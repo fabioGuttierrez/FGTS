@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow-lg">
+        <div class="card-header bg-gradient text-white" style="background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);">
+            <div class="d-flex justify-content-between align-items-center">
+                <h4 class="mb-0"><i class="bi bi-people-fill"></i> Lista de Funcionários</h4>
+                <button type="button" class="btn btn-light" data-bs-toggle="modal" data-bs-target="#funcionarioModal">
+                    <i class="bi bi-person-plus"></i> Novo Funcionário
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if funcionarios %}
+            <div class="table-responsive">
+                <table class="table table-hover table-striped">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Código</th>
+                            <th>Nome</th>
+                            <th>CPF</th>
+                            <th>Empresa</th>
+                            <th>Data Admissão</th>
+                            <th>Status</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for funcionario in funcionarios %}
+                        <tr>
+                            <td>{{ funcionario.id }}</td>
+                            <td>{{ funcionario.nome }}</td>
+                            <td>{{ funcionario.cpf }}</td>
+                            <td>{{ funcionario.empresa.nome }}</td>
+                            <td>{{ funcionario.data_admissao|date:"d/m/Y" }}</td>
+                            <td>
+                                {% if funcionario.data_demissao %}
+                                    <span class="badge bg-danger">Demitido</span>
+                                {% else %}
+                                    <span class="badge bg-success">Ativo</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-primary" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger" title="Excluir">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info text-center">
+                <i class="bi bi-info-circle"></i> Nenhum funcionário cadastrado ainda.
+                <br>
+                <button type="button" class="btn btn-primary mt-2" data-bs-toggle="modal" data-bs-target="#funcionarioModal">
+                    Cadastrar Primeiro Funcionário
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Incluir o modal de cadastro -->
+{% include 'funcionarios/funcionario_form.html' %}
+{% endblock %}

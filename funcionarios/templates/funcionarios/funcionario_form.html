@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <!-- Modal de Cadastro de Funcionário -->
+    <div class="modal fade" id="funcionarioModal" tabindex="-1" aria-labelledby="funcionarioModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="funcionarioModalLabel">
+                        <i class="bi bi-person-plus"></i> Cadastro de Funcionário
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <form method="post" action="{% url 'funcionario-create' %}" id="funcionarioForm">
+                    <div class="modal-body">
+                        {% csrf_token %}
+                        <div class="row g-3">
+                            <div class="col-md-8">
+                                <label for="id_empresa" class="form-label">Empresa *</label>
+                                {{ form.empresa }}
+                            </div>
+                            <div class="col-md-4">
+                                <label for="id_matricula" class="form-label">Matrícula</label>
+                                {{ form.matricula }}
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-12">
+                                <label for="id_nome" class="form-label">Nome do Funcionário *</label>
+                                {{ form.nome }}
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-4">
+                                <label for="id_pis" class="form-label">PIS</label>
+                                {{ form.pis }}
+                            </div>
+                            <div class="col-md-4">
+                                <label for="id_cpf" class="form-label">CPF *</label>
+                                {{ form.cpf }}
+                            </div>
+                            <div class="col-md-4">
+                                <label for="id_cbo" class="form-label">CBO</label>
+                                {{ form.cbo }}
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-6">
+                                <label for="id_carteira_profissional" class="form-label">Carteira Profissional</label>
+                                {{ form.carteira_profissional }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="id_serie_carteira" class="form-label">Série Carteira</label>
+                                {{ form.serie_carteira }}
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-4">
+                                <label for="id_data_nascimento" class="form-label">Data Nascimento</label>
+                                {{ form.data_nascimento }}
+                            </div>
+                            <div class="col-md-4">
+                                <label for="id_data_admissao" class="form-label">Data Admissão *</label>
+                                {{ form.data_admissao }}
+                            </div>
+                            <div class="col-md-4">
+                                <label for="id_data_demissao" class="form-label">Data Demissão</label>
+                                {{ form.data_demissao }}
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-12">
+                                <label for="id_observacao" class="form-label">Observação</label>
+                                {{ form.observacao }}
+                            </div>
+                        </div>
+
+                        {% if form.errors %}
+                        <div class="alert alert-danger mt-3">
+                            <strong>Erro!</strong> Corrija os campos destacados.
+                            {{ form.errors }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="bi bi-x-circle"></i> Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Salvar Funcionário
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Auto-abrir o modal se houver erros de validação
+    {% if form.errors %}
+        var funcionarioModal = new bootstrap.Modal(document.getElementById('funcionarioModal'));
+        funcionarioModal.show();
+    {% endif %}
+</script>
+{% endblock %}

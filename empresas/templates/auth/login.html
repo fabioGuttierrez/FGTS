@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Login — FGTS Web{% endblock %}
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-5">
+      <div class="card shadow-lg border-0">
+        <div class="card-body p-4">
+          <h3 class="mb-3 text-center">Entrar</h3>
+          <form method="post" novalidate>
+            {% csrf_token %}
+            {% if form.errors %}
+              <div class="alert alert-danger">Verifique usuário e senha.</div>
+            {% endif %}
+            <div class="mb-3">
+              <label class="form-label">Usuário</label>
+              {{ form.username }}
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Senha</label>
+              {{ form.password }}
+            </div>
+            <div class="d-grid">
+              <button type="submit" class="btn btn-primary">Entrar</button>
+            </div>
+          </form>
+          <div class="text-center mt-3">
+            <a href="/" class="text-decoration-none">Voltar</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

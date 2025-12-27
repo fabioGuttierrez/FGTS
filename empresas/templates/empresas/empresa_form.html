@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <!-- Modal de Cadastro de Empresa -->
+    <div class="modal fade" id="empresaModal" tabindex="-1" aria-labelledby="empresaModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="empresaModalLabel">
+                        <i class="bi bi-building-add"></i> Cadastro de Empresa
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <form method="post" action="{% url 'empresa-create' %}" id="empresaForm">
+                    <div class="modal-body">
+                        {% csrf_token %}
+                        <div class="row g-3">
+                            <div class="col-md-8">
+                                <label for="id_nome" class="form-label">Nome da Empresa *</label>
+                                {{ form.nome }}
+                            </div>
+                            <div class="col-md-4">
+                                <label for="id_cnpj" class="form-label">CNPJ *</label>
+                                {{ form.cnpj }}
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-8">
+                                <label for="id_endereco" class="form-label">Endereço</label>
+                                {{ form.endereco }}
+                            </div>
+                            <div class="col-md-4">
+                                <label for="id_numero" class="form-label">Número</label>
+                                {{ form.numero }}
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-4">
+                                <label for="id_bairro" class="form-label">Bairro</label>
+                                {{ form.bairro }}
+                            </div>
+                            <div class="col-md-3">
+                                <label for="id_cep" class="form-label">CEP</label>
+                                {{ form.cep }}
+                            </div>
+                            <div class="col-md-4">
+                                <label for="id_cidade" class="form-label">Cidade</label>
+                                {{ form.cidade }}
+                            </div>
+                            <div class="col-md-1">
+                                <label for="id_uf" class="form-label">UF</label>
+                                {{ form.uf }}
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-6">
+                                <label for="id_nome_contato" class="form-label">Nome do Contato</label>
+                                {{ form.nome_contato }}
+                            </div>
+                            <div class="col-md-6">
+                                <label for="id_fone_contato" class="form-label">Telefone de Contato</label>
+                                {{ form.fone_contato }}
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-3">
+                                <label for="id_cnae" class="form-label">CNAE</label>
+                                {{ form.cnae }}
+                            </div>
+                            <div class="col-md-3">
+                                <label for="id_percentual_rat" class="form-label">% RAT</label>
+                                {{ form.percentual_rat }}
+                            </div>
+                            <div class="col-md-3">
+                                <label for="id_optante_simples" class="form-label">Optante Simples</label>
+                                {{ form.optante_simples }}
+                            </div>
+                            <div class="col-md-3">
+                                <label for="id_fpas" class="form-label">FPAS</label>
+                                {{ form.fpas }}
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-4">
+                                <label for="id_outras_entidades" class="form-label">Outras Entidades</label>
+                                {{ form.outras_entidades }}
+                            </div>
+                            <div class="col-md-8">
+                                <label for="id_email" class="form-label">E-mail</label>
+                                {{ form.email }}
+                            </div>
+                        </div>
+
+                        {% if form.errors %}
+                        <div class="alert alert-danger mt-3">
+                            <strong>Erro!</strong> Corrija os campos destacados.
+                            {{ form.errors }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="bi bi-x-circle"></i> Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Salvar Empresa
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Página inicial -->
+    <div class="container mt-5">
+        <div class="text-center text-white">
+            <h1 class="display-4 mb-4">Bem-vindo ao FGTS Web</h1>
+            <p class="lead">Sistema de Gestão de FGTS em Atraso</p>
+            <button type="button" class="btn btn-light btn-lg mt-3" data-bs-toggle="modal" data-bs-target="#empresaModal">
+                <i class="bi bi-building-add"></i> Cadastrar Nova Empresa
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Auto-abrir o modal se houver erros de validação
+    {% if form.errors %}
+        var empresaModal = new bootstrap.Modal(document.getElementById('empresaModal'));
+        empresaModal.show();
+    {% endif %}
+</script>
+{% endblock %}

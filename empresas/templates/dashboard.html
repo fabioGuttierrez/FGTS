@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard — FGTS Web{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <div class="row g-3">
+    <div class="col-md-3">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted">Empresas</div>
+              <div class="h4">{{ empresas_total }}</div>
+            </div>
+            <i class="bi bi-building fs-3 text-secondary"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted">Funcionários</div>
+              <div class="h4">{{ funcs_total }}</div>
+            </div>
+            <i class="bi bi-people fs-3 text-secondary"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted">Lançamentos</div>
+              <div class="h4">{{ lancs_total }}</div>
+              <small class="text-muted">Pendentes: {{ lancs_pendentes }}</small>
+            </div>
+            <i class="bi bi-file-text fs-3 text-secondary"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <div class="text-muted">Assinaturas</div>
+              <div class="h4">{{ billing_active }} ativas</div>
+              <small class="text-muted">Pendentes: {{ billing_pending }} | Canceladas: {{ billing_canceled }}</small>
+            </div>
+            <i class="bi bi-credit-card fs-3 text-secondary"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-3">
+    <div class="col-md-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-light">Atualizações de dados</div>
+        <div class="card-body">
+          <p class="mb-1">Último índice: {% if last_indice %}{{ last_indice.data_indice|date:"d/m/Y" }}{% else %}não importado{% endif %}</p>
+          <p class="mb-1">Último JAM: {% if last_jam %}{{ last_jam.data_pagamento|date:"d/m/Y" }}{% else %}não importado{% endif %}</p>
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'relatorio-competencia' %}"><i class="bi bi-graph-up"></i> Gerar Relatório</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-light">Plano atual</div>
+        <div class="card-body">
+          {% if current_plan %}
+            <div class="h5">{{ current_plan.name }}</div>
+            <div>Valor: R$ {{ current_plan.amount }} — {{ current_plan.get_periodicity_display }}</div>
+          {% else %}
+            <div class="text-muted">Nenhum plano ativo configurado.</div>
+          {% endif %}
+          <a class="btn btn-outline-secondary btn-sm mt-2" href="/admin"><i class="bi bi-gear"></i> Abrir Admin</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

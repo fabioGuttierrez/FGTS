@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+
+{% block title %}FGTS Web — Gestão de FGTS em Atraso{% endblock %}
+
+{% block extra_css %}
+<style>
+  .hero {
+    min-height: 78vh;
+    display: flex;
+    align-items: center;
+    color: #fff;
+    background: radial-gradient(1200px 600px at 80% -10%, rgba(255,255,255,0.12), rgba(255,255,255,0) 60%),
+                linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+  .hero h1 { font-weight: 800; letter-spacing: -0.5px; }
+  .hero p.lead { opacity: .95; }
+  .metric {
+    border-radius: 12px; background: rgba(255,255,255,.1); color: #fff;
+    border: 1px solid rgba(255,255,255,.2);
+  }
+  .section { padding: 80px 0; background: #fff; }
+  .section-alt { padding: 80px 0; background: #f8f9fb; }
+  .feature-card { border: none; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.06); }
+  .feature-card .icon { width: 52px; height: 52px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; }
+  .cta-gradient { background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%); }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- HERO -->
+<section class="hero">
+  <div class="container py-5">
+    <div class="row align-items-center">
+      <div class="col-lg-7">
+        <h1 class="display-4 mb-3">FGTS em atraso sem dor de cabeça</h1>
+            <p class="lead mb-4">Calcule, organize e gere seus guias com precisão. Importação inteligente, índices atualizados e fluxo simples para empresas e escritórios contábeis.</p>
+        <div class="d-flex gap-2">
+          <a href="{% url 'empresa-list' %}" class="btn btn-light btn-lg"><i class="bi bi-rocket-takeoff"></i> Começar agora</a>
+          <a href="{% url 'funcionario-list' %}" class="btn btn-outline-light btn-lg"><i class="bi bi-people"></i> Ver funcionários</a>
+          <a href="{% url 'login' %}" class="btn btn-outline-light btn-lg"><i class="bi bi-box-arrow-in-right"></i> Login</a>
+        </div>
+        <div class="row g-3 mt-4">
+          <div class="col-6 col-md-4">
+            <div class="metric p-3 text-center">
+              <div class="h4 mb-0">+99,9%</div>
+              <small>Precisão de índices</small>
+            </div>
+          </div>
+          <div class="col-6 col-md-4">
+            <div class="metric p-3 text-center">
+                  {% if current_plan %}
+                  <div class="h4 mb-0">R$ {{ current_plan.amount }}</div>
+                  <small>{{ current_plan.get_periodicity_display }}</small>
+                  {% else %}
+                  <div class="h4 mb-0">R$ 99,90</div>
+                  <small>Mensal</small>
+                  {% endif %}
+            </div>
+          </div>
+          <div class="col-6 col-md-4 d-none d-md-block">
+            <div class="metric p-3 text-center">
+              <div class="h4 mb-0">Automático</div>
+              <small>importação/atualização</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-5 d-none d-lg-block">
+        <div class="card feature-card">
+          <div class="card-body p-4">
+            <h5 class="mb-3"><i class="bi bi-calculator"></i> Demonstração rápida</h5>
+            <p class="text-muted mb-3">Crie uma empresa e cadastre um funcionário para simular valores de FGTS.</p>
+            <ol class="mb-3 text-muted">
+              <li>Clique em "Começar agora"</li>
+              <li>Cadastre a empresa</li>
+              <li>Cadastre um funcionário</li>
+            </ol>
+            <a href="{% url 'empresa-list' %}" class="btn btn-primary w-100">Iniciar demonstração</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="section">
+  <div class="container">
+    <div class="text-center mb-5">
+      <h2 class="fw-bold">Tudo para regularizar seu FGTS</h2>
+      <p class="text-muted">Do cadastro ao cálculo, em um só lugar.</p>
+    </div>
+    <div class="row g-4">
+      <div class="col-md-6 col-lg-4">
+        <div class="card feature-card h-100">
+          <div class="card-body">
+            <div class="icon bg-primary-subtle text-primary mb-3"><i class="bi bi-cloud-arrow-down"></i></div>
+            <h5>Importação inteligente</h5>
+            <p class="text-muted">Traga bases e índices de forma simples, com validação automática.</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-4">
+        <div class="card feature-card h-100">
+          <div class="card-body">
+            <div class="icon bg-success-subtle text-success mb-3"><i class="bi bi-clipboard2-check"></i></div>
+            <h5>Cálculo preciso</h5>
+            <p class="text-muted">Regras consolidadas do legado, atualizadas para web com rastreabilidade.</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-4">
+        <div class="card feature-card h-100">
+          <div class="card-body">
+            <div class="icon bg-warning-subtle text-warning mb-3"><i class="bi bi-speedometer2"></i></div>
+            <h5>Relatórios claros</h5>
+            <p class="text-muted">Acompanhe consolidados por empresa, funcionário e competência.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="section-alt">
+  <div class="container">
+    <div class="p-5 rounded-4 text-white cta-gradient d-flex flex-column flex-md-row align-items-center justify-content-between">
+      <div>
+        <h3 class="mb-1">Pronto para começar?</h3>
+        <p class="mb-0">Leva poucos minutos para criar sua primeira empresa.</p>
+      </div>
+      <div class="mt-3 mt-md-0">
+        <a href="{% url 'empresa-list' %}" class="btn btn-light btn-lg"><i class="bi bi-building-add"></i> Cadastrar empresa</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<section class="py-4" style="background:#fff">
+  <div class="container d-flex flex-column flex-md-row align-items-center justify-content-between">
+    <div class="text-muted small">FGTS Web — Projeto em desenvolvimento</div>
+    <div class="small">
+      <a href="{% url 'empresa-list' %}" class="text-decoration-none me-3">Empresas</a>
+      <a href="{% url 'funcionario-list' %}" class="text-decoration-none">Funcionários</a>
+    </div>
+  </div>
+</section>
+{% endblock %}
