@@ -22,7 +22,9 @@ from django.contrib.auth import views as auth_views
 from empresas.views import EmpresaCreateView, EmpresaListView
 from funcionarios.views import FuncionarioCreateView, FuncionarioListView
 from lancamentos.views import (
-    RelatorioCompetenciaView, 
+    RelatorioCompetenciaView,
+    LancamentoCreateView,
+    LancamentoListView,
     export_relatorio_competencia_csv, 
     export_relatorio_competencia_pdf,
     download_memoria_calculo
@@ -43,6 +45,8 @@ urlpatterns = [
     path('empresas/novo/', EmpresaCreateView.as_view(), name='empresa-create'),
     path('funcionarios/', FuncionarioListView.as_view(), name='funcionario-list'),
     path('funcionarios/novo/', FuncionarioCreateView.as_view(), name='funcionario-create'),
+    path('lancamentos/', LancamentoListView.as_view(), name='lancamento-list'),
+    path('lancamentos/novo/', LancamentoCreateView.as_view(), name='lancamento-create'),
     path('lancamentos/relatorio/', RelatorioCompetenciaView.as_view(), name='relatorio-competencia'),
     path('lancamentos/relatorio/export/csv', export_relatorio_competencia_csv, name='relatorio-competencia-export-csv'),
     path('lancamentos/relatorio/export/pdf', export_relatorio_competencia_pdf, name='relatorio-competencia-export-pdf'),

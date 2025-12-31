@@ -1,14 +1,15 @@
 from datetime import datetime, date
 from decimal import Decimal
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.views.generic import FormView
-from django.shortcuts import render
+from django.contrib import messages
+from django.views.generic import FormView, CreateView, ListView
+from django.shortcuts import render, redirect
 from django.urls import reverse_lazy
 from billing.models import BillingCustomer
 from empresas.models import Empresa
 from coefjam.models import CoefJam
 from .models import Lancamento
-from .forms import RelatorioCompetenciaForm
+from .forms import RelatorioCompetenciaForm, LancamentoForm
 from .services.calculo import (
     calcular_fgts_atualizado,
     calcular_jam_composto,
@@ -20,7 +21,46 @@ from .services.calculo import (
 from django.conf import settings
 from indices.services.indice_service import IndiceFGTSService
 from funcionarios.models import Funcionario
-from fgtsweb.mixins import get_allowed_empresa_ids, is_empresa_allowed
+from fgtsweb.mixins import get_allowed_empresa_ids, is_empresa_allowed, EmpresaScopeMixin
+from django.http import HttpResponseForbidden
+
+
+class LancamentoCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
+    """Criar novo lançamento mensal (base FGTS)"""
+    model = Lancamento
+    form_class = LancamentoForm
+    template_name = 'lancamentos/lancamento_form.html'
+    success_url = reverse_lazy('lancamento-list')
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        empresa = form.cleaned_data.get('empresa')
+        if empresa and not is_empresa_allowed(self.request.user, empresa.codigo):
+            return HttpResponseForbidden('Empresa não permitida para este usuário.')
+        
+        lancamento = form.save()
+        messages.success(self.request, f'✅ Lançamento para {lancamento.funcionario.nome} ({lancamento.competencia}) registrado com sucesso!')
+        return super().form_valid(form)
+
+
+class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
+    """Listar lançamentos cadastrados"""
+    model = Lancamento
+    template_name = 'lancamentos/lancamento_list.html'
+    context_object_name = 'lancamentos'
+    paginate_by = 20
+
+    def get_queryset(self):
+        qs = super().get_queryset().select_related('empresa', 'funcionario').order_by('-competencia')
+        # Filtra apenas lançamentos de empresas permitidas
+        allowed_ids = get_allowed_empresa_ids(self.request.user)
+        if allowed_ids is not None:
+            qs = qs.filter(empresa__codigo__in=allowed_ids)
+        return qs
 
 
 class RelatorioCompetenciaView(LoginRequiredMixin, FormView):

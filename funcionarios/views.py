@@ -3,6 +3,7 @@ from django.urls import reverse_lazy
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.views.generic.list import ListView
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib import messages
 from django.http import HttpResponseForbidden
 from fgtsweb.mixins import EmpresaScopeMixin, get_allowed_empresa_ids, is_empresa_allowed
 from .models import Funcionario
@@ -27,6 +28,8 @@ class FuncionarioCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
         empresa = form.cleaned_data.get('empresa')
         if empresa and not is_empresa_allowed(self.request.user, empresa.codigo):
             return HttpResponseForbidden('Empresa não permitida para este usuário.')
+        funcionario = form.save()
+        messages.success(self.request, f'✅ Funcionário "{funcionario.nome}" cadastrado com sucesso!')
         return super().form_valid(form)
 
 class FuncionarioListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):

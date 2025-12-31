@@ -2,6 +2,52 @@ from django import forms
 from empresas.models import Empresa
 from funcionarios.models import Funcionario
 from fgtsweb.mixins import get_allowed_empresa_ids
+from .models import Lancamento
+
+
+class LancamentoForm(forms.ModelForm):
+    """Formulário para cadastro/edição de lançamentos mensais (base FGTS)"""
+    
+    class Meta:
+        model = Lancamento
+        fields = ['empresa', 'funcionario', 'competencia', 'base_fgts']
+        widgets = {
+            'empresa': forms.Select(attrs={'autocomplete': 'off', 'class': 'form-select'}),
+            'funcionario': forms.Select(attrs={'autocomplete': 'off', 'class': 'form-select'}),
+            'competencia': forms.TextInput(attrs={
+                'placeholder': 'MM/YYYY (ex: 01/2025)',
+                'autocomplete': 'off',
+                'class': 'form-control'
+            }),
+            'base_fgts': forms.NumberInput(attrs={
+                'placeholder': 'Valor base para cálculo do FGTS',
+                'step': '0.01',
+                'class': 'form-control'
+            }),
+        }
+        labels = {
+            'empresa': 'Empresa *',
+            'funcionario': 'Funcionário *',
+            'competencia': 'Competência (MM/YYYY) *',
+            'base_fgts': 'Base FGTS (Salário) *',
+        }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Filtrar empresas permitidas
+        if user is not None:
+            allowed_ids = get_allowed_empresa_ids(user)
+            if allowed_ids is not None:
+                self.fields['empresa'].queryset = Empresa.objects.filter(codigo__in=allowed_ids)
+        
+        # Filtrar funcionários se empresa foi selecionada
+        if 'data' in kwargs and kwargs['data'].get('empresa'):
+            try:
+                empresa_id = int(kwargs['data'].get('empresa'))
+                self.fields['funcionario'].queryset = Funcionario.objects.filter(empresa_id=empresa_id)
+            except (ValueError, TypeError):
+                self.fields['funcionario'].queryset = Funcionario.objects.none()
 
 
 class RelatorioCompetenciaForm(forms.Form):

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Novo Lançamento - FGTS Web{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0">
+                        <i class="bi bi-plus-circle"></i> Novo Lançamento Mensal
+                    </h3>
+                </div>
+                <div class="card-body p-4">
+                    <form method="post" class="needs-validation">
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.empresa.id_for_label }}" class="form-label">
+                                    {{ form.empresa.label }} <span class="text-danger">*</span>
+                                </label>
+                                {{ form.empresa }}
+                                {% if form.empresa.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {{ form.empresa.errors }}
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.competencia.id_for_label }}" class="form-label">
+                                    {{ form.competencia.label }} <span class="text-danger">*</span>
+                                </label>
+                                {{ form.competencia }}
+                                <small class="form-text text-muted">Formato: MM/YYYY (ex: 01/2025)</small>
+                                {% if form.competencia.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {{ form.competencia.errors }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.funcionario.id_for_label }}" class="form-label">
+                                    {{ form.funcionario.label }} <span class="text-danger">*</span>
+                                </label>
+                                {{ form.funcionario }}
+                                {% if form.funcionario.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {{ form.funcionario.errors }}
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="{{ form.base_fgts.id_for_label }}" class="form-label">
+                                    {{ form.base_fgts.label }} <span class="text-danger">*</span>
+                                </label>
+                                {{ form.base_fgts }}
+                                <small class="form-text text-muted">Valor base para cálculo do FGTS (geralmente o salário)</small>
+                                {% if form.base_fgts.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {{ form.base_fgts.errors }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info" role="alert">
+                            <i class="bi bi-info-circle"></i> 
+                            <strong>Dica:</strong> Se a base FGTS for igual ao mês anterior, você pode deixar em branco 
+                            e o sistema preencherá automaticamente. Cadastre apenas quando houver mudanças (aumento salarial, descontos, etc).
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="bi bi-check-circle"></i> Salvar Lançamento
+                            </button>
+                            <a href="{% url 'lancamento-list' %}" class="btn btn-secondary btn-lg">
+                                <i class="bi bi-x-circle"></i> Cancelar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Filtrar funcionários quando empresa mudar
+    document.getElementById('{{ form.empresa.id_for_label }}').addEventListener('change', function() {
+        const empresaId = this.value;
+        const funcionarioSelect = document.getElementById('{{ form.funcionario.id_for_label }}');
+        
+        if (empresaId) {
+            // Aqui você pode fazer uma requisição AJAX para carregar funcionários
+            // Por enquanto, mantém a seleção atual
+            funcionarioSelect.disabled = false;
+        } else {
+            funcionarioSelect.disabled = true;
+            funcionarioSelect.value = '';
+        }
+    });
+</script>
+{% endblock %}
