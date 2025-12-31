@@ -1,8 +1,9 @@
 from datetime import datetime, date
 from decimal import Decimal
+from dateutil.relativedelta import relativedelta
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
-from django.views.generic import FormView, CreateView, ListView
+from django.views.generic import FormView, CreateView, ListView, View
 from django.shortcuts import render, redirect
 from django.urls import reverse_lazy
 from billing.models import BillingCustomer
@@ -63,6 +64,91 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         return qs
 
 
+class GerarLancamentosAutomaticosView(LoginRequiredMixin, EmpresaScopeMixin, View):
+    """
+    Gera lançamentos automáticos para um funcionário específico.
+    Pega o último lançamento e gera todos os meses subsequentes até hoje.
+    Para na data de demissão se houver.
+    """
+    
+    def post(self, request, funcionario_id):
+        try:
+            funcionario = Funcionario.objects.get(id=funcionario_id)
+            
+            # Verificar se o funcionário pertence a uma empresa permitida
+            if not is_empresa_allowed(request.user, funcionario.empresa.codigo):
+                messages.error(request, '❌ Você não tem permissão para gerar lançamentos para este funcionário.')
+                return redirect('lancamento-list')
+            
+            # Verificar se o funcionário está ativo
+            if funcionario.data_demissao:
+                messages.warning(request, f'⚠️ {funcionario.nome} está demitido. Não é possível gerar lançamentos automáticos.')
+                return redirect('lancamento-list')
+            
+            # Buscar o último lançamento do funcionário
+            ultimo_lancamento = Lancamento.objects.filter(
+                funcionario=funcionario
+            ).order_by('-competencia').first()
+            
+            if not ultimo_lancamento:
+                messages.error(request, f'❌ {funcionario.nome} não possui nenhum lançamento. Crie o primeiro lançamento manualmente.')
+                return redirect('lancamento-list')
+            
+            # Converter competência do último lançamento para data
+            mes, ano = map(int, ultimo_lancamento.competencia.split('/'))
+            data_ultimo = datetime(ano, mes, 1)
+            
+            # Data final: hoje
+            data_hoje = datetime.now()
+            
+            # Data limite: hoje ou data de demissão (o que vier primeiro)
+            if funcionario.data_demissao:
+                data_limite = datetime.combine(funcionario.data_demissao, datetime.min.time())
+                if data_limite < data_hoje:
+                    data_hoje = data_limite
+            
+            # Gerar lançamentos mês a mês
+            lancamentos_criados = 0
+            data_atual = data_ultimo + relativedelta(months=1)
+            base_fgts_anterior = ultimo_lancamento.base_fgts
+            
+            while data_atual <= data_hoje:
+                competencia = data_atual.strftime('%m/%Y')
+                
+                # Verificar se já existe lançamento para esta competência
+                if not Lancamento.objects.filter(funcionario=funcionario, competencia=competencia).exists():
+                    # Criar novo lançamento herdando a base FGTS do anterior
+                    Lancamento.objects.create(
+                        empresa=funcionario.empresa,
+                        funcionario=funcionario,
+                        competencia=competencia,
+                        base_fgts=base_fgts_anterior,
+                        valor_fgts=base_fgts_anterior * Decimal('0.08'),  # 8% do FGTS
+                        pago=False
+                    )
+                    lancamentos_criados += 1
+                
+                data_atual += relativedelta(months=1)
+            
+            if lancamentos_criados > 0:
+                messages.success(
+                    request, 
+                    f'✅ {lancamentos_criados} lançamento(s) gerado(s) automaticamente para {funcionario.nome}!'
+                )
+            else:
+                messages.info(
+                    request,
+                    f'ℹ️ Todos os lançamentos de {funcionario.nome} já estão cadastrados até hoje.'
+                )
+            
+        except Funcionario.DoesNotExist:
+            messages.error(request, '❌ Funcionário não encontrado.')
+        except Exception as e:
+            messages.error(request, f'❌ Erro ao gerar lançamentos: {str(e)}')
+        
+        return redirect('lancamento-list')
+
+
 class RelatorioCompetenciaView(LoginRequiredMixin, FormView):
     template_name = 'lancamentos/relatorio_competencia.html'
     form_class = RelatorioCompetenciaForm
@@ -82,7 +168,7 @@ class RelatorioCompetenciaView(LoginRequiredMixin, FormView):
             return None, None, 'Competência inválida. Use MM/YYYY.'
 
         lancs_qs = (Lancamento.objects
-                .filter(empresa=empresa, competencia=competencia_str)
+                .filter(empresa=empresa, competencia=competencia_str, pago=False)  # APENAS NÃO PAGOS
                 .select_related('funcionario')
                 .order_by('funcionario_id'))
         if funcionario:

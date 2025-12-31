@@ -31,6 +31,14 @@
           <button class="btn btn-primary" type="submit"><i class="bi bi-file-bar-graph"></i> Gerar</button>
         </div>
       </form>
+      
+      <!-- Aviso sobre FGTS não pagos -->
+      <div class="alert alert-info mt-3 border-0" role="alert">
+        <i class="bi bi-info-circle-fill me-2"></i>
+        <strong>Importante:</strong> Este relatório calcula apenas os lançamentos com FGTS <strong>não pago</strong>. 
+        Lançamentos já marcados como pagos não aparecem no cálculo.
+      </div>
+      
       {% if erro %}
         <div class="alert alert-warning mt-3">{{ erro }}</div>
       {% endif %}

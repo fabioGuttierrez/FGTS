@@ -3,108 +3,271 @@
 {% block title %}Novo Lançamento - FGTS Web{% endblock %}
 
 {% block content %}
-<div class="container">
+<div class="container py-5">
     <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card shadow-lg">
-                <div class="card-header bg-primary text-white">
-                    <h3 class="mb-0">
-                        <i class="bi bi-plus-circle"></i> Novo Lançamento Mensal
-                    </h3>
+        <div class="col-lg-9">
+            <!-- Card Principal -->
+            <div class="card border-0 shadow-lg">
+                <!-- Header -->
+                <div class="card-header bg-gradient-primary text-white py-4 border-0">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-pencil-square fs-4 me-3"></i>
+                        <div>
+                            <h4 class="mb-0 fw-bold">Novo Lançamento</h4>
+                            <small class="opacity-75">Registre um novo entrada mensal de FGTS</small>
+                        </div>
+                    </div>
                 </div>
-                <div class="card-body p-4">
-                    <form method="post" class="needs-validation">
+
+                <!-- Body -->
+                <div class="card-body p-5">
+                    {% if messages %}
+                        {% for message in messages %}
+                        <div class="alert alert-{{ message.tags|default:'success' }} alert-dismissible fade show border-0" role="alert">
+                            <i class="bi bi-check-circle me-2"></i>
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    <!-- Info Box -->
+                    <div class="alert alert-info border-0 bg-light mb-4">
+                        <div class="d-flex">
+                            <i class="bi bi-info-circle-fill text-info me-3 mt-1"></i>
+                            <div>
+                                <strong>Herança Automática:</strong>
+                                <small class="d-block">Se você não informar a base FGTS, o sistema utilizará automaticamente o valor do mês anterior. Isso facilita o registro de múltiplos meses.</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form method="post" novalidate id="lancamentoForm">
                         {% csrf_token %}
-                        
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="{{ form.empresa.id_for_label }}" class="form-label">
-                                    {{ form.empresa.label }} <span class="text-danger">*</span>
-                                </label>
-                                {{ form.empresa }}
-                                {% if form.empresa.errors %}
-                                    <div class="invalid-feedback d-block">
-                                        {{ form.empresa.errors }}
-                                    </div>
-                                {% endif %}
-                            </div>
 
-                            <div class="col-md-6 mb-3">
-                                <label for="{{ form.competencia.id_for_label }}" class="form-label">
-                                    {{ form.competencia.label }} <span class="text-danger">*</span>
-                                </label>
-                                {{ form.competencia }}
-                                <small class="form-text text-muted">Formato: MM/YYYY (ex: 01/2025)</small>
-                                {% if form.competencia.errors %}
-                                    <div class="invalid-feedback d-block">
-                                        {{ form.competencia.errors }}
-                                    </div>
-                                {% endif %}
-                            </div>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="{{ form.funcionario.id_for_label }}" class="form-label">
-                                    {{ form.funcionario.label }} <span class="text-danger">*</span>
-                                </label>
-                                {{ form.funcionario }}
-                                {% if form.funcionario.errors %}
-                                    <div class="invalid-feedback d-block">
-                                        {{ form.funcionario.errors }}
-                                    </div>
-                                {% endif %}
-                            </div>
-
-                            <div class="col-md-6 mb-3">
-                                <label for="{{ form.base_fgts.id_for_label }}" class="form-label">
-                                    {{ form.base_fgts.label }} <span class="text-danger">*</span>
-                                </label>
-                                {{ form.base_fgts }}
-                                <small class="form-text text-muted">Valor base para cálculo do FGTS (geralmente o salário)</small>
-                                {% if form.base_fgts.errors %}
-                                    <div class="invalid-feedback d-block">
-                                        {{ form.base_fgts.errors }}
-                                    </div>
-                                {% endif %}
+                        <!-- Seção 1: Identificação -->
+                        <div class="mb-4">
+                            <h6 class="text-uppercase fw-bold text-muted mb-3">
+                                <i class="bi bi-search me-2"></i>Identificação
+                            </h6>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="{{ form.empresa.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.empresa.label }} <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.empresa }}
+                                    {% if form.empresa.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.empresa.errors }}</div>
+                                    {% endif %}
+                                    <small class="form-text text-muted d-block mt-2">Selecione a empresa para filtrar funcionários</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.competencia.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.competencia.label }} <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.competencia }}
+                                    {% if form.competencia.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.competencia.errors }}</div>
+                                    {% endif %}
+                                    <small class="form-text text-muted d-block mt-2">Formato: MM/YYYY (ex: 01/2024)</small>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="alert alert-info" role="alert">
-                            <i class="bi bi-info-circle"></i> 
-                            <strong>Dica:</strong> Se a base FGTS for igual ao mês anterior, você pode deixar em branco 
-                            e o sistema preencherá automaticamente. Cadastre apenas quando houver mudanças (aumento salarial, descontos, etc).
+                        <hr class="my-4 opacity-20">
+
+                        <!-- Seção 2: Dados Principais -->
+                        <div class="mb-4">
+                            <h6 class="text-uppercase fw-bold text-muted mb-3">
+                                <i class="bi bi-person-badge me-2"></i>Dados Principais
+                            </h6>
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <label for="{{ form.funcionario.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.funcionario.label }} <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.funcionario }}
+                                    {% if form.funcionario.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.funcionario.errors }}</div>
+                                    {% endif %}
+                                    <small class="form-text text-muted d-block mt-2">Selecione um funcionário da empresa</small>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-1">
+                                <div class="col-md-6">
+                                    <label for="{{ form.base_fgts.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.base_fgts.label }}
+                                    </label>
+                                    {{ form.base_fgts }}
+                                    {% if form.base_fgts.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.base_fgts.errors }}</div>
+                                    {% endif %}
+                                    <small class="form-text text-muted d-block mt-2">
+                                        <i class="bi bi-lightbulb me-1"></i>
+                                        Deixe em branco para usar o valor do mês anterior
+                                    </small>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="bg-light p-3 rounded" style="height: 100%; display: flex; align-items: center;">
+                                        <div class="w-100">
+                                            <small class="text-muted d-block mb-2">Base FGTS Anterior:</small>
+                                            <strong class="text-success fs-5" id="base-anterior">
+                                                R$ 0,00
+                                            </strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-primary btn-lg">
-                                <i class="bi bi-check-circle"></i> Salvar Lançamento
-                            </button>
-                            <a href="{% url 'lancamento-list' %}" class="btn btn-secondary btn-lg">
-                                <i class="bi bi-x-circle"></i> Cancelar
-                            </a>
+                        <hr class="my-4 opacity-20">
+
+                        <!-- Seção 3: Informações de Pagamento -->
+                        <div class="mb-4">
+                            <h6 class="text-uppercase fw-bold text-muted mb-3">
+                                <i class="bi bi-cash-coin me-2"></i>Informações de Pagamento
+                            </h6>
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <div class="form-check">
+                                        {{ form.pago }}
+                                        <label class="form-check-label fw-bold" for="{{ form.pago.id_for_label }}">
+                                            {{ form.pago.label }}
+                                        </label>
+                                        <small class="form-text text-muted d-block mt-2">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            Marque esta opção se o FGTS deste mês já foi pago
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-1" id="campos-pagamento" style="display: none;">
+                                <div class="col-md-6">
+                                    <label for="{{ form.data_pagto.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.data_pagto.label }}
+                                    </label>
+                                    {{ form.data_pagto }}
+                                    {% if form.data_pagto.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.data_pagto.errors }}</div>
+                                    {% endif %}
+                                    <small class="form-text text-muted d-block mt-2">Data em que o FGTS foi efetivamente pago</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.valor_pago.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.valor_pago.label }}
+                                    </label>
+                                    {{ form.valor_pago }}
+                                    {% if form.valor_pago.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.valor_pago.errors }}</div>
+                                    {% endif %}
+                                    <small class="form-text text-muted d-block mt-2">Valor que foi efetivamente pago (pode incluir juros/correção)</small>
+                                </div>
+                            </div>
                         </div>
+
+                        <!-- Erros Gerais -->
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger border-0" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            <strong>Erro ao salvar:</strong>
+                            {% for error in form.non_field_errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
                     </form>
+                </div>
+
+                <!-- Footer -->
+                <div class="card-footer bg-light border-top py-4">
+                    <div class="d-flex gap-3 justify-content-end">
+                        <a href="{% url 'lancamento-list' %}" class="btn btn-outline-secondary btn-lg rounded-3">
+                            <i class="bi bi-x-circle me-2"></i> Cancelar
+                        </a>
+                        <button type="submit" form="lancamentoForm" class="btn btn-primary btn-lg rounded-3">
+                            <i class="bi bi-check-circle me-2"></i> Registrar Lançamento
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info Card -->
+            <div class="card border-0 bg-light mt-4">
+                <div class="card-body py-3 px-4">
+                    <p class="mb-0">
+                        <i class="bi bi-lightbulb-fill text-warning me-2"></i>
+                        <strong>Campos obrigatórios:</strong> Empresa, Funcionário e Competência (MM/YYYY).
+                    </p>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
+<style>
+    .bg-gradient-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .form-label {
+        color: #2c3e50;
+    }
+
+    .form-control, .form-select {
+        border-radius: 0.5rem;
+        border: 1px solid #e0e0e0;
+        padding: 0.75rem 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .form-control:focus, .form-select:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+    }
+
+    .form-select:disabled {
+        background-color: #e9ecef;
+        color: #6c757d;
+    }
+</style>
+
 <script>
-    // Filtrar funcionários quando empresa mudar
-    document.getElementById('{{ form.empresa.id_for_label }}').addEventListener('change', function() {
-        const empresaId = this.value;
-        const funcionarioSelect = document.getElementById('{{ form.funcionario.id_for_label }}');
-        
-        if (empresaId) {
-            // Aqui você pode fazer uma requisição AJAX para carregar funcionários
-            // Por enquanto, mantém a seleção atual
-            funcionarioSelect.disabled = false;
-        } else {
-            funcionarioSelect.disabled = true;
-            funcionarioSelect.value = '';
+    document.addEventListener('DOMContentLoaded', function() {
+        const empresaSelect = document.getElementById('id_empresa');
+        const funcionarioSelect = document.getElementById('id_funcionario');
+        const baseFgtsInput = document.getElementById('id_base_fgts');
+        const baseAnteriorDisplay = document.getElementById('base-anterior');
+        const pagoCheckbox = document.getElementById('id_pago');
+        const camposPagamento = document.getElementById('campos-pagamento');
+
+        // Desabilitar funcionário se não houver empresa selecionada
+        function atualizarFuncionarios() {
+            if (!empresaSelect.value) {
+                funcionarioSelect.disabled = true;
+                funcionarioSelect.innerHTML = '<option value="">-- Selecione uma empresa primeiro --</option>';
+                baseAnteriorDisplay.textContent = 'R$ 0,00';
+            } else {
+                funcionarioSelect.disabled = false;
+            }
         }
+
+        // Mostrar/ocultar campos de pagamento
+        function toggleCamposPagamento() {
+            if (pagoCheckbox && pagoCheckbox.checked) {
+                camposPagamento.style.display = '';
+            } else {
+                camposPagamento.style.display = 'none';
+            }
+        }
+
+        empresaSelect.addEventListener('change', atualizarFuncionarios);
+        if (pagoCheckbox) {
+            pagoCheckbox.addEventListener('change', toggleCamposPagamento);
+            toggleCamposPagamento(); // Inicializar estado
+        }
+        atualizarFuncionarios();
     });
 </script>
 {% endblock %}

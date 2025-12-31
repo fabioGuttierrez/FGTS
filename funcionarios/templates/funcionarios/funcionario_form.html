@@ -1,103 +1,241 @@
-<!-- Modal de Cadastro de Funcionário (partial) -->
-<div class="container">
-    <div class="modal fade" id="funcionarioModal" tabindex="-1" aria-labelledby="funcionarioModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="funcionarioModalLabel">
-                        <i class="bi bi-person-plus"></i> Cadastro de Funcionário
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+{% extends "base.html" %}
+
+{% block title %}Novo Funcionário - FGTS Web{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-9">
+            <!-- Card Principal -->
+            <div class="card border-0 shadow-lg">
+                <!-- Header -->
+                <div class="card-header bg-gradient-primary text-white py-4 border-0">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-person-plus-fill fs-4 me-3"></i>
+                        <div>
+                            <h4 class="mb-0 fw-bold">Cadastrar Funcionário</h4>
+                            <small class="opacity-75">Adicione um novo colaborador ao sistema</small>
+                        </div>
+                    </div>
                 </div>
-                <form method="post" action="{% url 'funcionario-create' %}" id="funcionarioForm">
-                    <div class="modal-body">
+
+                <!-- Body -->
+                <div class="card-body p-5">
+                    {% if messages %}
+                        {% for message in messages %}
+                        <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show border-0" role="alert">
+                            <i class="bi bi-exclamation-circle me-2"></i>
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+
+                    <form method="post" novalidate>
                         {% csrf_token %}
-                        <div class="row g-3">
-                            <div class="col-md-8">
-                                <label for="id_empresa" class="form-label">Empresa *</label>
-                                {{ form.empresa }}
+
+                        <!-- Seção 1: Dados Básicos -->
+                        <div class="mb-4">
+                            <h6 class="text-uppercase fw-bold text-muted mb-3">
+                                <i class="bi bi-info-circle me-2"></i>Dados Básicos
+                            </h6>
+                            <div class="row g-3">
+                                <div class="col-md-8">
+                                    <label for="{{ form.nome.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.nome.label }} <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.nome }}
+                                    {% if form.nome.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.nome.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="{{ form.matricula.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.matricula.label }}
+                                    </label>
+                                    {{ form.matricula }}
+                                </div>
                             </div>
-                            <div class="col-md-4">
-                                <label for="id_matricula" class="form-label">Matrícula</label>
-                                {{ form.matricula }}
+
+                            <div class="row g-3 mt-1">
+                                <div class="col-md-6">
+                                    <label for="{{ form.empresa.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.empresa.label }} <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.empresa }}
+                                    {% if form.empresa.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.empresa.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.data_admissao.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.data_admissao.label }} <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.data_admissao }}
+                                    {% if form.data_admissao.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.data_admissao.errors }}</div>
+                                    {% endif %}
+                                </div>
                             </div>
                         </div>
 
-                        <div class="row g-3 mt-2">
-                            <div class="col-md-12">
-                                <label for="id_nome" class="form-label">Nome do Funcionário *</label>
-                                {{ form.nome }}
+                        <hr class="my-4 opacity-20">
+
+                        <!-- Seção 2: Documentação -->
+                        <div class="mb-4">
+                            <h6 class="text-uppercase fw-bold text-muted mb-3">
+                                <i class="bi bi-file-earmark-text me-2"></i>Documentação
+                            </h6>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label for="{{ form.cpf.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.cpf.label }} <span class="text-danger">*</span>
+                                    </label>
+                                    {{ form.cpf }}
+                                    {% if form.cpf.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.cpf.errors }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="{{ form.pis.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.pis.label }}
+                                    </label>
+                                    {{ form.pis }}
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="{{ form.cbo.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.cbo.label }}
+                                    </label>
+                                    {{ form.cbo }}
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-1">
+                                <div class="col-md-6">
+                                    <label for="{{ form.carteira_profissional.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.carteira_profissional.label }}
+                                    </label>
+                                    {{ form.carteira_profissional }}
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="{{ form.serie_carteira.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.serie_carteira.label }}
+                                    </label>
+                                    {{ form.serie_carteira }}
+                                </div>
                             </div>
                         </div>
 
-                        <div class="row g-3 mt-2">
-                            <div class="col-md-4">
-                                <label for="id_pis" class="form-label">PIS</label>
-                                {{ form.pis }}
-                            </div>
-                            <div class="col-md-4">
-                                <label for="id_cpf" class="form-label">CPF *</label>
-                                {{ form.cpf }}
-                            </div>
-                            <div class="col-md-4">
-                                <label for="id_cbo" class="form-label">CBO</label>
-                                {{ form.cbo }}
+                        <hr class="my-4 opacity-20">
+
+                        <!-- Seção 3: Datas -->
+                        <div class="mb-4">
+                            <h6 class="text-uppercase fw-bold text-muted mb-3">
+                                <i class="bi bi-calendar-event me-2"></i>Datas
+                            </h6>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label for="{{ form.data_nascimento.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.data_nascimento.label }}
+                                    </label>
+                                    {{ form.data_nascimento }}
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="{{ form.data_demissao.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.data_demissao.label }}
+                                    </label>
+                                    {{ form.data_demissao }}
+                                </div>
                             </div>
                         </div>
 
-                        <div class="row g-3 mt-2">
-                            <div class="col-md-6">
-                                <label for="id_carteira_profissional" class="form-label">Carteira Profissional</label>
-                                {{ form.carteira_profissional }}
-                            </div>
-                            <div class="col-md-6">
-                                <label for="id_serie_carteira" class="form-label">Série Carteira</label>
-                                {{ form.serie_carteira }}
-                            </div>
-                        </div>
+                        <hr class="my-4 opacity-20">
 
-                        <div class="row g-3 mt-2">
-                            <div class="col-md-4">
-                                <label for="id_data_nascimento" class="form-label">Data Nascimento</label>
-                                {{ form.data_nascimento }}
-                            </div>
-                            <div class="col-md-4">
-                                <label for="id_data_admissao" class="form-label">Data Admissão *</label>
-                                {{ form.data_admissao }}
-                            </div>
-                            <div class="col-md-4">
-                                <label for="id_data_demissao" class="form-label">Data Demissão</label>
-                                {{ form.data_demissao }}
-                            </div>
-                        </div>
-
-                        <div class="row g-3 mt-2">
-                            <div class="col-md-12">
-                                <label for="id_observacao" class="form-label">Observação</label>
+                        <!-- Seção 4: Observações -->
+                        <div class="mb-4">
+                            <h6 class="text-uppercase fw-bold text-muted mb-3">
+                                <i class="bi bi-chat-left-text me-2"></i>Observações
+                            </h6>
+                            <div>
+                                <label for="{{ form.observacao.id_for_label }}" class="form-label fw-bold">
+                                    {{ form.observacao.label }}
+                                </label>
                                 {{ form.observacao }}
+                                <small class="form-text text-muted d-block mt-2">Informações adicionais sobre o funcionário</small>
                             </div>
                         </div>
 
-                        {% if form.errors %}
-                        <div class="alert alert-danger mt-3">
-                            <strong>Erro!</strong> Corrija os campos destacados.
-                            {{ form.errors }}
+                        <!-- Erros Gerais -->
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger border-0" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            <strong>Erro ao salvar:</strong>
+                            {% for error in form.non_field_errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
                         </div>
                         {% endif %}
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                            <i class="bi bi-x-circle"></i> Cancelar
+                    </form>
+                </div>
+
+                <!-- Footer -->
+                <div class="card-footer bg-light border-top py-4">
+                    <div class="d-flex gap-3 justify-content-end">
+                        <a href="{% url 'funcionario-list' %}" class="btn btn-outline-secondary btn-lg rounded-3">
+                            <i class="bi bi-x-circle me-2"></i> Cancelar
+                        </a>
+                        <button type="submit" form="form" class="btn btn-primary btn-lg rounded-3">
+                            <i class="bi bi-check-circle me-2"></i> Salvar Funcionário
                         </button>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-check-circle"></i> Salvar Funcionário
-                        </button>
                     </div>
-                </form>
+                </div>
+            </div>
+
+            <!-- Info Card -->
+            <div class="card border-0 bg-light mt-4">
+                <div class="card-body py-3 px-4">
+                    <p class="mb-0">
+                        <i class="bi bi-lightbulb-fill text-warning me-2"></i>
+                        <strong>Dica:</strong> Campos marcados com <span class="text-danger">*</span> são obrigatórios.
+                    </p>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    .bg-gradient-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    .form-label {
+        color: #2c3e50;
+    }
+    
+    .form-control, .form-select {
+        border-radius: 0.5rem;
+        border: 1px solid #e0e0e0;
+        padding: 0.75rem 1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .form-control:focus, .form-select:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+    }
+    
+    textarea.form-control {
+        min-height: 120px;
+        resize: vertical;
+    }
+</style>
+
+<script>
+    // Adicionar ID ao formulário
+    document.querySelector('form').id = 'form';
+</script>
+{% endblock %}
 
 <script>
     {% if form.errors %}

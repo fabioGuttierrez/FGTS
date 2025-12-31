@@ -10,7 +10,7 @@ class LancamentoForm(forms.ModelForm):
     
     class Meta:
         model = Lancamento
-        fields = ['empresa', 'funcionario', 'competencia', 'base_fgts']
+        fields = ['empresa', 'funcionario', 'competencia', 'base_fgts', 'pago', 'data_pagto', 'valor_pago']
         widgets = {
             'empresa': forms.Select(attrs={'autocomplete': 'off', 'class': 'form-select'}),
             'funcionario': forms.Select(attrs={'autocomplete': 'off', 'class': 'form-select'}),
@@ -24,12 +24,25 @@ class LancamentoForm(forms.ModelForm):
                 'step': '0.01',
                 'class': 'form-control'
             }),
+            'pago': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'data_pagto': forms.DateInput(attrs={
+                'type': 'date',
+                'class': 'form-control'
+            }),
+            'valor_pago': forms.NumberInput(attrs={
+                'placeholder': 'Valor efetivamente pago',
+                'step': '0.01',
+                'class': 'form-control'
+            }),
         }
         labels = {
             'empresa': 'Empresa *',
             'funcionario': 'Funcionário *',
             'competencia': 'Competência (MM/YYYY) *',
-            'base_fgts': 'Base FGTS (Salário) *',
+            'base_fgts': 'Base FGTS (Salário)',
+            'pago': 'FGTS Pago?',
+            'data_pagto': 'Data do Pagamento',
+            'valor_pago': 'Valor Pago',
         }
 
     def __init__(self, *args, user=None, **kwargs):

@@ -25,6 +25,7 @@ from lancamentos.views import (
     RelatorioCompetenciaView,
     LancamentoCreateView,
     LancamentoListView,
+    GerarLancamentosAutomaticosView,
     export_relatorio_competencia_csv, 
     export_relatorio_competencia_pdf,
     download_memoria_calculo
@@ -47,6 +48,7 @@ urlpatterns = [
     path('funcionarios/novo/', FuncionarioCreateView.as_view(), name='funcionario-create'),
     path('lancamentos/', LancamentoListView.as_view(), name='lancamento-list'),
     path('lancamentos/novo/', LancamentoCreateView.as_view(), name='lancamento-create'),
+    path('lancamentos/gerar/<int:funcionario_id>/', GerarLancamentosAutomaticosView.as_view(), name='lancamento-gerar-automatico'),
     path('lancamentos/relatorio/', RelatorioCompetenciaView.as_view(), name='relatorio-competencia'),
     path('lancamentos/relatorio/export/csv', export_relatorio_competencia_csv, name='relatorio-competencia-export-csv'),
     path('lancamentos/relatorio/export/pdf', export_relatorio_competencia_pdf, name='relatorio-competencia-export-pdf'),

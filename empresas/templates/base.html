@@ -7,88 +7,255 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
+        * {
+            font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+        }
+
         :root {
-            --primary-color: #2c3e50;
-            --secondary-color: #3498db;
-            --accent-color: #e74c3c;
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --accent: #e74c3c;
+            --success: #27ae60;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+            --info: #3498db;
+            --light: #ecf0f1;
+            --dark: #2c3e50;
+            --gray: #95a5a6;
         }
+
+        html, body {
+            height: 100%;
+        }
+
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f6fa;
+            color: var(--dark);
         }
+
+        /* Navbar Styling */
         .navbar {
-            background-color: var(--primary-color) !important;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            background: linear-gradient(135deg, var(--dark) 0%, var(--primary) 100%) !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            padding: 1rem 0;
         }
+
         .navbar-brand {
-            font-weight: bold;
-            font-size: 1.5rem;
+            font-weight: 700;
+            font-size: 1.4rem;
+            letter-spacing: -0.5px;
+            color: white !important;
         }
+
+        .navbar-brand i {
+            margin-right: 0.5rem;
+            font-size: 1.6rem;
+        }
+
+        .nav-link {
+            color: rgba(255, 255, 255, 0.85) !important;
+            font-weight: 500;
+            margin: 0 0.25rem;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .nav-link:hover {
+            color: white !important;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-link i {
+            margin-right: 0.5rem;
+        }
+
+        /* Content Area */
         .content-wrapper {
             padding: 2rem 0;
+            min-height: calc(100vh - 60px);
         }
-        .modal-content {
-            border-radius: 15px;
+
+        /* Alerts */
+        .alert {
             border: none;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
-        .modal-header {
-            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-            color: white;
-            border-radius: 15px 15px 0 0;
-            padding: 1.5rem;
+
+        .alert-info {
+            background-color: rgba(52, 152, 219, 0.1);
+            color: var(--info);
+            border-left: 4px solid var(--info);
         }
+
+        .alert-success {
+            background-color: rgba(39, 174, 96, 0.1);
+            color: var(--success);
+            border-left: 4px solid var(--success);
+        }
+
+        .alert-danger {
+            background-color: rgba(231, 76, 60, 0.1);
+            color: var(--danger);
+            border-left: 4px solid var(--danger);
+        }
+
+        .alert-warning {
+            background-color: rgba(243, 156, 18, 0.1);
+            color: var(--warning);
+            border-left: 4px solid var(--warning);
+        }
+
+        /* Forms */
         .form-label {
             font-weight: 600;
-            color: var(--primary-color);
+            color: var(--dark);
+            margin-bottom: 0.5rem;
         }
-        .form-control, .form-select {
-            border-radius: 8px;
-            border: 2px solid #e0e0e0;
-            padding: 0.6rem;
-            transition: all 0.3s;
+
+        .form-control, 
+        .form-select {
+            border-radius: 0.5rem;
+            border: 1px solid #e0e0e0;
+            padding: 0.75rem 1rem;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
         }
-        .form-control:focus, .form-select:focus {
-            border-color: var(--secondary-color);
-            box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+
+        .form-control:focus, 
+        .form-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
         }
-        .btn-primary {
-            background: linear-gradient(135deg, var(--secondary-color) 0%, #2980b9 100%);
-            border: none;
-            border-radius: 8px;
-            padding: 0.7rem 2rem;
+
+        /* Buttons */
+        .btn {
+            border-radius: 0.5rem;
             font-weight: 600;
-            transition: all 0.3s;
+            padding: 0.6rem 1.2rem;
+            transition: all 0.3s ease;
         }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            border: none;
+            color: white;
+        }
+
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+            background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
         }
+
         .btn-secondary {
-            border-radius: 8px;
-            padding: 0.7rem 2rem;
+            background-color: #e9ecef;
+            border: none;
+            color: var(--dark);
+        }
+
+        .btn-secondary:hover {
+            background-color: #dee2e6;
+            transform: translateY(-2px);
+        }
+
+        .btn-outline-primary {
+            color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .btn-outline-primary:hover {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .btn-outline-secondary {
+            color: var(--gray);
+            border-color: var(--gray);
+        }
+
+        .btn-outline-secondary:hover {
+            background-color: var(--gray);
+            color: white;
+        }
+
+        /* Cards */
+        .card {
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Badge */
+        .badge {
+            padding: 0.5rem 0.8rem;
+            border-radius: 0.35rem;
+            font-weight: 500;
+        }
+
+        /* Table */
+        .table {
+            background-color: white;
+        }
+
+        .table thead th {
+            border-bottom: 2px solid #e0e0e0;
             font-weight: 600;
+        }
+
+        .table tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        /* Modal */
+        .modal-content {
+            border: none;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            border: none;
+            border-radius: 0.5rem 0.5rem 0 0;
+        }
+
+        .modal-header .btn-close {
+            filter: invert(1);
+        }
+
+        /* Footer */
+        footer {
+            background-color: white;
+            border-top: 1px solid #e0e0e0;
+            padding: 2rem 0;
+            margin-top: 3rem;
+        }
+
+        /* Loading Spinner */
+        .spinner-border {
+            color: var(--primary);
         }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container-fluid">
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
+        <div class="container-lg">
             <a class="navbar-brand" href="/">
                 <i class="bi bi-bank2"></i> FGTS Web
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#empresaModal">
-                            <i class="bi bi-building-add"></i> Cadastrar Empresa
-                        </a>
-                    </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'dashboard' %}">
                             <i class="bi bi-speedometer2"></i> Dashboard
@@ -101,7 +268,7 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'lancamento-list' %}">
-                            <i class="bi bi-file-text"></i> Lançamentos
+                            <i class="bi bi-receipt"></i> Lançamentos
                         </a>
                     </li>
                     <li class="nav-item">
@@ -109,9 +276,25 @@
                             <i class="bi bi-graph-up"></i> Relatório
                         </a>
                     </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="configDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-gear"></i> Configurações
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="configDropdown">
+                            <li><a class="dropdown-item" href="#">Empresas</a></li>
+                            <li><a class="dropdown-item" href="#">Índices</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#">Preferências</a></li>
+                        </ul>
+                    </li>
                     {% if request.user.is_authenticated %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'logout' %}">
+                        <span class="nav-link text-white-50">
+                            <i class="bi bi-person-circle"></i> {{ request.user.username }}
+                        </span>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'logout' %}" onclick="return confirm('Deseja realmente sair?')">
                             <i class="bi bi-box-arrow-right"></i> Sair
                         </a>
                     </li>
@@ -127,19 +310,38 @@
         </div>
     </nav>
 
+    <!-- Messages Section -->
     <div class="content-wrapper">
         {% if messages %}
-        <div class="container mt-3">
+        <div class="container-lg">
             {% for message in messages %}
             <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+                <i class="bi bi-info-circle-fill me-2"></i>
                 {{ message }}
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
             {% endfor %}
         </div>
         {% endif %}
+
+        <!-- Main Content -->
         {% block content %}{% endblock %}
     </div>
+
+    <!-- Footer -->
+    <footer class="mt-auto">
+        <div class="container-lg py-4">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="fw-bold">FGTS Web</h6>
+                    <p class="text-muted small">Sistema de Gestão de FGTS com cálculos automáticos e geração de relatórios.</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p class="text-muted small mb-0">&copy; 2024 FGTS Web. Todos os direitos reservados.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     {% block extra_js %}{% endblock %}

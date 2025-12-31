@@ -1,53 +1,152 @@
 {% extends 'base.html' %}
 
+{% block title %}Funcionários - FGTS Web{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-    <div class="card shadow-lg">
-        <div class="card-header bg-gradient text-white" style="background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);">
-            <div class="d-flex justify-content-between align-items-center">
-                <h4 class="mb-0"><i class="bi bi-people-fill"></i> Lista de Funcionários</h4>
-                <button type="button" class="btn btn-light" data-bs-toggle="modal" data-bs-target="#funcionarioModal">
-                    <i class="bi bi-person-plus"></i> Novo Funcionário
-                </button>
+<div class="container py-5">
+    <!-- Header Section -->
+    <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="fw-bold text-dark mb-1">
+                    <i class="bi bi-people-fill text-primary"></i> Funcionários
+                </h2>
+                <p class="text-muted mb-0">Gerencie todos os colaboradores do sistema</p>
+            </div>
+            <a href="{% url 'funcionario-create' %}" class="btn btn-primary btn-lg rounded-3">
+                <i class="bi bi-person-plus-fill me-2"></i> Novo Funcionário
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row mb-4 g-3">
+        <div class="col-md-4">
+            <div class="card border-0 bg-light h-100">
+                <div class="card-body py-3 px-4">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-success bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="bi bi-check-circle text-success fs-5"></i>
+                        </div>
+                        <div>
+                            <small class="text-muted">Funcionários Ativos</small>
+                            <h5 class="mb-0 fw-bold">{{ ativos_count|default:0 }}</h5>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="card-body">
+        <div class="col-md-4">
+            <div class="card border-0 bg-light h-100">
+                <div class="card-body py-3 px-4">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-danger bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="bi bi-x-circle text-danger fs-5"></i>
+                        </div>
+                        <div>
+                            <small class="text-muted">Funcionários Demitidos</small>
+                            <h5 class="mb-0 fw-bold">{{ demitidos_count|default:0 }}</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 bg-light h-100">
+                <div class="card-body py-3 px-4">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-info bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="bi bi-people text-info fs-5"></i>
+                        </div>
+                        <div>
+                            <small class="text-muted">Total de Funcionários</small>
+                            <h5 class="mb-0 fw-bold">{{ funcionarios|length }}</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Card -->
+    <div class="card border-0 shadow-lg">
+        <!-- Header -->
+        <div class="card-header bg-gradient-primary text-white py-4 border-0">
+            <h5 class="mb-0 fw-bold">
+                <i class="bi bi-list-ul me-2"></i>Listagem Completa
+            </h5>
+        </div>
+
+        <!-- Body -->
+        <div class="card-body p-4">
+            {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show border-0" role="alert">
+                    <i class="bi bi-check-circle me-2"></i>
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+            {% endif %}
+
             {% if funcionarios %}
             <div class="table-responsive">
-                <table class="table table-hover table-striped">
-                    <thead class="table-dark">
+                <table class="table table-hover mb-0">
+                    <thead class="bg-light border-bottom border-2">
                         <tr>
-                            <th>Código</th>
-                            <th>Nome</th>
-                            <th>CPF</th>
-                            <th>Empresa</th>
-                            <th>Data Admissão</th>
-                            <th>Status</th>
-                            <th>Ações</th>
+                            <th class="py-3 px-4 fw-bold text-dark">#ID</th>
+                            <th class="py-3 px-4 fw-bold text-dark">Nome</th>
+                            <th class="py-3 px-4 fw-bold text-dark">CPF</th>
+                            <th class="py-3 px-4 fw-bold text-dark">Matrícula</th>
+                            <th class="py-3 px-4 fw-bold text-dark">Empresa</th>
+                            <th class="py-3 px-4 fw-bold text-dark">Admissão</th>
+                            <th class="py-3 px-4 fw-bold text-dark">Status</th>
+                            <th class="py-3 px-4 fw-bold text-dark">Ações</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody class="border-top-0">
                         {% for funcionario in funcionarios %}
-                        <tr>
-                            <td>{{ funcionario.id }}</td>
-                            <td>{{ funcionario.nome }}</td>
-                            <td>{{ funcionario.cpf }}</td>
-                            <td>{{ funcionario.empresa.nome }}</td>
-                            <td>{{ funcionario.data_admissao|date:"d/m/Y" }}</td>
-                            <td>
+                        <tr class="align-middle">
+                            <td class="py-3 px-4">
+                                <span class="badge bg-light text-dark fw-bold">#{{ funcionario.id }}</span>
+                            </td>
+                            <td class="py-3 px-4">
+                                <div class="fw-bold text-dark">{{ funcionario.nome }}</div>
+                                <small class="text-muted">{{ funcionario.pis|default:"Sem PIS" }}</small>
+                            </td>
+                            <td class="py-3 px-4">
+                                <code class="bg-light px-2 py-1 rounded">{{ funcionario.cpf }}</code>
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="badge bg-secondary">{{ funcionario.matricula|default:"—" }}</span>
+                            </td>
+                            <td class="py-3 px-4">
+                                <div class="fw-bold text-dark">{{ funcionario.empresa.nome }}</div>
+                                <small class="text-muted">CNPJ: {{ funcionario.empresa.cnpj }}</small>
+                            </td>
+                            <td class="py-3 px-4 text-nowrap">
+                                {{ funcionario.data_admissao|date:"d/m/Y" }}
+                            </td>
+                            <td class="py-3 px-4">
                                 {% if funcionario.data_demissao %}
-                                    <span class="badge bg-danger">Demitido</span>
+                                    <span class="badge bg-danger rounded-pill">
+                                        <i class="bi bi-x-circle me-1"></i>Demitido
+                                    </span>
                                 {% else %}
-                                    <span class="badge bg-success">Ativo</span>
+                                    <span class="badge bg-success rounded-pill">
+                                        <i class="bi bi-check-circle me-1"></i>Ativo
+                                    </span>
                                 {% endif %}
                             </td>
-                            <td>
-                                <button class="btn btn-sm btn-primary" title="Editar">
-                                    <i class="bi bi-pencil"></i>
-                                </button>
-                                <button class="btn btn-sm btn-danger" title="Excluir">
-                                    <i class="bi bi-trash"></i>
-                                </button>
+                            <td class="py-3 px-4">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button class="btn btn-outline-primary" title="Editar" data-bs-toggle="tooltip">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger" title="Excluir" data-bs-toggle="tooltip">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -55,18 +154,56 @@
                 </table>
             </div>
             {% else %}
-            <div class="alert alert-info text-center">
-                <i class="bi bi-info-circle"></i> Nenhum funcionário cadastrado ainda.
-                <br>
-                <button type="button" class="btn btn-primary mt-2" data-bs-toggle="modal" data-bs-target="#funcionarioModal">
-                    Cadastrar Primeiro Funcionário
-                </button>
+            <div class="text-center py-5">
+                <div class="mb-4">
+                    <i class="bi bi-inbox fs-1 text-muted"></i>
+                </div>
+                <h5 class="text-dark mb-2">Nenhum funcionário cadastrado</h5>
+                <p class="text-muted mb-4">Comece adicionando o primeiro colaborador ao sistema</p>
+                <a href="{% url 'funcionario-create' %}" class="btn btn-primary btn-lg rounded-3">
+                    <i class="bi bi-person-plus-fill me-2"></i> Cadastrar Primeiro Funcionário
+                </a>
             </div>
             {% endif %}
         </div>
     </div>
+
+    <!-- Help Section -->
+    <div class="card border-0 bg-light mt-4">
+        <div class="card-body py-3 px-4">
+            <p class="mb-0">
+                <i class="bi bi-lightbulb-fill text-warning me-2"></i>
+                <strong>Dica:</strong> Um mesmo CPF pode estar vinculado a várias empresas com diferentes funções. Use o botão <strong>"Novo Funcionário"</strong> para adicionar novos vínculos.
+            </p>
+        </div>
+    </div>
 </div>
 
-<!-- Incluir o modal de cadastro -->
-{% include 'funcionarios/funcionario_form.html' %}
+<style>
+    .bg-gradient-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .table tbody tr {
+        transition: background-color 0.2s ease;
+    }
+
+    .table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+
+    .btn-group-sm .btn {
+        padding: 0.4rem 0.7rem;
+    }
+</style>
+
+<script>
+    // Inicializar tooltips
+    document.addEventListener('DOMContentLoaded', function() {
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function(tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    });
+</script>
 {% endblock %}
