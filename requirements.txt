@@ -31,6 +31,7 @@ pycparser==2.23
 pydantic==2.12.5
 pydantic_core==2.41.5
 Pygments==2.19.2
+python-dotenv==1.0.0
 pyiceberg==0.10.0
 PyJWT==2.10.1
 pyparsing==3.3.1
@@ -56,3 +57,4 @@ tzdata==2025.3
 urllib3==2.6.2
 websockets==15.0.1
 yarl==1.22.0
+gunicorn==21.2.0

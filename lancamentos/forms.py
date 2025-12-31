@@ -1,10 +1,53 @@
 from django import forms
 from empresas.models import Empresa
 from funcionarios.models import Funcionario
+from fgtsweb.mixins import get_allowed_empresa_ids
+
 
 class RelatorioCompetenciaForm(forms.Form):
-    empresa = forms.ModelChoiceField(queryset=Empresa.objects.all(), label='Empresa')
-    funcionario = forms.ModelChoiceField(queryset=Funcionario.objects.all(), label='Funcionário (opcional)', required=False)
-    competencia = forms.CharField(label='Competência', required=False, help_text='MM/YYYY')
-    competencias = forms.CharField(label='Múltiplas competências', required=False, help_text='Uma por linha no formato MM/YYYY', widget=forms.Textarea(attrs={'rows': 3}))
-    data_pagamento = forms.DateField(label='Data de Pagamento', required=False, widget=forms.DateInput(attrs={'type': 'date'}))
+    empresa = forms.ModelChoiceField(
+        queryset=Empresa.objects.all(), 
+        label='Empresa',
+        widget=forms.Select(attrs={'autocomplete': 'off'})
+    )
+    funcionario = forms.ModelChoiceField(
+        queryset=Funcionario.objects.none(), 
+        label='Funcionário (opcional)', 
+        required=False,
+        widget=forms.Select(attrs={'autocomplete': 'off'})
+    )
+    competencia = forms.CharField(
+        label='Competência', 
+        required=False, 
+        help_text='MM/YYYY',
+        widget=forms.TextInput(attrs={'autocomplete': 'off'})
+    )
+    competencias = forms.CharField(
+        label='Múltiplas competências', 
+        required=False, 
+        help_text='Uma por linha no formato MM/YYYY', 
+        widget=forms.Textarea(attrs={'rows': 3, 'autocomplete': 'off'})
+    )
+    data_pagamento = forms.DateField(
+        label='Data de Pagamento', 
+        required=False, 
+        widget=forms.DateInput(attrs={'type': 'date', 'autocomplete': 'off'})
+    )
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user is not None:
+            allowed_ids = get_allowed_empresa_ids(user)
+            if allowed_ids is not None:
+                self.fields['empresa'].queryset = Empresa.objects.filter(codigo__in=allowed_ids)
+        
+        # Se o formulário tem dados (POST), filtra funcionários pela empresa selecionada
+        if 'data' in kwargs and kwargs['data'].get('empresa'):
+            try:
+                empresa_id = int(kwargs['data'].get('empresa'))
+                self.fields['funcionario'].queryset = Funcionario.objects.filter(empresa_id=empresa_id)
+            except (ValueError, TypeError):
+                self.fields['funcionario'].queryset = Funcionario.objects.none()
+        elif user is not None and allowed_ids is not None:
+            # Se não tem empresa selecionada, mostra todos das empresas permitidas
+            self.fields['funcionario'].queryset = Funcionario.objects.filter(empresa__codigo__in=allowed_ids)

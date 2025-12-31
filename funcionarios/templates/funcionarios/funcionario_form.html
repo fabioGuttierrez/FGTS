@@ -1,8 +1,5 @@
-{% extends 'base.html' %}
-
-{% block content %}
+<!-- Modal de Cadastro de Funcionário (partial) -->
 <div class="container">
-    <!-- Modal de Cadastro de Funcionário -->
     <div class="modal fade" id="funcionarioModal" tabindex="-1" aria-labelledby="funcionarioModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
@@ -103,10 +100,8 @@
 </div>
 
 <script>
-    // Auto-abrir o modal se houver erros de validação
     {% if form.errors %}
         var funcionarioModal = new bootstrap.Modal(document.getElementById('funcionarioModal'));
         funcionarioModal.show();
     {% endif %}
 </script>
-{% endblock %}

@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from empresas.models import Empresa
+from fgtsweb.mixins import is_empresa_allowed
 from .models import BillingCustomer, Subscription, Payment, PricingPlan
 from .services.asaas_client import AsaasClient
 
@@ -46,6 +47,10 @@ def checkout_empresa(request, empresa_id):
         return HttpResponseBadRequest('Use POST para iniciar checkout.')
 
     empresa = get_object_or_404(Empresa, pk=empresa_id)
+
+    # Escopo multi-tenant: usuário precisa ter permissão para esta empresa
+    if not is_empresa_allowed(request.user, empresa.codigo):
+        return HttpResponseBadRequest('Empresa não permitida para este usuário.')
     billing_customer = _ensure_billing_customer(empresa, email_fallback=_first_email(empresa))
 
     try:

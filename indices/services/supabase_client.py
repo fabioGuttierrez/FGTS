@@ -40,3 +40,26 @@ def fetch_indices_range(start: date, end: date) -> List[Tuple[date, Decimal]]:
         return result
     except Exception:
         return []
+
+
+def fetch_indice_especifico(competencia: date, data_pagamento: date, tabela: int = 1) -> Decimal:
+    """
+    Busca o índice específico onde competencia = competencia E data_base = data_pagamento E tabela = tabela.
+    Retorna o valor do índice ou None se não encontrar.
+    
+    REGRA CRÍTICA: Busca EXATA, nunca aproximada.
+    """
+    base_url, headers = _headers()
+    if not base_url:
+        return None
+    
+    url = f"{base_url}{BASE_PATH}/{TABLE_NAME}?select=indice&competencia=eq.{competencia.isoformat()}&data_base=eq.{data_pagamento.isoformat()}&tabela=eq.{tabela}"
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        resp.raise_for_status()
+        items = resp.json()
+        if items and len(items) > 0:
+            return Decimal(str(items[0]['indice']))
+        return None
+    except Exception:
+        return None

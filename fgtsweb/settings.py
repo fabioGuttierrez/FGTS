@@ -12,9 +12,13 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 import os
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Carregar variáveis de ambiente do arquivo .env
+load_dotenv(BASE_DIR / '.env')
 
 
 # Quick-start development settings - unsuitable for production
@@ -94,33 +98,31 @@ SUPABASE_PORT = os.getenv('SUPABASE_PORT', '5432')
 SUPABASE_API_URL = os.getenv('SUPABASE_URL')  # ex: https://xyzcompany.supabase.co
 SUPABASE_API_KEY = os.getenv('SUPABASE_KEY')  # service_role ou anon conforme necessidade
 
-if SUPABASE_URL or (SUPABASE_HOST and SUPABASE_DB and SUPABASE_USER and SUPABASE_PASSWORD):
-    if SUPABASE_URL:
-        # Django não parseia DATABASE_URL nativamente; use dj-database-url se quiser.
-        # Aqui, optamos por variáveis separadas quando disponíveis; caso contrário, informe separadas.
-        # Fallback simples para sqlite se apenas URL estiver presente sem parser.
-        pass
-
+# Configurar banco de dados
+if SUPABASE_HOST and SUPABASE_DB and SUPABASE_USER and SUPABASE_PASSWORD:
+    # Usar PostgreSQL/Supabase quando configurado
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'HOST': SUPABASE_HOST or '',
-            'PORT': SUPABASE_PORT,
-            'NAME': SUPABASE_DB or '',
-            'USER': SUPABASE_USER or '',
-            'PASSWORD': SUPABASE_PASSWORD or '',
+            'HOST': SUPABASE_HOST,
+            'PORT': int(SUPABASE_PORT),
+            'NAME': SUPABASE_DB,
+            'USER': SUPABASE_USER,
+            'PASSWORD': SUPABASE_PASSWORD,
             'OPTIONS': {
                 'sslmode': 'require',
-            },
+            } if SUPABASE_HOST and 'supabase' in SUPABASE_HOST else {},
         }
     }
 else:
+    # Fallback para SQLite em desenvolvimento
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
+
 # Modelo de usuário customizado
 AUTH_USER_MODEL = 'usuarios.Usuario'
 

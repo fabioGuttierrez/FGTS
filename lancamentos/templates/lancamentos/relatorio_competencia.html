@@ -5,7 +5,7 @@
   <div class="card shadow-lg mb-4">
     <div class="card-header bg-dark text-white">Filtros</div>
     <div class="card-body">
-      <form method="post" class="row g-3">
+      <form method="post" class="row g-3" autocomplete="off">
         {% csrf_token %}
         <div class="col-md-6">
           <label class="form-label">Empresa</label>
@@ -59,6 +59,7 @@
               <th>Corrigido</th>
               <th>JAM</th>
               <th>Total</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -70,6 +71,13 @@
               <td>R$ {{ item.calc.valor_corrigido }}</td>
               <td>R$ {{ item.calc.valor_jam }}</td>
               <td><strong>R$ {{ item.calc.total }}</strong></td>
+              <td>
+                <a href="{% url 'relatorio-memoria-calculo' %}?empresa={{ empresa.pk }}&funcionario={{ item.lancamento.funcionario.pk }}&competencia={{ item.competencia }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}" 
+                   class="btn btn-sm btn-info" 
+                   title="Baixar Memória de Cálculo">
+                  <i class="bi bi-calculator"></i> Memória
+                </a>
+              </td>
             </tr>
             {% endfor %}
           </tbody>
@@ -81,6 +89,7 @@
               <th>R$ {{ totais.valor_corrigido }}</th>
               <th>R$ {{ totais.valor_jam }}</th>
               <th><strong>R$ {{ totais.total }}</strong></th>
+              <th></th>
             </tr>
           </tfoot>
         </table>

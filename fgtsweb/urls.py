@@ -21,7 +21,15 @@ from django.views.generic import TemplateView
 from django.contrib.auth import views as auth_views
 from empresas.views import EmpresaCreateView, EmpresaListView
 from funcionarios.views import FuncionarioCreateView, FuncionarioListView
-from lancamentos.views import RelatorioCompetenciaView, export_relatorio_competencia_csv, export_relatorio_competencia_pdf
+from lancamentos.views import (
+    RelatorioCompetenciaView, 
+    export_relatorio_competencia_csv, 
+    export_relatorio_competencia_pdf,
+    download_memoria_calculo
+)
+from indices.views import IndiceListView
+from coefjam.views import CoefJamListView
+from configuracoes.views import ConfiguracaoListView
 from .views import DashboardView
 
 urlpatterns = [
@@ -38,4 +46,8 @@ urlpatterns = [
     path('lancamentos/relatorio/', RelatorioCompetenciaView.as_view(), name='relatorio-competencia'),
     path('lancamentos/relatorio/export/csv', export_relatorio_competencia_csv, name='relatorio-competencia-export-csv'),
     path('lancamentos/relatorio/export/pdf', export_relatorio_competencia_pdf, name='relatorio-competencia-export-pdf'),
+    path('lancamentos/relatorio/memoria-calculo', download_memoria_calculo, name='relatorio-memoria-calculo'),
+    path('indices/', IndiceListView.as_view(), name='indice-list'),
+    path('coefjam/', CoefJamListView.as_view(), name='coefjam-list'),
+    path('configuracoes/', ConfiguracaoListView.as_view(), name='configuracao-list'),
 ]
