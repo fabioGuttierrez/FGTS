@@ -23,11 +23,8 @@ RUN pip install --no-cache-dir -r requirements.txt gunicorn
 # Copia todo o código
 COPY . .
 
-# Coleta arquivos estáticos
-RUN python manage.py collectstatic --noinput
-
 # Expõe porta 8000
 EXPOSE 8000
 
-# Comando para iniciar o servidor
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120", "fgtsweb.wsgi:application"]
+# Comando para iniciar o servidor (collectstatic será executado via start.sh)
+CMD ["sh", "start.sh"]
