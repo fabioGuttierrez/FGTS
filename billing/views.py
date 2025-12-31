@@ -2,17 +2,62 @@ from datetime import timedelta
 from decimal import Decimal
 from django.contrib import messages
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect, JsonResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from django.views.generic import TemplateView
+from django.urls import reverse
 from empresas.models import Empresa
 from fgtsweb.mixins import is_empresa_allowed
-from .models import BillingCustomer, Subscription, Payment, PricingPlan
+from .models import BillingCustomer, Subscription, Payment, PricingPlan, Plan
 from .services.asaas_client import AsaasClient
 
 
 DEFAULT_PLAN_VALUE = Decimal('99.90')
 DEFAULT_PERIODICITY = 'MONTHLY'
+
+
+class CheckoutPlanoView(TemplateView):
+    """Página de checkout pública - sem login obrigatório"""
+    template_name = 'billing/checkout_plano.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        plan_type = self.kwargs.get('plan_type')
+        
+        # Buscar plano selecionado (se houver)
+        if plan_type:
+            try:
+                context['selected_plan'] = Plan.objects.get(plan_type=plan_type, active=True)
+            except Plan.DoesNotExist:
+                context['error'] = 'Plano não encontrado'
+        
+        # Listar todos os planos
+        context['all_plans'] = Plan.objects.filter(active=True).order_by('plan_type')
+        
+        return context
+    
+    def post(self, request, *args, **kwargs):
+        """Processa seleção e redireciona"""
+        plan_type = request.POST.get('plan_type')
+        
+        try:
+            plan = Plan.objects.get(plan_type=plan_type, active=True)
+        except Plan.DoesNotExist:
+            messages.error(request, 'Plano inválido')
+            return redirect('checkout-plano')
+        
+        # Salvar na sessão
+        request.session['selected_plan_type'] = plan_type
+        request.session['selected_plan_price'] = str(plan.price_monthly)
+        
+        # Se logado, ir direto para criar empresa
+        if request.user.is_authenticated:
+            return redirect('empresa-create-with-plan')
+        
+        # Se não logado, ir para registro/login (com next setado)
+        messages.info(request, f'Você selecionou o plano {plan.get_plan_type_display()}. Crie uma conta para continuar.')
+        return redirect('register')
 
 
 def _get_current_plan():

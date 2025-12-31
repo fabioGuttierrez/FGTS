@@ -24,6 +24,7 @@ from funcionarios.views import FuncionarioCreateView, FuncionarioListView
 from lancamentos.views import (
     RelatorioCompetenciaView,
     LancamentoCreateView,
+    LancamentoUpdateView,
     LancamentoListView,
     GerarLancamentosAutomaticosView,
     export_relatorio_competencia_csv, 
@@ -39,7 +40,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', TemplateView.as_view(template_name='landing.html'), name='home'),
     path('login/', auth_views.LoginView.as_view(template_name='auth/login.html'), name='login'),
-    path('logout/', auth_views.LogoutView.as_view(next_page='home'), name='logout'),
+    path('logout/', auth_views.LogoutView.as_view(next_page='/'), name='logout'),
+    path('usuario/', include('usuarios.urls')),
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('billing/', include('billing.urls')),
     path('empresas/', EmpresaListView.as_view(), name='empresa-list'),
@@ -48,6 +50,7 @@ urlpatterns = [
     path('funcionarios/novo/', FuncionarioCreateView.as_view(), name='funcionario-create'),
     path('lancamentos/', LancamentoListView.as_view(), name='lancamento-list'),
     path('lancamentos/novo/', LancamentoCreateView.as_view(), name='lancamento-create'),
+    path('lancamentos/<int:pk>/editar/', LancamentoUpdateView.as_view(), name='lancamento-update'),
     path('lancamentos/gerar/<int:funcionario_id>/', GerarLancamentosAutomaticosView.as_view(), name='lancamento-gerar-automatico'),
     path('lancamentos/relatorio/', RelatorioCompetenciaView.as_view(), name='relatorio-competencia'),
     path('lancamentos/relatorio/export/csv', export_relatorio_competencia_csv, name='relatorio-competencia-export-csv'),
@@ -56,4 +59,5 @@ urlpatterns = [
     path('indices/', IndiceListView.as_view(), name='indice-list'),
     path('coefjam/', CoefJamListView.as_view(), name='coefjam-list'),
     path('configuracoes/', ConfiguracaoListView.as_view(), name='configuracao-list'),
+    path('auditoria/', include('audit_logs.urls')),
 ]

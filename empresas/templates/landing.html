@@ -23,6 +23,25 @@
   .feature-card { border: none; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.06); }
   .feature-card .icon { width: 52px; height: 52px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; }
   .cta-gradient { background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%); }
+  
+  /* Pricing Plans */
+  .pricing-section { padding: 100px 0; background: #fff; }
+  .pricing-card { border: 2px solid #e0e0e0; border-radius: 14px; transition: all 0.3s ease; position: relative; }
+  .pricing-card:hover { transform: translateY(-8px); box-shadow: 0 20px 40px rgba(0,0,0,.1); border-color: #667eea; }
+  .pricing-card.featured { border-color: #667eea; box-shadow: 0 20px 40px rgba(102, 126, 234, 0.15); }
+  .pricing-card.featured .badge-popular { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 6px 16px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+  .pricing-price { font-size: 2.5rem; font-weight: 800; color: #2c3e50; }
+  .pricing-period { color: #95a5a6; font-size: 0.95rem; }
+  .pricing-features { list-style: none; padding: 0; margin: 25px 0; }
+  .pricing-features li { padding: 12px 0; border-bottom: 1px solid #f0f0f0; color: #555; display: flex; align-items: center; }
+  .pricing-features li:before { content: "✓"; color: #27ae60; font-weight: bold; margin-right: 10px; font-size: 1.2rem; }
+  .pricing-features li:last-child { border-bottom: none; }
+  .pricing-btn { width: 100%; padding: 12px; font-size: 1rem; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; transition: all 0.3s ease; }
+  .pricing-btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+  .pricing-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3); }
+  .pricing-btn-secondary { background: #f0f0f0; color: #2c3e50; border: 2px solid #e0e0e0; }
+  .pricing-btn-secondary:hover { background: #e0e0e0; }
+
 </style>
 {% endblock %}
 
@@ -35,9 +54,13 @@
         <h1 class="display-4 mb-3">FGTS em atraso sem dor de cabeça</h1>
             <p class="lead mb-4">Calcule, organize e gere seus guias com precisão. Importação inteligente, índices atualizados e fluxo simples para empresas e escritórios contábeis.</p>
         <div class="d-flex gap-2">
+          {% if request.user.is_authenticated %}
+          <a href="{% url 'dashboard' %}" class="btn btn-light btn-lg"><i class="bi bi-speedometer2"></i> Dashboard</a>
+          <a href="{% url 'lancamento-list' %}" class="btn btn-outline-light btn-lg"><i class="bi bi-receipt"></i> Lançamentos</a>
+          {% else %}
           <a href="{% url 'empresa-list' %}" class="btn btn-light btn-lg"><i class="bi bi-rocket-takeoff"></i> Começar agora</a>
-          <a href="{% url 'funcionario-list' %}" class="btn btn-outline-light btn-lg"><i class="bi bi-people"></i> Ver funcionários</a>
           <a href="{% url 'login' %}" class="btn btn-outline-light btn-lg"><i class="bi bi-box-arrow-in-right"></i> Login</a>
+          {% endif %}
         </div>
         <div class="row g-3 mt-4">
           <div class="col-6 col-md-4">
@@ -49,9 +72,11 @@
           <div class="col-6 col-md-4">
             <div class="metric p-3 text-center">
                   {% if current_plan %}
+                  <div class="h6 mb-2 text-muted">Plano Atual</div>
                   <div class="h4 mb-0">R$ {{ current_plan.amount }}</div>
                   <small>{{ current_plan.get_periodicity_display }}</small>
                   {% else %}
+                  <div class="h6 mb-2 text-muted">Plano Básico</div>
                   <div class="h4 mb-0">R$ 99,90</div>
                   <small>Mensal</small>
                   {% endif %}
@@ -66,6 +91,7 @@
         </div>
       </div>
       <div class="col-lg-5 d-none d-lg-block">
+        {% if not request.user.is_authenticated %}
         <div class="card feature-card">
           <div class="card-body p-4">
             <h5 class="mb-3"><i class="bi bi-calculator"></i> Demonstração rápida</h5>
@@ -78,6 +104,7 @@
             <a href="{% url 'empresa-list' %}" class="btn btn-primary w-100">Iniciar demonstração</a>
           </div>
         </div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -118,6 +145,90 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING PLANS -->
+<section class="pricing-section">
+  <div class="container">
+    <div class="text-center mb-5">
+      <h2 class="fw-bold mb-2">Planos e Preços</h2>
+      <p class="text-muted">Escolha o plano ideal para o tamanho da sua empresa e necessidades de gestão de FGTS.</p>
+    </div>
+    
+    <div class="row g-4">
+      <!-- Plano Básico -->
+      <div class="col-lg-4">
+        <div class="pricing-card h-100 p-4">
+          <h4 class="mb-2">Básico</h4>
+          <p class="text-muted mb-3">Para pequenas empresas</p>
+          
+          <div class="mb-4">
+            <span class="pricing-price">R$ 99</span>
+            <span class="pricing-period"> /mês</span>
+          </div>
+          
+          <ul class="pricing-features">
+            <li>Até 50 Colaboradores</li>
+            <li>Dashboard Básico</li>
+            <li>Relatórios Mensais</li>
+            <li>Suporte por e-mail</li>
+          </ul>
+          
+          <button class="pricing-btn pricing-btn-secondary" onclick="window.location.href='{% url 'checkout-plano-tipo' plan_type='BASIC' %}'">Escolher Plano</button>
+        </div>
+      </div>
+      
+      <!-- Plano Profissional (Mais Popular) -->
+      <div class="col-lg-4">
+        <div class="pricing-card featured h-100 p-4">
+          <div class="badge-popular">Mais popular</div>
+          <h4 class="mb-2">Profissional</h4>
+          <p class="text-muted mb-3">Para empresas em crescimento</p>
+          
+          <div class="mb-4">
+            <span class="pricing-price">R$ 199</span>
+            <span class="pricing-period"> /mês</span>
+          </div>
+          
+          <ul class="pricing-features">
+            <li>Até 200 Colaboradores</li>
+            <li>Dashboard Avançado</li>
+            <li>Relatórios Personalizados</li>
+            <li>Exportação em PDF e Excel</li>
+            <li>Suporte prioritário</li>
+          </ul>
+          
+          <button class="pricing-btn pricing-btn-primary" onclick="window.location.href='{% url 'checkout-plano-tipo' plan_type='PROFESSIONAL' %}'">Escolher Plano</button>
+        </div>
+      </div>
+      
+      <!-- Plano Empresarial -->
+      <div class="col-lg-4">
+        <div class="pricing-card h-100 p-4">
+          <h4 class="mb-2">Empresarial</h4>
+          <p class="text-muted mb-3">Para grandes empresas</p>
+          
+          <div class="mb-4">
+            <span class="pricing-price">R$ 399</span>
+            <span class="pricing-period"> /mês</span>
+          </div>
+          
+          <ul class="pricing-features">
+            <li>Colaboradores ilimitados</li>
+            <li>Dashboard Personalizado</li>
+            <li>API para integração</li>
+            <li>Suporte 24/7</li>
+          </ul>
+          
+          <button class="pricing-btn pricing-btn-secondary" onclick="window.location.href='{% url 'checkout-plano-tipo' plan_type='ENTERPRISE' %}'">Escolher Plano</button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="text-center mt-5">
+      <p class="text-muted mb-0">Todos os planos incluem índices atualizados, importação inteligente e cálculo preciso de FGTS.</p>
     </div>
   </div>
 </section>

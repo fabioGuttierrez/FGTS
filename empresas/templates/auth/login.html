@@ -1,35 +1,183 @@
 {% extends 'base.html' %}
 {% block title %}Login — FGTS Web{% endblock %}
+
+{% block extra_css %}
+<style>
+  .login-container {
+    min-height: 85vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 20px;
+  }
+  
+  .login-card {
+    background: white;
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+    width: 100%;
+    max-width: 420px;
+    padding: 40px;
+  }
+  
+  .login-card h2 {
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 8px;
+    text-align: center;
+  }
+  
+  .login-card .subtitle {
+    text-align: center;
+    color: #95a5a6;
+    margin-bottom: 30px;
+    font-size: 0.95rem;
+  }
+  
+  .form-group {
+    margin-bottom: 16px;
+  }
+  
+  .form-group label {
+    display: block;
+    font-weight: 500;
+    color: #2c3e50;
+    margin-bottom: 6px;
+    font-size: 0.9rem;
+  }
+  
+  .form-group input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    transition: border-color 0.3s;
+  }
+  
+  .form-group input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+  
+  .alert {
+    background: #fee;
+    border: 1px solid #fcc;
+    border-radius: 6px;
+    padding: 12px;
+    color: #c33;
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+  }
+  
+  .btn-login {
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  
+  .btn-login:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+  }
+  
+  .login-footer {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #f0f0f0;
+    justify-content: space-between;
+  }
+  
+  .login-footer a {
+    color: #667eea;
+    text-decoration: none;
+    font-size: 0.95rem;
+  }
+  
+  .login-footer a:hover {
+    text-decoration: underline;
+  }
+  
+  .login-divider {
+    text-align: center;
+    padding: 20px 0;
+    color: #bbb;
+  }
+  
+  .btn-register {
+    width: 100%;
+    padding: 12px;
+    background: #f0f0f0;
+    color: #2c3e50;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
+  }
+  
+  .btn-register:hover {
+    background: #e0e0e0;
+    border-color: #667eea;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container py-5">
-  <div class="row justify-content-center">
-    <div class="col-lg-5">
-      <div class="card shadow-lg border-0">
-        <div class="card-body p-4">
-          <h3 class="mb-3 text-center">Entrar</h3>
-          <form method="post" novalidate>
-            {% csrf_token %}
-            {% if form.errors %}
-              <div class="alert alert-danger">Verifique usuário e senha.</div>
-            {% endif %}
-            <div class="mb-3">
-              <label class="form-label">Usuário</label>
-              {{ form.username }}
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Senha</label>
-              {{ form.password }}
-            </div>
-            <div class="d-grid">
-              <button type="submit" class="btn btn-primary">Entrar</button>
-            </div>
-          </form>
-          <div class="text-center mt-3">
-            <a href="/" class="text-decoration-none">Voltar</a>
-          </div>
+
+<div class="login-container">
+  <div class="login-card">
+    <h2>Entrar</h2>
+    <p class="subtitle">Acesse sua conta FGTS Web</p>
+    
+    <form method="post" novalidate>
+      {% csrf_token %}
+      
+      {% if form.errors %}
+        <div class="alert">
+          ⚠️ Usuário ou senha incorretos. Tente novamente.
         </div>
+      {% endif %}
+      
+      <div class="form-group">
+        <label for="{{ form.username.id_for_label }}">Usuário</label>
+        {{ form.username }}
       </div>
+      
+      <div class="form-group">
+        <label for="{{ form.password.id_for_label }}">Senha</label>
+        {{ form.password }}
+      </div>
+      
+      <button type="submit" class="btn-login">Entrar</button>
+    </form>
+    
+    <div class="login-footer">
+      <a href="{% url 'home' %}">← Voltar para home</a>
     </div>
+    
+    <div class="login-divider">Ou</div>
+    
+    <a href="{% url 'register' %}" class="btn-register">
+      <i class="bi bi-person-plus"></i> Criar Conta
+    </a>
   </div>
 </div>
+
 {% endblock %}
+

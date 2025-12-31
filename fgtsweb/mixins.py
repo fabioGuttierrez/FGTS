@@ -1,5 +1,8 @@
 from typing import Iterable, Optional
 from django.db.models import QuerySet
+from django.contrib.auth.mixins import UserPassesTestMixin
+from django.contrib import messages
+from django.shortcuts import redirect
 
 
 def get_allowed_empresa_ids(user) -> Optional[list]:
@@ -56,3 +59,63 @@ class EmpresaScopeMixin:
     def get_queryset(self):
         qs = super().get_queryset()
         return self.filter_queryset_by_empresa(qs)
+
+
+# ============ PLAN-BASED AUTHORIZATION MIXINS ============
+
+class PlanFeatureRequiredMixin(UserPassesTestMixin):
+    """Verifica se o plano da empresa permite acessar uma feature específica"""
+    
+    required_feature = None  # Sobrescrever com feature desejada
+    
+    def test_func(self):
+        """Testa se usuário tem acesso à feature"""
+        if not self.request.user.is_authenticated:
+            return False
+        
+        try:
+            plan = self.request.user.empresa.billing_customer.plan
+        except:
+            return False
+        
+        if not plan:
+            return False
+        
+        # Mapear feature para atributo do modelo Plan
+        feature_attr = self.get_feature_attribute()
+        return getattr(plan, feature_attr, False)
+    
+    def get_feature_attribute(self):
+        """Retorna o atributo do modelo Plan a verificar"""
+        return self.required_feature
+    
+    def handle_no_permission(self):
+        """Redireciona com mensagem amigável"""
+        plan_name = self.request.user.empresa.billing_customer.plan.get_plan_type_display()
+        messages.error(
+            self.request,
+            f'Este recurso não está disponível no seu plano {plan_name}. '
+            f'Faça upgrade para acessá-lo.'
+        )
+        return redirect('dashboard')
+
+
+class AdvancedDashboardRequiredMixin(PlanFeatureRequiredMixin):
+    """Requer que o plano tenha has_advanced_dashboard=True"""
+    required_feature = 'has_advanced_dashboard'
+
+
+class CustomReportsRequiredMixin(PlanFeatureRequiredMixin):
+    """Requer que o plano tenha has_custom_reports=True"""
+    required_feature = 'has_custom_reports'
+
+
+class PDFExportRequiredMixin(PlanFeatureRequiredMixin):
+    """Requer que o plano tenha has_pdf_export=True"""
+    required_feature = 'has_pdf_export'
+
+
+class APIAccessRequiredMixin(PlanFeatureRequiredMixin):
+    """Requer que o plano tenha has_api=True"""
+    required_feature = 'has_api'
+

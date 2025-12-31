@@ -47,4 +47,10 @@ class FuncionarioListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['form'] = FuncionarioForm()
+        
+        # Contar funcionários ativos e demitidos
+        queryset = self.get_queryset()
+        context['ativos_count'] = queryset.filter(data_demissao__isnull=True).count()
+        context['demitidos_count'] = queryset.filter(data_demissao__isnull=False).count()
+        
         return context

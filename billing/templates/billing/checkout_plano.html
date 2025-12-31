@@ -1,0 +1,401 @@
+{% extends 'base.html' %}
+
+{% block title %}Checkout — FGTS Web{% endblock %}
+
+{% block extra_css %}
+<style>
+  .checkout-hero {
+    min-height: 40vh;
+    display: flex;
+    align-items: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+  }
+  
+  .plan-card {
+    border: 2px solid #e0e0e0;
+    border-radius: 14px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+  }
+  
+  .plan-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px rgba(0,0,0,.1);
+  }
+  
+  .plan-card.selected {
+    border-color: #667eea;
+    background: linear-gradient(to bottom, rgba(102, 126, 234, 0.05), rgba(0,0,0,0));
+    box-shadow: 0 20px 40px rgba(102, 126, 234, 0.15);
+  }
+  
+  .plan-badge {
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  
+  .price-large {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #2c3e50;
+  }
+  
+  .feature-list {
+    list-style: none;
+    padding: 0;
+  }
+  
+  .feature-list li {
+    padding: 12px 0;
+    border-bottom: 1px solid #f0f0f0;
+    color: #555;
+    display: flex;
+    align-items: center;
+  }
+  
+  .feature-list li:before {
+    content: "✓";
+    color: #27ae60;
+    font-weight: bold;
+    margin-right: 10px;
+    font-size: 1.2rem;
+  }
+  
+  .feature-list li:last-child {
+    border-bottom: none;
+  }
+  
+  .btn-select-plan {
+    width: 100%;
+    padding: 14px;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  
+  .btn-select-plan.primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+  }
+  
+  .btn-select-plan.primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+  }
+  
+  .btn-select-plan.secondary {
+    background: #f0f0f0;
+    color: #2c3e50;
+    border: 2px solid #e0e0e0;
+  }
+  
+  .btn-select-plan.secondary:hover {
+    background: #e0e0e0;
+  }
+  
+  .checkout-section {
+    padding: 60px 0;
+  }
+  
+  .summary-card {
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 30px;
+    margin-top: 30px;
+  }
+  
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  
+  .summary-row.total {
+    border-bottom: none;
+    font-weight: bold;
+    font-size: 1.1rem;
+    padding-top: 15px;
+  }
+  
+  .comparison-table {
+    width: 100%;
+    margin-top: 40px;
+    border-collapse: collapse;
+  }
+  
+  .comparison-table th {
+    background: #f8f9fa;
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid #e0e0e0;
+  }
+  
+  .comparison-table td {
+    padding: 12px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  
+  .comparison-table .feature-name {
+    font-weight: 500;
+    color: #2c3e50;
+  }
+  
+  .check-icon { color: #27ae60; font-weight: bold; }
+  .x-icon { color: #e74c3c; }
+
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- HERO -->
+<section class="checkout-hero">
+  <div class="container">
+    <h1 class="display-5 fw-bold mb-2">Escolha seu Plano</h1>
+    <p class="lead mb-0">Selecione o plano ideal e comece a usar o FGTS Web em minutos.</p>
+  </div>
+</section>
+
+<!-- CHECKOUT -->
+<section class="checkout-section">
+  <div class="container">
+    {% if error %}
+      <div class="alert alert-danger" role="alert">
+        <strong>Erro:</strong> {{ error }}
+      </div>
+    {% endif %}
+    
+    <form method="post" id="planForm">
+      {% csrf_token %}
+      
+      <!-- Cards de Planos -->
+      <div class="row g-4 mb-5">
+        <!-- BÁSICO -->
+        <div class="col-lg-4">
+          <div class="plan-card p-4 {% if selected_plan.plan_type == 'BASIC' %}selected{% endif %}" 
+               onclick="selectPlan('BASIC')">
+            <input type="radio" name="plan_type" value="BASIC" 
+                   {% if selected_plan.plan_type == 'BASIC' %}checked{% endif %} 
+                   style="display:none">
+            
+            <h4 class="mb-2">Básico</h4>
+            <p class="text-muted mb-3">Para pequenas empresas</p>
+            
+            <div class="mb-4">
+              <span class="price-large">R$ 99</span>
+              <span class="text-muted"> /mês</span>
+            </div>
+            
+            <ul class="feature-list">
+              <li>Até 50 Colaboradores</li>
+              <li>Dashboard Básico</li>
+              <li>Relatórios Mensais</li>
+              <li>Suporte por e-mail</li>
+            </ul>
+            
+            <button type="button" class="btn-select-plan secondary mt-3" 
+                    onclick="event.stopPropagation(); selectAndSubmit('BASIC')">
+              Escolher Plano
+            </button>
+          </div>
+        </div>
+        
+        <!-- PROFISSIONAL -->
+        <div class="col-lg-4">
+          <div class="plan-card p-4 {% if selected_plan.plan_type == 'PROFESSIONAL' %}selected{% endif %}" 
+               onclick="selectPlan('PROFESSIONAL')">
+            <div class="plan-badge">⭐ Mais Popular</div>
+            <input type="radio" name="plan_type" value="PROFESSIONAL" 
+                   {% if selected_plan.plan_type == 'PROFESSIONAL' %}checked{% endif %} 
+                   style="display:none">
+            
+            <h4 class="mb-2">Profissional</h4>
+            <p class="text-muted mb-3">Para empresas em crescimento</p>
+            
+            <div class="mb-4">
+              <span class="price-large">R$ 199</span>
+              <span class="text-muted"> /mês</span>
+            </div>
+            
+            <ul class="feature-list">
+              <li>Até 200 Colaboradores</li>
+              <li>Dashboard Avançado</li>
+              <li>Relatórios Personalizados</li>
+              <li>Exportação PDF/Excel</li>
+              <li>Suporte Prioritário</li>
+            </ul>
+            
+            <button type="button" class="btn-select-plan primary mt-3"
+                    onclick="event.stopPropagation(); selectAndSubmit('PROFESSIONAL')">
+              Escolher Plano
+            </button>
+          </div>
+        </div>
+        
+        <!-- EMPRESARIAL -->
+        <div class="col-lg-4">
+          <div class="plan-card p-4 {% if selected_plan.plan_type == 'ENTERPRISE' %}selected{% endif %}" 
+               onclick="selectPlan('ENTERPRISE')">
+            <input type="radio" name="plan_type" value="ENTERPRISE" 
+                   {% if selected_plan.plan_type == 'ENTERPRISE' %}checked{% endif %} 
+                   style="display:none">
+            
+            <h4 class="mb-2">Empresarial</h4>
+            <p class="text-muted mb-3">Para grandes empresas</p>
+            
+            <div class="mb-4">
+              <span class="price-large">R$ 399</span>
+              <span class="text-muted"> /mês</span>
+            </div>
+            
+            <ul class="feature-list">
+              <li>Colaboradores Ilimitados</li>
+              <li>Dashboard Personalizado</li>
+              <li>API para Integração</li>
+              <li>Suporte 24/7</li>
+            </ul>
+            
+            <button type="button" class="btn-select-plan secondary mt-3"
+                    onclick="event.stopPropagation(); selectAndSubmit('ENTERPRISE')">
+              Escolher Plano
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Resumo -->
+      {% if selected_plan %}
+      <div class="row">
+        <div class="col-lg-8"></div>
+        <div class="col-lg-4">
+          <div class="summary-card">
+            <h5 class="mb-3">Resumo do Pedido</h5>
+            <div class="summary-row">
+              <span>Plano {{ selected_plan.get_plan_type_display }}</span>
+              <strong>R$ {{ selected_plan.price_monthly }}</strong>
+            </div>
+            <div class="summary-row">
+              <span>Período</span>
+              <strong>Mensal</strong>
+            </div>
+            <div class="summary-row total">
+              <span>Total/Mês</span>
+              <span>R$ {{ selected_plan.price_monthly }}</span>
+            </div>
+            
+            <small class="text-muted d-block mt-3">
+              💳 Você será redirecionado para confirmar seu pagamento após prosseguir.
+            </small>
+            
+            <button type="submit" class="btn btn-primary w-100 mt-3">
+              Continuar para Pagamento
+            </button>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </form>
+    
+    <!-- Comparativo -->
+    <div class="row mt-5 pt-5 border-top">
+      <div class="col-12">
+        <h3 class="mb-4 text-center">Comparação de Planos</h3>
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th style="width: 35%;">Funcionalidade</th>
+              <th style="width: 22%; text-align: center;">Básico</th>
+              <th style="width: 22%; text-align: center;">Profissional</th>
+              <th style="width: 21%; text-align: center;">Empresarial</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="feature-name">Máximo de Colaboradores</td>
+              <td style="text-align: center;">50</td>
+              <td style="text-align: center;">200</td>
+              <td style="text-align: center;">Ilimitado</td>
+            </tr>
+            <tr>
+              <td class="feature-name">Dashboard Avançado</td>
+              <td style="text-align: center;"><span class="x-icon">✗</span></td>
+              <td style="text-align: center;"><span class="check-icon">✓</span></td>
+              <td style="text-align: center;"><span class="check-icon">✓</span></td>
+            </tr>
+            <tr>
+              <td class="feature-name">Relatórios Personalizados</td>
+              <td style="text-align: center;"><span class="x-icon">✗</span></td>
+              <td style="text-align: center;"><span class="check-icon">✓</span></td>
+              <td style="text-align: center;"><span class="check-icon">✓</span></td>
+            </tr>
+            <tr>
+              <td class="feature-name">Exportação PDF/Excel</td>
+              <td style="text-align: center;"><span class="x-icon">✗</span></td>
+              <td style="text-align: center;"><span class="check-icon">✓</span></td>
+              <td style="text-align: center;"><span class="check-icon">✓</span></td>
+            </tr>
+            <tr>
+              <td class="feature-name">API para Integração</td>
+              <td style="text-align: center;"><span class="x-icon">✗</span></td>
+              <td style="text-align: center;"><span class="x-icon">✗</span></td>
+              <td style="text-align: center;"><span class="check-icon">✓</span></td>
+            </tr>
+            <tr>
+              <td class="feature-name">Nível de Suporte</td>
+              <td style="text-align: center;"><small>E-mail</small></td>
+              <td style="text-align: center;"><small>Prioritário</small></td>
+              <td style="text-align: center;"><small>24/7</small></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA Volta -->
+<section style="background: #f8f9fa; padding: 40px 0;">
+  <div class="container text-center">
+    <p class="text-muted mb-3">Tem dúvidas sobre qual plano escolher?</p>
+    <a href="{% url 'home' %}" class="btn btn-outline-secondary">← Voltar para Home</a>
+  </div>
+</section>
+
+<script>
+function selectPlan(planType) {
+  document.querySelector(`input[value="${planType}"]`).checked = true;
+  document.querySelectorAll('.plan-card').forEach(card => card.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+}
+
+function selectAndSubmit(planType) {
+  document.querySelector(`input[value="${planType}"]`).checked = true;
+  document.getElementById('planForm').submit();
+}
+
+// Marcar como selected ao carregar (se houver selecionado)
+document.addEventListener('DOMContentLoaded', function() {
+  const checked = document.querySelector('input[name="plan_type"]:checked');
+  if (checked) {
+    const card = checked.closest('.plan-card');
+    if (card) card.classList.add('selected');
+  }
+});
+</script>
+
+{% endblock %}

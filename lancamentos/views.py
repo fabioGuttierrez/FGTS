@@ -3,7 +3,7 @@ from decimal import Decimal
 from dateutil.relativedelta import relativedelta
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
-from django.views.generic import FormView, CreateView, ListView, View
+from django.views.generic import FormView, CreateView, UpdateView, ListView, View
 from django.shortcuts import render, redirect
 from django.urls import reverse_lazy
 from billing.models import BillingCustomer
@@ -48,6 +48,29 @@ class LancamentoCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
         return super().form_valid(form)
 
 
+class LancamentoUpdateView(LoginRequiredMixin, EmpresaScopeMixin, UpdateView):
+    """Editar lançamento mensal"""
+    model = Lancamento
+    form_class = LancamentoForm
+    template_name = 'lancamentos/lancamento_form.html'
+    success_url = reverse_lazy('lancamento-list')
+    pk_url_kwarg = 'pk'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        empresa = form.cleaned_data.get('empresa')
+        if empresa and not is_empresa_allowed(self.request.user, empresa.codigo):
+            return HttpResponseForbidden('Empresa não permitida para este usuário.')
+        
+        lancamento = form.save()
+        messages.success(self.request, f'✅ Lançamento para {lancamento.funcionario.nome} ({lancamento.competencia}) atualizado com sucesso!')
+        return super().form_valid(form)
+
+
 class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
     """Listar lançamentos cadastrados"""
     model = Lancamento
@@ -56,12 +79,89 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        qs = super().get_queryset().select_related('empresa', 'funcionario').order_by('-competencia')
+        qs = super().get_queryset().select_related('empresa', 'funcionario')
+        
         # Filtra apenas lançamentos de empresas permitidas
         allowed_ids = get_allowed_empresa_ids(self.request.user)
         if allowed_ids is not None:
             qs = qs.filter(empresa__codigo__in=allowed_ids)
+        
+        # Aplicar filtros
+        competencia = self.request.GET.get('competencia', '').strip()
+        funcionario_id = self.request.GET.get('funcionario', '').strip()
+        empresa_id = self.request.GET.get('empresa', '').strip()
+        status_pagto = self.request.GET.get('status_pagto', '').strip()
+        
+        if competencia:
+            qs = qs.filter(competencia=competencia)
+        
+        if funcionario_id:
+            qs = qs.filter(funcionario_id=funcionario_id)
+        
+        if empresa_id:
+            qs = qs.filter(empresa_id=empresa_id)
+        
+        if status_pagto in ['pago', 'nao_pago']:
+            qs = qs.filter(pago=(status_pagto == 'pago'))
+        
+        # Aplicar ordenação
+        ordem = self.request.GET.get('ordem', '-competencia').strip()
+        if ordem == 'competencia_asc':
+            qs = qs.order_by('competencia')
+        elif ordem == 'competencia_desc':
+            qs = qs.order_by('-competencia')
+        elif ordem == 'funcionario_asc':
+            qs = qs.order_by('funcionario__nome')
+        elif ordem == 'funcionario_desc':
+            qs = qs.order_by('-funcionario__nome')
+        else:
+            qs = qs.order_by('-competencia')
+        
         return qs
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Adicionar empresas e funcionários permitidos para o filtro
+        allowed_ids = get_allowed_empresa_ids(self.request.user)
+        if allowed_ids is not None:
+            context['empresas'] = Empresa.objects.filter(codigo__in=allowed_ids)
+            context['funcionarios'] = Funcionario.objects.filter(empresa__codigo__in=allowed_ids).order_by('nome')
+        else:
+            context['empresas'] = Empresa.objects.all()
+            context['funcionarios'] = Funcionario.objects.all().order_by('nome')
+        
+        # Passar parâmetros de filtro para o template
+        context['competencia_filtro'] = self.request.GET.get('competencia', '')
+        context['funcionario_filtro'] = self.request.GET.get('funcionario', '')
+        context['empresa_filtro'] = self.request.GET.get('empresa', '')
+        context['status_pagto_filtro'] = self.request.GET.get('status_pagto', '')
+        context['ordem_filtro'] = self.request.GET.get('ordem', '-competencia')
+        
+        # Construir um dicionário com a última competência de cada funcionário
+        # e marcar quais lançamentos são a última competência
+        ultimas_competencias = {}
+        lancamentos_list = context.get('lancamentos', [])
+        
+        for lancamento in lancamentos_list:
+            func_id = lancamento.funcionario.id
+            if func_id not in ultimas_competencias:
+                # Buscar a última competência deste funcionário
+                ultimo = Lancamento.objects.filter(
+                    funcionario_id=func_id
+                ).order_by('-competencia').first()
+                if ultimo:
+                    ultimas_competencias[func_id] = ultimo.competencia
+        
+        # Adicionar flag is_ultima_competencia a cada lançamento
+        for lancamento in lancamentos_list:
+            func_id = lancamento.funcionario.id
+            lancamento.is_ultima_competencia = (
+                func_id in ultimas_competencias and 
+                lancamento.competencia == ultimas_competencias[func_id]
+            )
+        
+        return context
 
 
 class GerarLancamentosAutomaticosView(LoginRequiredMixin, EmpresaScopeMixin, View):
