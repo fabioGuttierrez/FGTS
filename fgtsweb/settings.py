@@ -32,6 +32,13 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '*').split(',')
 
+# CSRF trusted origins for HTTPS
+CSRF_TRUSTED_ORIGINS = [
+    'https://fgts.bildee.com.br',
+    'http://fgts.bildee.com.br',
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+]
 
 # Application definition
 
