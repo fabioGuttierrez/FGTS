@@ -37,7 +37,7 @@ class EmpresaCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         response = super().form_valid(form)
         
-        # Se há plano selecionado, associar à empresa
+        # Se há plano selecionado, associar à empresa e redirecionar para checkout
         plan_type = self.request.session.get('selected_plan_type')
         if plan_type and self.object:
             try:
@@ -56,10 +56,15 @@ class EmpresaCreateView(LoginRequiredMixin, CreateView):
                     billing.save()
                 
                 # Limpar da sessão
-                del self.request.session['selected_plan_type']
-                del self.request.session['selected_plan_price']
+                if 'selected_plan_type' in self.request.session:
+                    del self.request.session['selected_plan_type']
+                if 'selected_plan_price' in self.request.session:
+                    del self.request.session['selected_plan_price']
                 
-                messages.success(self.request, f'Empresa criada! Plano {plan.get_plan_type_display()} atribuído.')
+                messages.success(self.request, f'Empresa criada! Redirecionando para pagamento...')
+                
+                # Redirecionar para o checkout da empresa
+                return redirect('billing-checkout-empresa', empresa_id=self.object.id)
             except Plan.DoesNotExist:
                 pass
         

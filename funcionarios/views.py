@@ -54,3 +54,46 @@ class FuncionarioListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         context['demitidos_count'] = queryset.filter(data_demissao__isnull=False).count()
         
         return context
+
+
+class FuncionarioUpdateView(LoginRequiredMixin, EmpresaScopeMixin, UpdateView):
+    model = Funcionario
+    form_class = FuncionarioForm
+    template_name = 'funcionarios/funcionario_form.html'
+    success_url = reverse_lazy('funcionario-list')
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        allowed_ids = get_allowed_empresa_ids(self.request.user)
+        if allowed_ids is not None:
+            form.fields['empresa'].queryset = Empresa.objects.filter(codigo__in=allowed_ids)
+        return form
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return self.filter_queryset_by_empresa(qs)
+
+    def form_valid(self, form):
+        empresa = form.cleaned_data.get('empresa')
+        if empresa and not is_empresa_allowed(self.request.user, empresa.codigo):
+            return HttpResponseForbidden('Empresa não permitida para este usuário.')
+        funcionario = form.save()
+        messages.success(self.request, f'✅ Funcionário "{funcionario.nome}" atualizado com sucesso!')
+        return super().form_valid(form)
+
+
+class FuncionarioDeleteView(LoginRequiredMixin, EmpresaScopeMixin, DeleteView):
+    model = Funcionario
+    template_name = 'funcionarios/funcionario_confirm_delete.html'
+    success_url = reverse_lazy('funcionario-list')
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return self.filter_queryset_by_empresa(qs)
+
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        nome = self.object.nome
+        response = super().delete(request, *args, **kwargs)
+        messages.success(request, f'✅ Funcionário "{nome}" excluído com sucesso!')
+        return response

@@ -80,6 +80,6 @@ class UsuarioRegisterView(CreateView):
             
             # Se há plano selecionado em sessão, redirecionar para criar empresa
             if 'selected_plan_type' in self.request.session:
-                return redirect('empresa-create-with-plan')
+                return redirect('empresa-create')
         
         return response

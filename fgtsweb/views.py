@@ -17,30 +17,27 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         ctx = super().get_context_data(**kwargs)
         now = timezone.now()
 
-        empresas_total = Empresa.objects.count()
-        funcs_total = Funcionario.objects.count()
-        lancs_total = Lancamento.objects.count()
-        lancs_pendentes = Lancamento.objects.filter(pago=False).count()
-
-        billing_active = BillingCustomer.objects.filter(status='active').count()
-        billing_pending = BillingCustomer.objects.filter(status='pending').count()
-        billing_canceled = BillingCustomer.objects.filter(status='canceled').count()
-
-        last_indice = Indice.objects.order_by('-data_indice').first()
-        last_jam = CoefJam.objects.order_by('-data_pagamento').first()
+        # Se superuser/staff, mostrar dados globais; senão, apenas da empresa do usuário
+        if self.request.user.is_superuser or self.request.user.is_staff:
+            funcs_total = Funcionario.objects.count()
+            lancs_total = Lancamento.objects.count()
+            lancs_pendentes = Lancamento.objects.filter(pago=False).count()
+        else:
+            # Usuário comum: mostrar apenas da sua empresa (primeira)
+            empresa = Empresa.objects.filter(usuarios=self.request.user).first()
+            if empresa:
+                funcs_total = Funcionario.objects.filter(empresa=empresa).count()
+                lancs_total = Lancamento.objects.filter(empresa=empresa).count()
+                lancs_pendentes = Lancamento.objects.filter(empresa=empresa, pago=False).count()
+            else:
+                funcs_total = lancs_total = lancs_pendentes = 0
 
         current_plan = PricingPlan.objects.filter(active=True).order_by('sort_order', '-updated_at').first()
 
         ctx.update({
-            'empresas_total': empresas_total,
             'funcs_total': funcs_total,
             'lancs_total': lancs_total,
             'lancs_pendentes': lancs_pendentes,
-            'billing_active': billing_active,
-            'billing_pending': billing_pending,
-            'billing_canceled': billing_canceled,
-            'last_indice': last_indice,
-            'last_jam': last_jam,
             'current_plan': current_plan,
             'now': now,
         })

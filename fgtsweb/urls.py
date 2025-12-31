@@ -20,7 +20,7 @@ from django.urls import path, include
 from django.views.generic import TemplateView
 from django.contrib.auth import views as auth_views
 from empresas.views import EmpresaCreateView, EmpresaListView
-from funcionarios.views import FuncionarioCreateView, FuncionarioListView
+from funcionarios.views import FuncionarioCreateView, FuncionarioListView, FuncionarioUpdateView, FuncionarioDeleteView
 from lancamentos.views import (
     RelatorioCompetenciaView,
     LancamentoCreateView,
@@ -48,6 +48,8 @@ urlpatterns = [
     path('empresas/novo/', EmpresaCreateView.as_view(), name='empresa-create'),
     path('funcionarios/', FuncionarioListView.as_view(), name='funcionario-list'),
     path('funcionarios/novo/', FuncionarioCreateView.as_view(), name='funcionario-create'),
+    path('funcionarios/<int:pk>/editar/', FuncionarioUpdateView.as_view(), name='funcionario-update'),
+    path('funcionarios/<int:pk>/excluir/', FuncionarioDeleteView.as_view(), name='funcionario-delete'),
     path('lancamentos/', LancamentoListView.as_view(), name='lancamento-list'),
     path('lancamentos/novo/', LancamentoCreateView.as_view(), name='lancamento-create'),
     path('lancamentos/<int:pk>/editar/', LancamentoUpdateView.as_view(), name='lancamento-update'),

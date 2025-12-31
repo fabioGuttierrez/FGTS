@@ -53,7 +53,7 @@ class CheckoutPlanoView(TemplateView):
         
         # Se logado, ir direto para criar empresa
         if request.user.is_authenticated:
-            return redirect('empresa-create-with-plan')
+            return redirect('empresa-create')
         
         # Se não logado, ir para registro/login (com next setado)
         messages.info(request, f'Você selecionou o plano {plan.get_plan_type_display()}. Crie uma conta para continuar.')
@@ -88,14 +88,25 @@ def _first_email(empresa: Empresa) -> str:
 
 
 def checkout_empresa(request, empresa_id):
-    if request.method != 'POST':
-        return HttpResponseBadRequest('Use POST para iniciar checkout.')
-
     empresa = get_object_or_404(Empresa, pk=empresa_id)
 
     # Escopo multi-tenant: usuário precisa ter permissão para esta empresa
     if not is_empresa_allowed(request.user, empresa.codigo):
         return HttpResponseBadRequest('Empresa não permitida para este usuário.')
+    
+    # Se GET, mostrar página de confirmação
+    if request.method == 'GET':
+        billing_customer = _ensure_billing_customer(empresa, email_fallback=_first_email(empresa))
+        context = {
+            'empresa': empresa,
+            'billing_customer': billing_customer,
+        }
+        return render(request, 'billing/checkout_empresa.html', context)
+    
+    # Se POST, processar pagamento
+    if request.method != 'POST':
+        return HttpResponseBadRequest('Método não suportado.')
+    
     billing_customer = _ensure_billing_customer(empresa, email_fallback=_first_email(empresa))
 
     try:

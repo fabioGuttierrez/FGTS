@@ -18,6 +18,17 @@
     transition: all 0.3s ease;
     cursor: pointer;
     position: relative;
+    background: #ffffff;
+  }
+  
+  .plan-card h4 {
+    color: #2c3e50;
+    font-weight: 700;
+  }
+  
+  .plan-card p {
+    color: #7f8c8d;
+    font-size: 0.95rem;
   }
   
   .plan-card:hover {
@@ -58,9 +69,10 @@
   .feature-list li {
     padding: 12px 0;
     border-bottom: 1px solid #f0f0f0;
-    color: #555;
+    color: #2c3e50;
     display: flex;
     align-items: center;
+    font-weight: 500;
   }
   
   .feature-list li:before {
@@ -117,11 +129,16 @@
     margin-top: 30px;
   }
   
+  .summary-card h5 {
+    color: #2c3e50;
+  }
+  
   .summary-row {
     display: flex;
     justify-content: space-between;
     padding: 12px 0;
     border-bottom: 1px solid #e0e0e0;
+    color: #2c3e50;
   }
   
   .summary-row.total {
@@ -129,6 +146,7 @@
     font-weight: bold;
     font-size: 1.1rem;
     padding-top: 15px;
+    color: #2c3e50;
   }
   
   .comparison-table {
@@ -157,6 +175,63 @@
   
   .check-icon { color: #27ae60; font-weight: bold; }
   .x-icon { color: #e74c3c; }
+  
+  .demo-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 14px;
+    padding: 30px;
+    margin-bottom: 30px;
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.25);
+  }
+  
+  .demo-card h4 {
+    color: white;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .demo-card p {
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 15px;
+    font-size: 0.95rem;
+  }
+  
+  .demo-card ol {
+    margin-left: 20px;
+    margin-bottom: 20px;
+  }
+  
+  .demo-card li {
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+  }
+  
+  .demo-card .btn-demo {
+    background: white;
+    color: #667eea;
+    font-weight: 600;
+    padding: 12px 30px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+  }
+  
+  .demo-card .btn-demo:hover {
+    background: #f0f0f0;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    color: #667eea;
+    text-decoration: none;
+  }
 
 </style>
 {% endblock %}
@@ -180,7 +255,7 @@
       </div>
     {% endif %}
     
-    <form method="post" id="planForm">
+    <form method="post" id="planForm" action="{% url 'checkout-plano' %}">
       {% csrf_token %}
       
       <!-- Cards de Planos -->
@@ -240,7 +315,7 @@
               <li>Suporte Prioritário</li>
             </ul>
             
-            <button type="button" class="btn-select-plan primary mt-3"
+            <button type="button" class="btn-select-plan secondary mt-3" 
                     onclick="event.stopPropagation(); selectAndSubmit('PROFESSIONAL')">
               Escolher Plano
             </button>
@@ -279,12 +354,12 @@
       </div>
       
       <!-- Resumo -->
-      {% if selected_plan %}
-      <div class="row">
+      <div class="row mt-5">
         <div class="col-lg-8"></div>
         <div class="col-lg-4">
           <div class="summary-card">
             <h5 class="mb-3">Resumo do Pedido</h5>
+            {% if selected_plan %}
             <div class="summary-row">
               <span>Plano {{ selected_plan.get_plan_type_display }}</span>
               <strong>R$ {{ selected_plan.price_monthly }}</strong>
@@ -305,10 +380,14 @@
             <button type="submit" class="btn btn-primary w-100 mt-3">
               Continuar para Pagamento
             </button>
+            {% else %}
+            <div class="alert alert-info border-0">
+              <small><i class="bi bi-info-circle me-2"></i>Selecione um plano acima para ver o resumo</small>
+            </div>
+            {% endif %}
           </div>
         </div>
       </div>
-      {% endif %}
     </form>
     
     <!-- Comparativo -->

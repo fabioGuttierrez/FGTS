@@ -140,12 +140,12 @@
                             </td>
                             <td class="py-3 px-4">
                                 <div class="btn-group btn-group-sm" role="group">
-                                    <button class="btn btn-outline-primary" title="Editar" data-bs-toggle="tooltip">
+                                    <a href="{% url 'funcionario-update' funcionario.id %}" class="btn btn-outline-primary" title="Editar" data-bs-toggle="tooltip">
                                         <i class="bi bi-pencil"></i>
-                                    </button>
-                                    <button class="btn btn-outline-danger" title="Excluir" data-bs-toggle="tooltip">
+                                    </a>
+                                    <a href="{% url 'funcionario-delete' funcionario.id %}" class="btn btn-outline-danger" title="Excluir" data-bs-toggle="tooltip">
                                         <i class="bi bi-trash"></i>
-                                    </button>
+                                    </a>
                                 </div>
                             </td>
                         </tr>

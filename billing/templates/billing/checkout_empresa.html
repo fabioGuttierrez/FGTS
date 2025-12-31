@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+
+{% block title %}Checkout — FGTS Web{% endblock %}
+
+{% block extra_css %}
+<style>
+  .checkout-hero {
+    min-height: 40vh;
+    display: flex;
+    align-items: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+  }
+  
+  .checkout-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 14px;
+    padding: 30px;
+    background: #ffffff;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  
+  .empresa-info {
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    margin-bottom: 20px;
+  }
+  
+  .empresa-info p {
+    margin: 10px 0;
+    color: #2c3e50;
+  }
+  
+  .summary-total {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #667eea;
+    text-align: center;
+    padding: 20px;
+    background: linear-gradient(to right, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+    border-radius: 10px;
+    margin: 20px 0;
+  }
+  
+  .btn-submit {
+    width: 100%;
+    padding: 16px;
+    font-weight: 600;
+    font-size: 1.1rem;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  
+  .btn-submit:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+  }
+  
+  .btn-cancel {
+    width: 100%;
+    padding: 12px;
+    margin-top: 10px;
+    border: 1px solid #e0e0e0;
+    background: white;
+    color: #2c3e50;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  
+  .btn-cancel:hover {
+    background: #f8f9fa;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="checkout-hero">
+  <div class="container">
+    <div>
+      <h1>Finalize seu Pagamento</h1>
+      <p class="lead">Confirme os dados abaixo e prossiga para completar seu registro</p>
+    </div>
+  </div>
+</section>
+
+<section style="padding: 60px 0;">
+  <div class="container">
+    <div class="row">
+      <div class="col-lg-8">
+        <div class="checkout-card">
+          <h3 class="mb-4">Informações da Empresa</h3>
+          
+          <div class="empresa-info">
+            <p>
+              <strong>Empresa:</strong><br>
+              {{ empresa.nome }}
+            </p>
+            {% if empresa.cnpj %}
+            <p>
+              <strong>CNPJ:</strong><br>
+              {{ empresa.cnpj }}
+            </p>
+            {% endif %}
+            {% if empresa.email %}
+            <p>
+              <strong>E-mail:</strong><br>
+              {{ empresa.email }}
+            </p>
+            {% endif %}
+            {% if empresa.fone_contato %}
+            <p>
+              <strong>Telefone:</strong><br>
+              {{ empresa.fone_contato }}
+            </p>
+            {% endif %}
+          </div>
+          
+          <form method="post" id="checkoutForm">
+            {% csrf_token %}
+            
+            <button type="submit" class="btn-submit">
+              💳 Continuar para Pagamento
+            </button>
+            <a href="{% url 'empresa-list' %}" class="btn btn-cancel">
+              ← Cancelar
+            </a>
+          </form>
+        </div>
+      </div>
+      
+      <div class="col-lg-4">
+        <div class="checkout-card sticky-top" style="top: 20px;">
+          <h5 class="mb-4">Resumo do Pedido</h5>
+          
+          <div style="padding: 15px; background: #f8f9fa; border-radius: 8px; margin-bottom: 20px;">
+            <p class="mb-2">
+              <span>Plano Profissional</span>
+              <strong style="float: right;">R$ 199,00</strong>
+            </p>
+            <p class="mb-0">
+              <span>Período</span>
+              <strong style="float: right;">Mensal</strong>
+            </p>
+          </div>
+          
+          <div class="summary-total">
+            R$ 199,00<br>
+            <small style="font-size: 0.6em; color: #666;">por mês</small>
+          </div>
+          
+          <small class="text-muted d-block text-center">
+            💳 Você será redirecionado para confirmar seu pagamento após prosseguir.
+          </small>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+document.getElementById('checkoutForm').addEventListener('submit', function(e) {
+  // Adicionar loading visual
+  const btn = this.querySelector('button[type="submit"]');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Processando...';
+});
+</script>
+
+{% endblock %}

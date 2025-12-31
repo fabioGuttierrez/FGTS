@@ -31,7 +31,7 @@
                         {% endfor %}
                     {% endif %}
 
-                    <form method="post" novalidate>
+                    <form method="post" novalidate id="form">
                         {% csrf_token %}
 
                         <!-- Seção 1: Dados Básicos -->
@@ -230,16 +230,4 @@
         resize: vertical;
     }
 </style>
-
-<script>
-    // Adicionar ID ao formulário
-    document.querySelector('form').id = 'form';
-</script>
 {% endblock %}
-
-<script>
-    {% if form.errors %}
-        var funcionarioModal = new bootstrap.Modal(document.getElementById('funcionarioModal'));
-        funcionarioModal.show();
-    {% endif %}
-</script>

@@ -92,19 +92,39 @@
       </div>
       <div class="col-lg-5 d-none d-lg-block">
         {% if not request.user.is_authenticated %}
-        <div class="card feature-card">
+        <div class="card feature-card shadow-lg">
           <div class="card-body p-4">
-            <h5 class="mb-3"><i class="bi bi-calculator"></i> Demonstração rápida</h5>
-            <p class="text-muted mb-3">Crie uma empresa e cadastre um funcionário para simular valores de FGTS.</p>
-            <ol class="mb-3 text-muted">
-              <li>Clique em "Começar agora"</li>
-              <li>Cadastre a empresa</li>
-              <li>Cadastre um funcionário</li>
-            </ol>
-            <a href="{% url 'empresa-list' %}" class="btn btn-primary w-100">Iniciar demonstração</a>
+            <h5 class="mb-3"><i class="bi bi-lightning-fill text-warning"></i> Demonstração rápida</h5>
+            <p class="text-muted mb-3" style="font-size: 0.95rem;">Quer ver como funciona sem criar conta? Use nossa demonstração com dados reais!</p>
+            
+            <div class="alert alert-info border-0 mb-3 small">
+              <strong>📋 Credenciais Demo:</strong><br>
+              Usuário: <code>demo</code><br>
+              Senha: <code>demo123456</code>
+            </div>
+            
+            <div class="mb-3">
+              <strong class="d-block mb-2 text-dark">Ou siga os passos abaixo:</strong>
+              <ol class="mb-0 text-muted small">
+                <li>Clique em "Começar agora"</li>
+                <li>Cadastre sua empresa</li>
+                <li>Adicione colaboradores</li>
+                <li>Veja cálculos de FGTS</li>
+              </ol>
+            </div>
+            
+            <div class="d-grid gap-2">
+              <a href="{% url 'login' %}?next={% url 'dashboard' %}" class="btn btn-primary btn-sm" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;">
+                <i class="bi bi-lightning"></i> Acessar Demo
+              </a>
+              <a href="{% url 'empresa-list' %}" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-rocket-takeoff"></i> Criar Empresa
+              </a>
+            </div>
           </div>
         </div>
         {% endif %}
+
       </div>
     </div>
   </div>
@@ -176,7 +196,7 @@
             <li>Suporte por e-mail</li>
           </ul>
           
-          <button class="pricing-btn pricing-btn-secondary" onclick="window.location.href='{% url 'checkout-plano-tipo' plan_type='BASIC' %}'">Escolher Plano</button>
+          <button class="pricing-btn pricing-btn-secondary" onclick="window.location.href='/billing/checkout/BASIC/'">Escolher Plano</button>
         </div>
       </div>
       
@@ -200,7 +220,7 @@
             <li>Suporte prioritário</li>
           </ul>
           
-          <button class="pricing-btn pricing-btn-primary" onclick="window.location.href='{% url 'checkout-plano-tipo' plan_type='PROFESSIONAL' %}'">Escolher Plano</button>
+          <button class="pricing-btn pricing-btn-primary" onclick="window.location.href='/billing/checkout/PROFESSIONAL/'">Escolher Plano</button>
         </div>
       </div>
       
@@ -222,7 +242,7 @@
             <li>Suporte 24/7</li>
           </ul>
           
-          <button class="pricing-btn pricing-btn-secondary" onclick="window.location.href='{% url 'checkout-plano-tipo' plan_type='ENTERPRISE' %}'">Escolher Plano</button>
+          <button class="pricing-btn pricing-btn-secondary" onclick="window.location.href='/billing/checkout/ENTERPRISE/'">Escolher Plano</button>
         </div>
       </div>
     </div>
