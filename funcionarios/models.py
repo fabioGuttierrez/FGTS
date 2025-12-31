@@ -6,7 +6,7 @@ class Funcionario(models.Model):
     matricula = models.CharField(max_length=20, blank=True, verbose_name='Matrícula')
     nome = models.CharField(max_length=255, verbose_name='Nome')
     pis = models.CharField(max_length=15, blank=True, verbose_name='PIS')
-    cpf = models.CharField(max_length=14, unique=True, verbose_name='CPF')
+    cpf = models.CharField(max_length=14, verbose_name='CPF')
     cbo = models.CharField(max_length=10, blank=True, verbose_name='CBO')
     carteira_profissional = models.CharField(max_length=20, blank=True, verbose_name='Carteira Profissional')
     serie_carteira = models.CharField(max_length=10, blank=True, verbose_name='Série Carteira')
@@ -21,3 +21,5 @@ class Funcionario(models.Model):
     class Meta:
         verbose_name = 'Funcionário'
         verbose_name_plural = 'Funcionários'
+        # Permite múltiplos vínculos de um mesmo CPF (mesma empresa ou não)
+        # Exemplo: um funcionário pode ser horista e advogado simultaneamente
