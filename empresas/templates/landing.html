@@ -52,16 +52,32 @@
     <div class="row align-items-center">
       <div class="col-lg-7">
         <h1 class="display-4 mb-3">FGTS em atraso sem dor de cabeça</h1>
-            <p class="lead mb-4">Calcule, organize e gere seus guias com precisão. Importação inteligente, índices atualizados e fluxo simples para empresas e escritórios contábeis.</p>
-        <div class="d-flex gap-2">
+        <p class="lead mb-4">Calcule, organize e gere seus guias com precisão. Importação inteligente, índices atualizados e fluxo simples para empresas e escritórios contábeis.</p>
+        
+        <!-- Trial Badge -->
+        {% if not request.user.is_authenticated %}
+        <div class="mb-4 d-inline-block">
+          <div class="alert alert-success border-0 shadow-sm d-inline-flex align-items-center px-4 py-3 mb-0" style="background: rgba(255,255,255,0.95); font-weight: 600; border-radius: 50px;">
+            <i class="bi bi-gift-fill me-2 fs-5" style="color: #27ae60;"></i>
+            <span style="color: rgba(255,255,255,0.9);">Teste <strong>GRÁTIS</strong> por <strong>7 DIAS</strong> • Sem cartão de crédito</span>
+          </div>
+        </div>
+        {% endif %}
+        
+        <div class="d-flex gap-2 mb-4">
           {% if request.user.is_authenticated %}
           <a href="{% url 'dashboard' %}" class="btn btn-light btn-lg"><i class="bi bi-speedometer2"></i> Dashboard</a>
           <a href="{% url 'lancamento-list' %}" class="btn btn-outline-light btn-lg"><i class="bi bi-receipt"></i> Lançamentos</a>
           {% else %}
-          <a href="{% url 'empresa-list' %}" class="btn btn-light btn-lg"><i class="bi bi-rocket-takeoff"></i> Começar agora</a>
-          <a href="{% url 'login' %}" class="btn btn-outline-light btn-lg"><i class="bi bi-box-arrow-in-right"></i> Login</a>
+          <a href="{% url 'register' %}" class="btn btn-light btn-lg px-5 shadow" style="font-weight: 700;">
+            <i class="bi bi-rocket-takeoff me-2"></i> Começar Teste Grátis
+          </a>
+          <a href="{% url 'login' %}" class="btn btn-lg" style="background: rgba(52, 152, 219, 0.2); color: white; border: 2px solid rgba(255,255,255,0.3);">
+            <i class="bi bi-box-arrow-in-right"></i> Login
+          </a>
           {% endif %}
         </div>
+        
         <div class="row g-3 mt-4">
           <div class="col-6 col-md-4">
             <div class="metric p-3 text-center">
@@ -71,15 +87,14 @@
           </div>
           <div class="col-6 col-md-4">
             <div class="metric p-3 text-center">
-                  {% if current_plan %}
-                  <div class="h6 mb-2 text-muted">Plano Atual</div>
-                  <div class="h4 mb-0">R$ {{ current_plan.amount }}</div>
-                  <small>{{ current_plan.get_periodicity_display }}</small>
-                  {% else %}
-                  <div class="h6 mb-2 text-muted">Plano Básico</div>
-                  <div class="h4 mb-0">R$ 99,90</div>
-                  <small>Mensal</small>
-                  {% endif %}
+              {% if current_plan %}
+              <div class="h6 mb-2 text-muted">Plano Atual</div>
+              <div class="h4 mb-0">R$ {{ current_plan.amount }}</div>
+              <small>{{ current_plan.get_periodicity_display }}</small>
+              {% else %}
+              <div class="h4 mb-0">7 DIAS</div>
+              <small>Teste grátis</small>
+              {% endif %}
             </div>
           </div>
           <div class="col-6 col-md-4 d-none d-md-block">
@@ -90,41 +105,57 @@
           </div>
         </div>
       </div>
+      
+      <!-- Trial CTA Card -->
       <div class="col-lg-5 d-none d-lg-block">
         {% if not request.user.is_authenticated %}
-        <div class="card feature-card shadow-lg">
-          <div class="card-body p-4">
-            <h5 class="mb-3"><i class="bi bi-lightning-fill text-warning"></i> Demonstração rápida</h5>
-            <p class="text-muted mb-3" style="font-size: 0.95rem;">Quer ver como funciona sem criar conta? Use nossa demonstração com dados reais!</p>
-            
-            <div class="alert alert-info border-0 mb-3 small">
-              <strong>📋 Credenciais Demo:</strong><br>
-              Usuário: <code>demo</code><br>
-              Senha: <code>demo123456</code>
+        <div class="card feature-card shadow-lg border-0">
+          <div class="card-body p-5">
+            <div class="text-center mb-4">
+              <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3" 
+                   style="width: 80px; height: 80px; background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);">
+                <i class="bi bi-gift-fill text-white" style="font-size: 2.5rem;"></i>
+              </div>
+              <h3 class="fw-bold mb-2" style="color: #2c3e50;">Teste por 7 dias GRÁTIS</h3>
+              <p class="text-muted mb-0">Experimente o sistema com até 10 funcionários</p>
             </div>
             
-            <div class="mb-3">
-              <strong class="d-block mb-2 text-dark">Ou siga os passos abaixo:</strong>
-              <ol class="mb-0 text-muted small">
-                <li>Clique em "Começar agora"</li>
-                <li>Cadastre sua empresa</li>
-                <li>Adicione colaboradores</li>
-                <li>Veja cálculos de FGTS</li>
-              </ol>
+            <div class="bg-light rounded-3 p-3 mb-4">
+              <div class="d-flex align-items-start mb-2">
+                <i class="bi bi-check-circle-fill text-success me-2 mt-1"></i>
+                <div>
+                  <strong class="d-block text-dark">Acesso completo ao sistema</strong>
+                  <small class="text-muted">Todas as funcionalidades disponíveis</small>
+                </div>
+              </div>
+              <div class="d-flex align-items-start mb-2">
+                <i class="bi bi-check-circle-fill text-success me-2 mt-1"></i>
+                <div>
+                  <strong class="d-block text-dark">Sem cartão de crédito</strong>
+                  <small class="text-muted">Comece testando com seus dados reais</small>
+                </div>
+              </div>
+              <div class="d-flex align-items-start">
+                <i class="bi bi-shield-check text-success me-2 mt-1"></i>
+                <div>
+                  <strong class="d-block text-dark">Conformidade LGPD</strong>
+                  <small class="text-muted">Seus dados estão protegidos</small>
+                </div>
+              </div>
             </div>
             
             <div class="d-grid gap-2">
-              <a href="{% url 'login' %}?next={% url 'dashboard' %}" class="btn btn-primary btn-sm" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;">
-                <i class="bi bi-lightning"></i> Acessar Demo
+              <a href="{% url 'register' %}" class="btn btn-lg shadow" 
+                 style="background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%); color: white; border: none; font-weight: 700; padding: 16px;">
+                <i class="bi bi-rocket-takeoff me-2"></i> Começar Teste Grátis Agora
               </a>
-              <a href="{% url 'empresa-list' %}" class="btn btn-outline-primary btn-sm">
-                <i class="bi bi-rocket-takeoff"></i> Criar Empresa
-              </a>
+              <small class="text-center text-muted">
+                <i class="bi bi-lock-fill me-1"></i> Seus dados estão seguros e protegidos
+              </small>
             </div>
           </div>
         </div>
         {% endif %}
-
       </div>
     </div>
   </div>
@@ -169,18 +200,79 @@
   </div>
 </section>
 
+<!-- HOW IT WORKS -->
+<section class="section-alt">
+  <div class="container">
+    <div class="text-center mb-5">
+      <h2 class="fw-bold">Como funciona o teste grátis?</h2>
+      <p class="text-muted">Simples, rápido e transparente</p>
+    </div>
+    <div class="row g-4">
+      <div class="col-md-6 col-lg-3">
+        <div class="text-center">
+          <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3" 
+               style="width: 64px; height: 64px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <span class="text-white fw-bold fs-4">1</span>
+          </div>
+          <h5 class="mb-2">Crie sua conta</h5>
+          <p class="text-muted small mb-0">Cadastro rápido, não é necessário cartão de crédito</p>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-3">
+        <div class="text-center">
+          <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3" 
+               style="width: 64px; height: 64px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <span class="text-white fw-bold fs-4">2</span>
+          </div>
+          <h5 class="mb-2">Use por 7 dias</h5>
+          <p class="text-muted small mb-0">Acesso total a todas as funcionalidades</p>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-3">
+        <div class="text-center">
+          <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3" 
+               style="width: 64px; height: 64px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <span class="text-white fw-bold fs-4">3</span>
+          </div>
+          <h5 class="mb-2">Escolha um plano</h5>
+          <p class="text-muted small mb-0">Que melhor se encaixa nas necessidades da sua empresa</p>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-3">
+        <div class="text-center">
+          <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3" 
+               style="width: 64px; height: 64px; background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);">
+            <i class="bi bi-shield-check text-white fs-3"></i>
+          </div>
+          <h5 class="mb-2">Dados protegidos</h5>
+          <p class="text-muted small mb-0">Exclusão automática conforme LGPD</p>
+        </div>
+      </div>
+    </div>
+    
+    <div class="text-center mt-5">
+      <div class="alert alert-info d-inline-block border-0 shadow-sm" style="max-width: 600px;">
+        <i class="bi bi-info-circle-fill me-2"></i>
+        <strong>Garantia de privacidade:</strong> Após o fim do teste, você tem 30 dias para assinar. 
+        Se não assinar, todos os seus dados serão automaticamente excluídos conforme a LGPD.
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- PRICING PLANS -->
 <section class="pricing-section">
   <div class="container">
     <div class="text-center mb-5">
       <h2 class="fw-bold mb-2">Planos e Preços</h2>
-      <p class="text-muted">Escolha o plano ideal para o tamanho da sua empresa e necessidades de gestão de FGTS.</p>
+      <p class="text-muted">Escolha o plano ideal após o período de teste gratuito de 7 dias</p>
     </div>
     
     <div class="row g-4">
       <!-- Plano Básico -->
       <div class="col-lg-4">
         <div class="pricing-card h-100 p-4">
+          <div class="badge bg-success mb-3">Teste 7 dias grátis</div>
           <h4 class="mb-2">Básico</h4>
           <p class="text-muted mb-3">Para pequenas empresas</p>
           
@@ -196,7 +288,7 @@
             <li>Suporte por e-mail</li>
           </ul>
           
-          <button class="pricing-btn pricing-btn-secondary" onclick="window.location.href='/billing/checkout/BASIC/'">Escolher Plano</button>
+          <button class="pricing-btn pricing-btn-secondary" onclick="window.location.href='{% url 'register' %}'">Começar Teste Grátis</button>
         </div>
       </div>
       
@@ -204,6 +296,7 @@
       <div class="col-lg-4">
         <div class="pricing-card featured h-100 p-4">
           <div class="badge-popular">Mais popular</div>
+          <div class="badge bg-success mb-3 mt-3">Teste 7 dias grátis</div>
           <h4 class="mb-2">Profissional</h4>
           <p class="text-muted mb-3">Para empresas em crescimento</p>
           
@@ -220,13 +313,14 @@
             <li>Suporte prioritário</li>
           </ul>
           
-          <button class="pricing-btn pricing-btn-primary" onclick="window.location.href='/billing/checkout/PROFESSIONAL/'">Escolher Plano</button>
+          <button class="pricing-btn pricing-btn-primary" onclick="window.location.href='{% url 'register' %}'">Começar Teste Grátis</button>
         </div>
       </div>
       
       <!-- Plano Empresarial -->
       <div class="col-lg-4">
         <div class="pricing-card h-100 p-4">
+          <div class="badge bg-success mb-3">Teste 7 dias grátis</div>
           <h4 class="mb-2">Empresarial</h4>
           <p class="text-muted mb-3">Para grandes empresas</p>
           
@@ -242,13 +336,14 @@
             <li>Suporte 24/7</li>
           </ul>
           
-          <button class="pricing-btn pricing-btn-secondary" onclick="window.location.href='/billing/checkout/ENTERPRISE/'">Escolher Plano</button>
+          <button class="pricing-btn pricing-btn-secondary" onclick="window.location.href='{% url 'register' %}'">Começar Teste Grátis</button>
         </div>
       </div>
     </div>
     
     <div class="text-center mt-5">
-      <p class="text-muted mb-0">Todos os planos incluem índices atualizados, importação inteligente e cálculo preciso de FGTS.</p>
+      <p class="text-muted mb-2">✨ Todos os planos incluem 7 dias de teste grátis, sem necessidade de cartão de crédito</p>
+      <p class="text-muted mb-0">Índices atualizados • Importação inteligente • Cálculo preciso de FGTS • Conformidade LGPD</p>
     </div>
   </div>
 </section>
@@ -258,11 +353,16 @@
   <div class="container">
     <div class="p-5 rounded-4 text-white cta-gradient d-flex flex-column flex-md-row align-items-center justify-content-between">
       <div>
-        <h3 class="mb-1">Pronto para começar?</h3>
-        <p class="mb-0">Leva poucos minutos para criar sua primeira empresa.</p>
+        <h3 class="mb-2">🎁 Comece seu teste grátis de 7 dias agora</h3>
+        <p class="mb-0 opacity-90">Sem compromisso • Sem cartão de crédito • Conformidade LGPD garantida</p>
       </div>
-      <div class="mt-3 mt-md-0">
-        <a href="{% url 'empresa-list' %}" class="btn btn-light btn-lg"><i class="bi bi-building-add"></i> Cadastrar empresa</a>
+      <div class="mt-3 mt-md-0 d-flex gap-2">
+        <a href="{% url 'register' %}" class="btn btn-light btn-lg px-5 shadow" style="font-weight: 700;">
+          <i class="bi bi-rocket-takeoff me-2"></i> Testar Grátis
+        </a>
+        <a href="{% url 'empresa-create' %}" class="btn btn-lg px-5 shadow" style="background: rgba(255,255,255,0.2); color: white; border: 2px solid white; font-weight: 700;">
+          <i class="bi bi-building-add me-2"></i> Criar Empresa
+        </a>
       </div>
     </div>
   </div>
@@ -271,10 +371,15 @@
 <!-- FOOTER -->
 <section class="py-4" style="background:#fff">
   <div class="container d-flex flex-column flex-md-row align-items-center justify-content-between">
-    <div class="text-muted small">FGTS Web — Projeto em desenvolvimento</div>
+    <div class="text-muted small">
+      FGTS Web © 2025 • Gestão profissional de FGTS em atraso
+    </div>
     <div class="small">
-      <a href="{% url 'empresa-list' %}" class="text-decoration-none me-3">Empresas</a>
-      <a href="{% url 'funcionario-list' %}" class="text-decoration-none">Funcionários</a>
+      <a href="#" class="text-decoration-none me-3">Política de Privacidade</a>
+      <a href="#" class="text-decoration-none me-3">Termos de Uso</a>
+      <a href="{% url 'register' %}" class="text-decoration-none fw-bold" style="color: #27ae60;">
+        <i class="bi bi-gift-fill me-1"></i> Teste Grátis
+      </a>
     </div>
   </div>
 </section>
