@@ -60,7 +60,7 @@
                         </div>
                         <div>
                             <small class="text-muted">Total de Funcionários</small>
-                            <h5 class="mb-0 fw-bold">{{ funcionarios|length }}</h5>
+                            <h5 class="mb-0 fw-bold">{{ total_count|default:0 }}</h5>
                         </div>
                     </div>
                 </div>
@@ -79,16 +79,6 @@
 
         <!-- Body -->
         <div class="card-body p-4">
-            {% if messages %}
-                {% for message in messages %}
-                <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show border-0" role="alert">
-                    <i class="bi bi-check-circle me-2"></i>
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-                {% endfor %}
-            {% endif %}
-
             {% if funcionarios %}
             <div class="table-responsive">
                 <table class="table table-hover mb-0">

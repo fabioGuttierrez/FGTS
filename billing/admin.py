@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Plan, BillingCustomer, Subscription, Payment, PricingPlan
+from .models import Plan, BillingCustomer, Subscription, Payment, PricingPlan, Feedback
 
 
 @admin.register(Plan)
@@ -72,3 +72,29 @@ class PricingPlanAdmin(admin.ModelAdmin):
     list_filter = ('periodicity', 'active')
     search_fields = ('name',)
     ordering = ('sort_order', '-updated_at')
+
+
+@admin.register(Feedback)
+class FeedbackAdmin(admin.ModelAdmin):
+    list_display = ('titulo', 'get_tipo_display', 'empresa', 'criado_em', 'respondido')
+    list_filter = ('tipo', 'respondido', 'criado_em')
+    search_fields = ('titulo', 'mensagem', 'empresa__nome')
+    readonly_fields = ('criado_em', 'atualizado_em')
+    fieldsets = (
+        ('Feedback', {
+            'fields': ('empresa', 'tipo', 'titulo', 'mensagem', 'email_resposta')
+        }),
+        ('Status', {
+            'fields': ('respondido', 'resposta')
+        }),
+        ('Timestamps', {
+            'fields': ('criado_em', 'atualizado_em'),
+            'classes': ('collapse',)
+        }),
+    )
+    actions = ['marcar_respondido']
+    
+    def marcar_respondido(self, request, queryset):
+        queryset.update(respondido=True)
+        self.message_user(request, f'{queryset.count()} feedbacks marcados como respondidos.')
+    marcar_respondido.short_description = 'Marcar como respondido'

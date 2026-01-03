@@ -69,6 +69,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'audit_logs.middleware.AuditLogsMiddleware',
+    'billing.middleware.TrialWarningMiddleware',
 ]
 
 ROOT_URLCONF = 'fgtsweb.urls'
@@ -119,8 +120,8 @@ if SUPABASE_HOST and SUPABASE_DB and SUPABASE_USER and SUPABASE_PASSWORD:
             'USER': SUPABASE_USER,
             'PASSWORD': SUPABASE_PASSWORD,
             'OPTIONS': {
-                'sslmode': 'require',
-            } if SUPABASE_HOST and 'supabase' in SUPABASE_HOST else {},
+                'sslmode': 'prefer',
+            },
         }
     }
 else:
@@ -162,9 +163,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'pt-br'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/Sao_Paulo'
 
 USE_I18N = True
 

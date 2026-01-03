@@ -12,22 +12,26 @@ logger = logging.getLogger(__name__)
 @receiver(user_logged_in)
 def log_user_login(sender, request, user, **kwargs):
     """Log de login do usuário"""
-    ip = get_client_ip(request)
-    user_agent = get_user_agent(request)
-    
-    AuditLog.objects.create(
-        user=user,
-        action='LOGIN',
-        module='auth',
-        view_name='auth.login',
-        url_path=request.path,
-        ip_address=ip,
-        user_agent=user_agent,
-        method='POST',
-        status_code=302,
-        object_repr=f"Login do usuário: {user.username}",
-        description=f"Usuário {user.username} realizou login com sucesso"
-    )
+    try:
+        ip = get_client_ip(request)
+        user_agent = get_user_agent(request)
+        
+        AuditLog.objects.create(
+            user=user,
+            action='LOGIN',
+            module='auth',
+            view_name='auth.login',
+            url_path=request.path,
+            ip_address=ip,
+            user_agent=user_agent,
+            method='POST',
+            status_code=302,
+            object_repr=f"Login do usuário: {user.username}",
+            description=f"Usuário {user.username} realizou login com sucesso"
+        )
+    except Exception as e:
+        # Log silencioso - não interrompe o login
+        logger.error(f"Erro ao registrar log de auditoria no middleware: {e}")
 
 
 @receiver(user_logged_out)

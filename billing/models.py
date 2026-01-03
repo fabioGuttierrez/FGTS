@@ -103,6 +103,7 @@ class BillingCustomer(models.Model):
         ('active', 'Ativo'),
         ('inactive', 'Inativo'),
         ('pending', 'Pendente'),
+        ('trial', 'Trial'),
         ('canceled', 'Cancelado'),
     ]
 
@@ -112,6 +113,12 @@ class BillingCustomer(models.Model):
     email_cobranca = models.EmailField(blank=True, null=True)
     asaas_customer_id = models.CharField(max_length=100, blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    
+    # Trial de 7 dias
+    trial_active = models.BooleanField(default=True, verbose_name='Trial Ativo')
+    trial_expires = models.DateField(null=True, blank=True, verbose_name='Trial Expira em')
+    trial_used = models.BooleanField(default=False, verbose_name='Trial Já Utilizado')
+    
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -135,6 +142,32 @@ class BillingCustomer(models.Model):
         if not self.plan or self.plan.max_employees is None:
             return None  # Ilimitado
         return self.plan.max_employees - self.active_employees
+    
+    def is_trial_active(self):
+        """Verifica se trial está ativo"""
+        from datetime import date
+        if not self.trial_active or not self.trial_expires:
+            return False
+        return date.today() <= self.trial_expires
+    
+    def days_remaining_trial(self):
+        """Retorna quantidade de dias restantes no trial"""
+        from datetime import date
+        if not self.is_trial_active():
+            return 0
+        return (self.trial_expires - date.today()).days
+    
+    def trial_warning_message(self):
+        """Retorna mensagem de aviso do trial"""
+        days = self.days_remaining_trial()
+        if days == 0:
+            return "Seu trial expira HOJE! Assine agora para continuar usando o sistema."
+        elif days == 1:
+            return "Seu trial expira em 1 dia. Assine agora para não perder acesso!"
+        elif days <= 3:
+            return f"Seu trial expira em {days} dias. Aproveite para assinar!"
+        else:
+            return f"Você tem {days} dias de trial restantes"
 
 
 class PricingPlan(models.Model):
@@ -184,6 +217,37 @@ class Subscription(models.Model):
 
     def __str__(self):
         return f"{self.plan_name} - {self.customer.empresa.nome}"
+
+
+class Feedback(models.Model):
+    """Modelo para armazenar feedbacks, elogios, reclamações e sugestões dos usuários"""
+    
+    TIPO_CHOICES = [
+        ('sugestao', 'Sugestão'),
+        ('elogio', 'Elogio'),
+        ('reclamacao', 'Reclamação'),
+        ('bug', 'Bug/Erro'),
+        ('outro', 'Outro'),
+    ]
+    
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='feedbacks')
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, verbose_name='Tipo de Feedback')
+    titulo = models.CharField(max_length=255, verbose_name='Título')
+    mensagem = models.TextField(verbose_name='Mensagem')
+    email_resposta = models.EmailField(blank=True, verbose_name='Email para Resposta')
+    respondido = models.BooleanField(default=False, verbose_name='Respondido')
+    resposta = models.TextField(blank=True, verbose_name='Resposta do Time')
+    
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-criado_em']
+        verbose_name = 'Feedback'
+        verbose_name_plural = 'Feedbacks'
+    
+    def __str__(self):
+        return f"[{self.get_tipo_display()}] {self.titulo} - {self.empresa.nome}"
 
 
 class Payment(models.Model):

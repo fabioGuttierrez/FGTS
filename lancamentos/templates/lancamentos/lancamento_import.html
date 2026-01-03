@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Importar Lançamentos FGTS{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <!-- Header -->
+            <div class="mb-3">
+                <h1 class="h4 fw-bold text-dark">
+                    <i class="bi bi-upload text-primary me-2"></i>
+                    Importar Lançamentos
+                </h1>
+                <p class="text-muted mb-0 small">
+                    Importe lançamentos em massa a partir de um arquivo XLSX padronizado pelo sistema.
+                </p>
+            </div>
+
+            <!-- Quick Info -->
+            <div class="alert alert-info border-0 small py-2">
+                <p class="mb-1">
+                    <strong>Como usar:</strong>
+                    1) Baixe o modelo; 2) Preencha os dados; 3) Selecione a empresa; 4) Faça o upload.
+                </p>
+                <p class="mb-0">
+                    <strong>Importante:</strong>
+                    Colaborador cadastrado - Formato da competência MM/YYYY - Valores com ponto decimal.
+                </p>
+            </div>
+
+            <!-- Botão Download Template -->
+            <div class="mb-4 text-center">
+                <a href="{% url 'lancamento-download-template' %}"
+                   class="btn btn-success btn-lg rounded-3 shadow-sm d-inline-flex align-items-center justify-content-center">
+                    <i class="bi bi-download me-2"></i>
+                    Baixar modelo XLSX
+                </a>
+            </div>
+
+            <!-- Formulário de Upload -->
+            <div class="card border-0 shadow-lg">
+                <div class="card-header bg-gradient-primary text-white py-3 border-0">
+                    <h2 class="h6 mb-0">
+                        <i class="bi bi-file-earmark-spreadsheet me-2"></i>
+                        Upload de lançamentos
+                    </h2>
+                </div>
+
+                <form method="post" enctype="multipart/form-data" class="card-body p-3">
+                    {% csrf_token %}
+
+                    <!-- Seleção de Empresa -->
+                    <div class="mb-3">
+                        <label for="empresa" class="form-label small fw-bold">Empresa *</label>
+                        <select name="empresa" id="empresa" required class="form-select form-select-sm">
+                            <option value="">Selecione uma empresa</option>
+                            {% for empresa in empresas %}
+                                <option value="{{ empresa.codigo }}">{{ empresa.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Upload de Arquivo -->
+                    <div class="mb-3">
+                        <label for="file" class="form-label small fw-bold">Arquivo XLSX *</label>
+                        <div class="border border-2 border-dashed rounded-3 p-4 text-center bg-light">
+                            <div class="text-center small">
+                                <i class="bi bi-cloud-upload fs-3 text-muted d-block mb-2"></i>
+                                <div class="text-muted">
+                                    <label for="file" class="fw-semibold text-primary cursor-pointer">
+                                        Selecione um arquivo
+                                        <input id="file" name="file" type="file" accept=".xlsx" required class="d-none" onchange="updateFileName(this)">
+                                    </label>
+                                    <span class="text-secondary"> ou arraste para esta área</span>
+                                </div>
+                                <p class="text-secondary mt-1 mb-0">Apenas arquivos .xlsx gerados a partir do modelo.</p>
+                                <p id="file-name" class="text-primary fw-semibold mt-1 mb-0"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Botões -->
+                    <div class="d-flex justify-content-end gap-2 pt-3 border-top">
+                        <a href="{% url 'lancamento-list' %}" class="btn btn-outline-secondary btn-lg rounded-3">
+                            <i class="bi bi-x-circle me-1"></i>
+                            Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-primary btn-lg rounded-3 d-inline-flex align-items-center">
+                            <i class="bi bi-upload me-2"></i>
+                            Importar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .bg-gradient-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .border-dashed {
+        border-style: dashed !important;
+    }
+</style>
+
+<script>
+function updateFileName(input) {
+    const fileName = input.files && input.files[0] ? input.files[0].name : "";
+    const fileNameDisplay = document.getElementById('file-name');
+    if (fileNameDisplay) {
+        fileNameDisplay.textContent = fileName ? `Arquivo selecionado: ${fileName}` : "";
+    }
+}
+</script>
+{% endblock %}

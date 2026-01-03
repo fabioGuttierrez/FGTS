@@ -18,9 +18,24 @@ class EmpresaCreateView(LoginRequiredMixin, CreateView):
     success_url = reverse_lazy('empresa-list')
 
     def dispatch(self, request, *args, **kwargs):
-        # Somente superuser ou gestor multiempresas pode criar novas empresas
-        if not (request.user.is_superuser or getattr(request.user, 'is_multi_empresa', False)):
-            return HttpResponseForbidden('Você não tem permissão para criar empresas.')
+        # Verificar se é superuser, multi-empresa ou está em trial ativo
+        user_has_permission = (
+            request.user.is_superuser or 
+            getattr(request.user, 'is_multi_empresa', False)
+        )
+        
+        # Se não tem permissão acima, verificar se tem trial ativo
+        if not user_has_permission:
+            try:
+                billing = BillingCustomer.objects.filter(
+                    user=request.user, 
+                    trial_active=True
+                ).first()
+                if not billing:
+                    return HttpResponseForbidden('Você não tem permissão para criar empresas.')
+            except:
+                return HttpResponseForbidden('Você não tem permissão para criar empresas.')
+        
         return super().dispatch(request, *args, **kwargs)
     
     def get_context_data(self, **kwargs):
@@ -41,18 +56,24 @@ class EmpresaCreateView(LoginRequiredMixin, CreateView):
         plan_type = self.request.session.get('selected_plan_type')
         if plan_type and self.object:
             try:
+                from datetime import date, timedelta
                 plan = Plan.objects.get(plan_type=plan_type, active=True)
-                # Criar ou atualizar BillingCustomer com o plano
+                # Criar ou atualizar BillingCustomer com trial de 7 dias
                 billing, created = BillingCustomer.objects.get_or_create(
                     empresa=self.object,
                     defaults={
                         'plan': plan,
                         'email_cobranca': self.object.email,
-                        'status': 'pending',
+                        'status': 'trial',
+                        'trial_active': True,
+                        'trial_expires': date.today() + timedelta(days=7),
                     }
                 )
                 if not created and not billing.plan:
                     billing.plan = plan
+                    billing.trial_active = True
+                    billing.trial_expires = date.today() + timedelta(days=7)
+                    billing.status = 'trial'
                     billing.save()
                 
                 # Limpar da sessão

@@ -69,9 +69,17 @@ def calcular_jam_composto(acumulado_anterior: Decimal, valor_fgts: Decimal, jam_
 def calcular_jam_periodo(valor_fgts: Decimal, competencia_start: date, data_pagamento: date, data_admissao: date) -> Decimal:
     """Calcula JAM para UMA competência específica.
     
+    IMPORTANTE: Esta função calcula o JAM de forma SIMPLIFICADA para uma única competência.
+    O cálculo correto do JAM requer o acumulado de TODAS as competências anteriores,
+    o que deve ser feito no nível da view que processa múltiplas competências.
+    
     Regra oficial: 
     - A competência de admissão (mês de admissão) = JAM zerado (nenhum acúmulo anterior)
     - Competências posteriores à admissão = JAM com acúmulo desde a admissão
+    
+    Fórmula JAM (por competência):
+    - JAM = Acumulado_Anterior × Coeficiente_JAM_do_Mês_Anterior
+    - Acumulado_Novo = Acumulado_Anterior + JAM + Valor_FGTS_do_Mês
     
     Args:
         valor_fgts: Valor FGTS da competência
@@ -80,7 +88,7 @@ def calcular_jam_periodo(valor_fgts: Decimal, competencia_start: date, data_paga
         data_admissao: Data de admissão do funcionário
     
     Returns:
-        JAM calculado para essa competência
+        JAM calculado para essa competência (SIMPLIFICADO - retorna 0 por padrão)
     """
     from coefjam.models import CoefJam
     
@@ -93,31 +101,12 @@ def calcular_jam_periodo(valor_fgts: Decimal, competencia_start: date, data_paga
     if competencia_start < competencia_admissao:
         return Decimal('0.00')
     
-    # Para competências posteriores à admissão, calcula JAM
-    # JAM = Acumulado anterior × Coeficiente JAM da competência
-    # O acumulado é: valor_fgts × quantidade de meses desde admissão
+    # IMPORTANTE: O cálculo correto do JAM requer estado acumulado de todas as competências
+    # anteriores. Como esta função é chamada de forma isolada, retornamos 0 por padrão.
+    # O cálculo correto deve ser feito na view RelatorioCompetenciaView que processa
+    # todas as competências em ordem cronológica.
     
-    # Conta quantos meses completos passaram desde admissão até a competência
-    meses_passados = (competencia_start.year - competencia_admissao.year) * 12 + (competencia_start.month - competencia_admissao.month)
-    
-    # Acumulado = FGTS do mês × número de meses anteriores
-    # (isto é, na competência anterior, tínhamos FGTS × (meses_passados - 1))
-    acumulado_anterior = valor_fgts * Decimal(meses_passados - 1)
-    
-    # Busca coeficiente JAM da competência anterior
-    competencia_anterior = competencia_start - relativedelta(months=1)
-    competencia_anterior_str = competencia_anterior.strftime('%m/%Y')
-    
-    jam_coef = CoefJam.objects.filter(competencia=competencia_anterior_str).first()
-    
-    if not jam_coef:
-        # Se não houver coeficiente, JAM = 0
-        return Decimal('0.00')
-    
-    # JAM = Acumulado anterior × Coeficiente
-    jam_valor = (acumulado_anterior * jam_coef.valor).quantize(Decimal('0.01'))
-    
-    return jam_valor if jam_valor > 0 else Decimal('0.00')
+    return Decimal('0.00')
 
 
 def calcular_fgts_atualizado(valor_fgts: Decimal,

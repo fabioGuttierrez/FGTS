@@ -36,6 +36,23 @@ def is_empresa_allowed(user, empresa_id: int) -> bool:
     return empresa_id in allowed
 
 
+def get_active_empresa_ids():
+    """Return empresa IDs com billing status ativo ou em trial.
+    Se nenhum billing customer existe, retorna todas as empresas."""
+    from billing.models import BillingCustomer
+    from empresas.models import Empresa
+    
+    active_billing = BillingCustomer.objects.filter(
+        status__in=['active', 'trial']
+    ).values_list('empresa__codigo', flat=True)
+    
+    if active_billing.exists():
+        return list(active_billing)
+    
+    # Se não há clientes de billing, retorna todas as empresas
+    return list(Empresa.objects.values_list('codigo', flat=True))
+
+
 class EmpresaScopeMixin:
     """Mixin to scope querysets by empresa for multi-tenant isolation."""
 

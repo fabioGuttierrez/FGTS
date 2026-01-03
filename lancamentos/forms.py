@@ -61,6 +61,18 @@ class LancamentoForm(forms.ModelForm):
                 self.fields['funcionario'].queryset = Funcionario.objects.filter(empresa_id=empresa_id)
             except (ValueError, TypeError):
                 self.fields['funcionario'].queryset = Funcionario.objects.none()
+    
+    def save(self, commit=True):
+        """Sobrescrever save para calcular valor_fgts automaticamente"""
+        lancamento = super().save(commit=False)
+        # ⚡ Calcular valor_fgts automaticamente (8% da base_fgts)
+        base_fgts = lancamento.base_fgts
+        if base_fgts and (lancamento.valor_fgts is None or lancamento.valor_fgts == 0):
+            from decimal import Decimal
+            lancamento.valor_fgts = base_fgts * Decimal('0.08')
+        if commit:
+            lancamento.save()
+        return lancamento
 
 
 class RelatorioCompetenciaForm(forms.Form):
@@ -76,16 +88,26 @@ class RelatorioCompetenciaForm(forms.Form):
         widget=forms.Select(attrs={'autocomplete': 'off'})
     )
     competencia = forms.CharField(
-        label='Competência', 
+        label='Competência Única', 
         required=False, 
-        help_text='MM/YYYY',
-        widget=forms.TextInput(attrs={'autocomplete': 'off'})
+        help_text='MM/YYYY - Deixe vazio para calcular TODAS as competências em aberto',
+        widget=forms.TextInput(attrs={'autocomplete': 'off', 'placeholder': 'Vazio = todas em aberto'})
     )
     competencias = forms.CharField(
-        label='Múltiplas competências', 
+        label='Múltiplas competências (uma por linha)', 
         required=False, 
-        help_text='Uma por linha no formato MM/YYYY', 
-        widget=forms.Textarea(attrs={'rows': 3, 'autocomplete': 'off'})
+        help_text='Uma por linha no formato MM/YYYY. Ignora se competência única estiver preenchida', 
+        widget=forms.Textarea(attrs={'rows': 3, 'autocomplete': 'off', 'placeholder': '01/2024\n02/2024\n03/2024'})
+    )
+    agrupamento = forms.ChoiceField(
+        label='Agrupar por',
+        choices=[
+            ('competencia', 'Competência'),
+            ('ano', 'Ano'),
+            ('funcionario', 'Funcionário'),
+        ],
+        initial='competencia',
+        widget=forms.Select(attrs={'class': 'form-select'})
     )
     data_pagamento = forms.DateField(
         label='Data de Pagamento', 

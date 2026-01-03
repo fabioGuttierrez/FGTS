@@ -13,9 +13,14 @@
                 </h2>
                 <p class="text-muted mb-0">Controle de entradas mensais de FGTS por funcionário</p>
             </div>
-            <a href="{% url 'lancamento-create' %}" class="btn btn-primary btn-lg rounded-3">
-                <i class="bi bi-plus-circle me-2"></i> Novo Lançamento
-            </a>
+            <div class="d-flex gap-2">
+                <a href="{% url 'lancamento-import' %}" class="btn btn-success btn-lg rounded-3">
+                    <i class="bi bi-upload me-2"></i> Importar XLSX
+                </a>
+                <a href="{% url 'lancamento-create' %}" class="btn btn-primary btn-lg rounded-3">
+                    <i class="bi bi-plus-circle me-2"></i> Novo Lançamento
+                </a>
+            </div>
         </div>
     </div>
 

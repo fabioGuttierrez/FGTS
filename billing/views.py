@@ -239,3 +239,51 @@ def asaas_webhook(request):
     billing_customer.save(update_fields=['status'])
 
     return HttpResponse('OK')
+
+# ===== FEEDBACK =====
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.views.generic import CreateView, ListView
+from .models import Feedback
+from .forms import FeedbackForm
+from fgtsweb.mixins import EmpresaScopeMixin
+
+
+class FeedbackCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
+    """Criar novo feedback/sugestão/reclamação"""
+    model = Feedback
+    form_class = FeedbackForm
+    template_name = 'billing/feedback_form.html'
+    
+    def form_valid(self, form):
+        # Obter empresa do usuário
+        empresas_ids = [e['codigo'] for e in Empresa.objects.filter(
+            usuarioempresa__usuario=self.request.user
+        ).values('codigo')]
+        
+        if not empresas_ids:
+            messages.error(self.request, 'Você não tem empresa associada.')
+            return redirect('dashboard')
+        
+        # Usar primeira empresa do usuário
+        empresa = Empresa.objects.get(codigo=empresas_ids[0])
+        form.instance.empresa = empresa
+        
+        response = super().form_valid(form)
+        messages.success(self.request, '✅ Feedback enviado com sucesso! Obrigado pelas sugestões.')
+        return response
+    
+    def get_success_url(self):
+        return reverse('dashboard')
+
+
+class FeedbackListView(LoginRequiredMixin, ListView):
+    """Listar feedbacks do usuário (admin)"""
+    model = Feedback
+    template_name = 'billing/feedback_list.html'
+    context_object_name = 'feedbacks'
+    paginate_by = 20
+    
+    def get_queryset(self):
+        if self.request.user.is_staff:
+            return Feedback.objects.all()
+        return Feedback.objects.none()

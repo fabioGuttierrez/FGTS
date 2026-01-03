@@ -284,6 +284,11 @@
                         </a>
                     </li>
                     {% endif %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'feedback-criar' %}" title="Envie seu feedback">
+                            <i class="bi bi-chat-left-dots"></i> Feedback
+                        </a>
+                    </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="configDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-gear"></i> Configurações
@@ -334,6 +339,62 @@
         </div>
         {% endif %}
 
+        <!-- Banner de Trial com Aviso LGPD -->
+        {% if request.user.is_authenticated and request.trial_customer %}
+            {% if request.trial_customer.is_trial_active %}
+            <div class="container-lg mb-3">
+                {% if request.trial_customer.days_remaining_trial <= 3 %}
+                <!-- ÚLTIMOS 3 DIAS: Banner vermelho SEM botão close -->
+                <div class="alert alert-danger alert-dismissible fade show mb-0" role="alert">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="flex-grow-1">
+                            <i class="bi bi-exclamation-triangle-fill me-2 fs-5 text-danger"></i>
+                            <strong>⚠️ {{ request.trial_customer.trial_warning_message }}</strong>
+                            <br>
+                            <small class="text-white-50">
+                                {% if request.trial_customer.days_remaining_trial == 0 %}
+                                    <strong>Trial expira hoje!</strong> Assine agora para não perder acesso.
+                                {% else %}
+                                    Assine agora para não interromper seu trabalho.
+                                {% endif %}
+                                <br>
+                                <i class="bi bi-shield-lock me-1"></i><strong>LGPD:</strong> 
+                                Após o trial, você terá 30 dias para assinar. 
+                                Caso não assine, <strong>todos os dados serão excluídos permanentemente</strong>.
+                            </small>
+                        </div>
+                        <a href="{% url 'checkout-plano' %}" class="btn btn-light btn-sm ms-3" style="white-space: nowrap;">
+                            <i class="bi bi-lightning-fill me-1"></i> Assinar Agora!
+                        </a>
+                    </div>
+                    <!-- SEM btn-close nos últimos 3 dias! -->
+                </div>
+                {% else %}
+                <!-- MAIS DE 3 DIAS: Banner amarelo COM botão close -->
+                <div class="alert alert-warning alert-dismissible fade show mb-0" role="alert">
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="flex-grow-1">
+                            <i class="bi bi-clock-history me-2 fs-5"></i>
+                            <strong>{{ request.trial_customer.trial_warning_message }}</strong>
+                            <br>
+                            <small class="text-muted">
+                                Teste completo com todas as funcionalidades por 7 dias.
+                                <br>
+                                <i class="bi bi-info-circle me-1"></i><strong>Importante:</strong> 
+                                Após expirar, você terá 30 dias para assinar antes que os dados sejam excluídos (LGPD).
+                            </small>
+                        </div>
+                        <a href="{% url 'checkout-plano' %}" class="btn btn-primary btn-sm ms-3" style="white-space: nowrap;">
+                            <i class="bi bi-credit-card me-1"></i> Assinar Agora
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        {% endif %}
+
         <!-- Main Content -->
         {% block content %}{% endblock %}
     </div>
@@ -347,7 +408,7 @@
                     <p class="text-muted small">Sistema de Gestão de FGTS com cálculos automáticos e geração de relatórios.</p>
                 </div>
                 <div class="col-md-6 text-md-end">
-                    <p class="text-muted small mb-0">&copy; 2024 FGTS Web. Todos os direitos reservados.</p>
+                    <p class="text-muted small mb-0">&copy; 2026 FGTS Web. Todos os direitos reservados.</p>
                 </div>
             </div>
         </div>
