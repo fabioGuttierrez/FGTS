@@ -1,7 +1,21 @@
 from django import forms
+from decimal import Decimal
 from .models import Funcionario
 
 class FuncionarioForm(forms.ModelForm):
+    salario_inicial = forms.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        required=False,
+        label='Salário Inicial (Base FGTS)',
+        help_text='Se informado, será criado automaticamente o primeiro lançamento de FGTS na competência de admissão',
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Ex: 3500.00',
+            'step': '0.01'
+        })
+    )
+    
     class Meta:
         model = Funcionario
         fields = ['empresa', 'matricula', 'nome', 'pis', 'cpf', 'cbo', 'carteira_profissional', 

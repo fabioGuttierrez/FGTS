@@ -117,17 +117,17 @@ def calcular_fgts_atualizado(valor_fgts: Decimal,
                               valor_jam_override: Decimal | None = None,
                               **kwargs) -> dict:
     """Cálculo FGTS simplificado:
-    O índice já encapsula correção, juros e multa.
-    
-    - Valor Corrigido = Valor FGTS × Índice (sem arredondar o índice, apenas o resultado)
-    - JAM = Valor FGTS × Coeficiente JAM
-    - Total = Valor Corrigido + JAM
+    O índice representa a correção aplicada ao valor FGTS.
+
+    - Valor Corrigido (Correção) = Valor FGTS × Índice
+    - JAM = Calculado separadamente
+    - Total = Valor FGTS + Correção + JAM
     """
-    # Usa o índice específico para competencia + data_pagamento
+    # Usa o índice específico para competência + data_pagamento
     # Se não houver índice, usa 1.0 (sem correção)
     indice_final = indice if indice is not None else Decimal('1.0')
-    
-    # Multiplica sem perder precisão do índice, arredonda apenas o resultado final
+
+    # Correção total (FGTS × índice)
     valor_corrigido = (valor_fgts * indice_final).quantize(Decimal('0.01'))
 
     # Se vier um JAM pré-calculado (modo composto), usa-o; caso contrário, calcula simples
@@ -135,13 +135,16 @@ def calcular_fgts_atualizado(valor_fgts: Decimal,
         valor_jam = valor_jam_override.quantize(Decimal('0.01'))
     else:
         valor_jam = aplicar_jam(valor_fgts, jam_coef)
-    total = (valor_corrigido + valor_jam).quantize(Decimal('0.01'))
+    
+    # Total = FGTS + Correção + JAM
+    total = (valor_fgts + valor_corrigido + valor_jam).quantize(Decimal('0.01'))
     
     return {
         'indice': indice_final,
-        'valor_corrigido': valor_corrigido,
+        'valor_fgts': valor_fgts,
+        'valor_corrigido': valor_corrigido,  # Correção total (FGTS × índice)
         'valor_jam': valor_jam,
-        'total': total,
+        'total': total,  # FGTS + Correção + JAM
     }
 
 

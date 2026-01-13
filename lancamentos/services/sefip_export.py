@@ -223,6 +223,99 @@ def gerar_sefip_conteudo(filtros: SefipFilters) -> str:
         )
         linhas.append(reg30)
 
+        # ----- REGISTRO 40 - Remunerações Variáveis -----
+        # Extrai valores adicionais do lançamento (se existirem campos)
+        horas_extras = getattr(lanc, 'horas_extras', Decimal(0)) or Decimal(0)
+        adicionais = getattr(lanc, 'adicionais', Decimal(0)) or Decimal(0)
+        insalubridade = getattr(lanc, 'insalubridade', Decimal(0)) or Decimal(0)
+        periculosidade = getattr(lanc, 'periculosidade', Decimal(0)) or Decimal(0)
+        outras_remun = getattr(lanc, 'outras_remun', Decimal(0)) or Decimal(0)
+
+        # Converter para centavos (inteiros, sem decimais)
+        horas_extras_cents = int(horas_extras * 100)
+        adicionais_cents = int(adicionais * 100)
+        insalubridade_cents = int(insalubridade * 100)
+        periculosidade_cents = int(periculosidade * 100)
+        outras_remun_cents = int(outras_remun * 100)
+
+        reg40 = (
+            "40"
+            + _pad(cnpj_digits, 14)
+            + " " * 15
+            + pis
+            + competencia_dt.strftime("%d%m%Y")
+            + _left_zero(str(horas_extras_cents), 11)
+            + _left_zero(str(adicionais_cents), 11)
+            + _left_zero(str(insalubridade_cents), 11)
+            + _left_zero(str(periculosidade_cents), 11)
+            + _left_zero(str(outras_remun_cents), 11)
+            + " " * 155
+            + "*"
+        )
+        linhas.append(reg40)
+
+        # ----- REGISTRO 50 - Descontos -----
+        # Extrai descontos do lançamento (se existirem campos)
+        desconto_inss = getattr(lanc, 'desconto_inss', Decimal(0)) or Decimal(0)
+        desconto_ir = getattr(lanc, 'desconto_ir', Decimal(0)) or Decimal(0)
+        desconto_faltas = getattr(lanc, 'desconto_faltas', Decimal(0)) or Decimal(0)
+        desconto_dsr = getattr(lanc, 'desconto_dsr', Decimal(0)) or Decimal(0)
+        outros_descontos = getattr(lanc, 'outros_descontos', Decimal(0)) or Decimal(0)
+
+        # Converter para centavos
+        inss_cents = int(desconto_inss * 100)
+        ir_cents = int(desconto_ir * 100)
+        faltas_cents = int(desconto_faltas * 100)
+        dsr_cents = int(desconto_dsr * 100)
+        outros_desc_cents = int(outros_descontos * 100)
+
+        reg50 = (
+            "50"
+            + _pad(cnpj_digits, 14)
+            + " " * 15
+            + pis
+            + competencia_dt.strftime("%d%m%Y")
+            + _left_zero(str(inss_cents), 11)
+            + _left_zero(str(ir_cents), 11)
+            + _left_zero(str(faltas_cents), 11)
+            + _left_zero(str(dsr_cents), 11)
+            + _left_zero(str(outros_desc_cents), 11)
+            + " " * 155
+            + "*"
+        )
+        linhas.append(reg50)
+
+        # ----- REGISTRO 60 - Contribuições Sindicais -----
+        # Extrai contribuições sindicais (se existirem campos)
+        desconto_sindical = getattr(lanc, 'desconto_sindical', Decimal(0)) or Decimal(0)
+        contribuicao_confederativa = getattr(lanc, 'contribuicao_confederativa', Decimal(0)) or Decimal(0)
+        contribuicao_assistencial = getattr(lanc, 'contribuicao_assistencial', Decimal(0)) or Decimal(0)
+        desconto_fgts_atraso = getattr(lanc, 'desconto_fgts_atraso', Decimal(0)) or Decimal(0)
+        outras_contrib = getattr(lanc, 'outras_contrib', Decimal(0)) or Decimal(0)
+
+        # Converter para centavos
+        sindical_cents = int(desconto_sindical * 100)
+        confederativa_cents = int(contribuicao_confederativa * 100)
+        assistencial_cents = int(contribuicao_assistencial * 100)
+        fgts_atraso_cents = int(desconto_fgts_atraso * 100)
+        outras_contrib_cents = int(outras_contrib * 100)
+
+        reg60 = (
+            "60"
+            + _pad(cnpj_digits, 14)
+            + " " * 15
+            + pis
+            + competencia_dt.strftime("%d%m%Y")
+            + _left_zero(str(sindical_cents), 11)
+            + _left_zero(str(confederativa_cents), 11)
+            + _left_zero(str(assistencial_cents), 11)
+            + _left_zero(str(fgts_atraso_cents), 11)
+            + _left_zero(str(outras_contrib_cents), 11)
+            + " " * 155
+            + "*"
+        )
+        linhas.append(reg60)
+
     # ----- REGISTRO 90 (trailer) -----
     reg90 = (
         "909" + "9" * 53 + " " * 238 + "*"

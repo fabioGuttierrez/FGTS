@@ -173,10 +173,28 @@
             </div>
 
             {% if lancamentos %}
+            <!-- Toolbar de ações em massa -->
+            <div class="bg-light border-bottom p-3 d-flex justify-content-between align-items-center">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="selectAll">
+                    <label class="form-check-label fw-bold" for="selectAll">
+                        Selecionar Todos
+                    </label>
+                    <span class="badge bg-primary ms-2" id="selectedCount">0 selecionados</span>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-success" id="gerarRelatorioBtn" disabled>
+                        <i class="bi bi-file-earmark-bar-graph me-2"></i>Gerar Relatório
+                    </button>
+                </div>
+            </div>
             <div class="table-responsive">
                 <table class="table table-hover mb-0">
                     <thead class="bg-light border-bottom border-2">
                         <tr>
+                            <th class="py-3 px-4 fw-bold text-dark" style="width: 40px;">
+                                <i class="bi bi-check-square"></i>
+                            </th>
                             <th class="py-3 px-4 fw-bold text-dark">Competência</th>
                             <th class="py-3 px-4 fw-bold text-dark">Funcionário</th>
                             <th class="py-3 px-4 fw-bold text-dark">Empresa</th>
@@ -189,6 +207,14 @@
                     <tbody class="border-top-0">
                         {% for lancamento in lancamentos %}
                         <tr class="align-middle">
+                            <td class="py-3 px-4">
+                                <div class="form-check">
+                                    <input class="form-check-input lancamento-checkbox" type="checkbox" 
+                                           value="{{ lancamento.id }}" 
+                                           data-empresa="{{ lancamento.empresa.id }}"
+                                           data-competencia="{{ lancamento.competencia }}">
+                                </div>
+                            </td>
                             <td class="py-3 px-4">
                                 <span class="badge bg-info text-dark fw-bold">{{ lancamento.competencia }}</span>
                             </td>
@@ -338,6 +364,59 @@
         tooltipTriggerList.map(function(tooltipTriggerEl) {
             return new bootstrap.Tooltip(tooltipTriggerEl);
         });
+
+        // Funcionalidade de seleção múltipla e geração de relatório
+        const selectAllCheckbox = document.getElementById('selectAll');
+        const lancamentoCheckboxes = document.querySelectorAll('.lancamento-checkbox');
+        const gerarRelatorioBtn = document.getElementById('gerarRelatorioBtn');
+        const selectedCountBadge = document.getElementById('selectedCount');
+
+        function updateSelectedCount() {
+            const checkedBoxes = document.querySelectorAll('.lancamento-checkbox:checked');
+            const count = checkedBoxes.length;
+            selectedCountBadge.textContent = count + ' selecionado' + (count !== 1 ? 's' : '');
+            if (gerarRelatorioBtn) {
+                gerarRelatorioBtn.disabled = count === 0;
+            }
+        }
+
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                lancamentoCheckboxes.forEach(checkbox => {
+                    checkbox.checked = this.checked;
+                });
+                updateSelectedCount();
+            });
+        }
+
+        lancamentoCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateSelectedCount);
+        });
+
+        if (gerarRelatorioBtn) {
+            gerarRelatorioBtn.addEventListener('click', function() {
+                const checkedBoxes = document.querySelectorAll('.lancamento-checkbox:checked');
+                if (checkedBoxes.length === 0) {
+                    alert('Selecione pelo menos um lançamento.');
+                    return;
+                }
+
+                // Coletar IDs dos lançamentos selecionados
+                const ids = Array.from(checkedBoxes).map(cb => cb.value);
+                
+                // Verificar se todos são da mesma empresa
+                const empresas = new Set(Array.from(checkedBoxes).map(cb => cb.dataset.empresa));
+                if (empresas.size > 1) {
+                    if (!confirm('Os lançamentos selecionados são de empresas diferentes. Deseja continuar?')) {
+                        return;
+                    }
+                }
+
+                // Redirecionar para a rota de relatório por IDs
+                const url = "{% url 'relatorio-por-ids' %}?ids=" + ids.join(',');
+                window.location.href = url;
+            });
+        }
     });
 </script>
 {% endblock %}

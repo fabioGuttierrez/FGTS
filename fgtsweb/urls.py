@@ -19,7 +19,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.views.generic import TemplateView
 from django.contrib.auth import views as auth_views
-from empresas.views import EmpresaCreateView, EmpresaListView
+from empresas.views import EmpresaCreateView, EmpresaListView, EmpresaUpdateView
 from lancamentos.views import (
     RelatorioCompetenciaView,
     LancamentoCreateView,
@@ -31,7 +31,8 @@ from lancamentos.views import (
     export_relatorio_competencia_csv, 
     export_relatorio_competencia_pdf,
     export_sefip,
-    download_memoria_calculo
+    download_memoria_calculo,
+    relatorio_por_ids
 )
 from indices.views import IndiceListView
 from django.urls import include
@@ -42,12 +43,13 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', TemplateView.as_view(template_name='landing.html'), name='home'),
     path('login/', auth_views.LoginView.as_view(template_name='auth/login.html'), name='login'),
-    path('logout/', auth_views.LogoutView.as_view(next_page='/'), name='logout'),
+    path('logout/', auth_views.LogoutView.as_view(next_page='home'), name='logout'),
     path('usuario/', include('usuarios.urls')),
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
-    path('billing/', include('billing.urls')),
+    path('billing/', include(('billing.urls', 'billing'))),
     path('empresas/', EmpresaListView.as_view(), name='empresa-list'),
     path('empresas/novo/', EmpresaCreateView.as_view(), name='empresa-create'),
+    path('empresas/<int:pk>/editar/', EmpresaUpdateView.as_view(), name='empresa-update'),
     path('funcionarios/', include('funcionarios.urls')),
     path('lancamentos/', LancamentoListView.as_view(), name='lancamento-list'),
     path('lancamentos/novo/', LancamentoCreateView.as_view(), name='lancamento-create'),
@@ -56,6 +58,7 @@ urlpatterns = [
     path('lancamentos/download-template/', LancamentoDownloadTemplateView.as_view(), name='lancamento-download-template'),
     path('lancamentos/gerar/<int:funcionario_id>/', GerarLancamentosAutomaticosView.as_view(), name='lancamento-gerar-automatico'),
     path('lancamentos/relatorio/', RelatorioCompetenciaView.as_view(), name='relatorio-competencia'),
+    path('lancamentos/relatorio/por-ids/', relatorio_por_ids, name='relatorio-por-ids'),
     path('lancamentos/relatorio/export/csv', export_relatorio_competencia_csv, name='relatorio-competencia-export-csv'),
     path('lancamentos/relatorio/export/pdf', export_relatorio_competencia_pdf, name='relatorio-competencia-export-pdf'),
     path('lancamentos/relatorio/memoria-calculo', download_memoria_calculo, name='relatorio-memoria-calculo'),
@@ -64,4 +67,5 @@ urlpatterns = [
     path('coefjam/', include('coefjam.urls')),
     path('configuracoes/', ConfiguracaoListView.as_view(), name='configuracao-list'),
     path('auditoria/', include('audit_logs.urls')),
+    path('monitoring/', include('monitoring.urls')),
 ]

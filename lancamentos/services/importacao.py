@@ -20,7 +20,7 @@ class LancamentoImportService:
     ]
     
     OPTIONAL_COLUMNS = [
-        'VALOR_FGTS', 'PAGO', 'DATA_PAGTO', 'VALOR_PAGO'
+        'VALOR_FGTS', 'PAGO', 'DATA_PAGTO', 'VALOR_PAGO', 'PARCELA_13'
     ]
     
     @staticmethod
@@ -159,8 +159,14 @@ class LancamentoImportService:
         try:
             wb = openpyxl.load_workbook(file, data_only=True)
             ws = wb.active
+        except openpyxl.utils.exceptions.InvalidFileException:
+            raise ValueError("❌ Arquivo inválido. Por favor, envie um arquivo XLSX válido.")
         except Exception as e:
-            raise ValueError(f"Erro ao ler arquivo: {str(e)}")
+            raise ValueError(f"❌ Erro ao ler arquivo: {str(e)}. Verifique se o arquivo não está corrompido.")
+        
+        # Validar se planilha tem dados
+        if ws.max_row < 2:
+            raise ValueError("❌ Arquivo vazio. O arquivo deve conter pelo menos uma linha de dados além do cabeçalho.")
         
         # Validar headers
         headers = [cell.value for cell in ws[1]]
@@ -168,7 +174,10 @@ class LancamentoImportService:
         
         missing_columns = [col for col in LancamentoImportService.REQUIRED_COLUMNS if col not in headers_upper]
         if missing_columns:
-            raise ValueError(f"Colunas obrigatórias faltando: {', '.join(missing_columns)}")
+            raise ValueError(
+                f"❌ Colunas obrigatórias faltando no arquivo: {', '.join(missing_columns)}. "
+                f"Por favor, baixe o modelo atualizado e preencha corretamente."
+            )
         
         # Criar mapeamento de índices
         column_indices = {col: headers_upper.index(col) for col in LancamentoImportService.REQUIRED_COLUMNS}
@@ -186,10 +195,14 @@ class LancamentoImportService:
             'skipped': 0
         }
         
+        linhas_processadas = 0
+        
         for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
             # Pular linhas vazias
             if not any(row):
                 continue
+            
+            linhas_processadas += 1
             
             try:
                 lancamento_data = LancamentoImportService._process_row(
@@ -197,11 +210,12 @@ class LancamentoImportService:
                 )
                 
                 if lancamento_data:
-                    # Verificar se já existe lançamento para esta competência
+                    # Verificar se já existe lançamento para esta competência/parcela
                     existing = Lancamento.objects.filter(
                         empresa=empresa,
                         funcionario=lancamento_data['funcionario'],
-                        competencia=lancamento_data['competencia']
+                        competencia=lancamento_data['competencia'],
+                        parcela_13=lancamento_data.get('parcela_13')
                     ).first()
                     
                     if existing:
@@ -209,11 +223,14 @@ class LancamentoImportService:
                         for key, value in lancamento_data.items():
                             if key != 'funcionario':  # Não atualizar funcionario
                                 setattr(existing, key, value)
+                        existing.full_clean()
                         existing.save()
                         result['updated'] += 1
                     else:
                         # Criar novo
-                        Lancamento.objects.create(**lancamento_data)
+                        novo = Lancamento(**lancamento_data)
+                        novo.full_clean()
+                        novo.save()
                         result['created'] += 1
                     
                     result['success'] += 1
@@ -225,6 +242,13 @@ class LancamentoImportService:
                     'row': row_idx,
                     'error': str(e)
                 })
+        
+        # Validar se alguma linha foi processada
+        if linhas_processadas == 0:
+            raise ValueError(
+                "❌ Nenhuma linha de dados encontrada no arquivo. "
+                "Verifique se você preencheu o arquivo corretamente e removeu a linha de exemplo."
+            )
         
         return result
     
@@ -238,20 +262,26 @@ class LancamentoImportService:
         cpf = ''.join(filter(str.isdigit, cpf))  # Remover formatação
         
         if not cpf:
-            raise ValueError(f"CPF não informado")
+            raise ValueError(f"CPF do funcionário não informado ou inválido")
+        
+        if len(cpf) != 11:
+            raise ValueError(f"CPF inválido: {cpf}. O CPF deve conter 11 dígitos")
         
         # Buscar funcionário
         try:
             funcionario = Funcionario.objects.get(cpf=cpf, empresa=empresa)
         except Funcionario.DoesNotExist:
-            raise ValueError(f"Colaborador com CPF {cpf} não encontrado na empresa")
+            raise ValueError(
+                f"Colaborador com CPF {cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]} não encontrado na empresa '{empresa.nome}'. "
+                f"Certifique-se de que o colaborador está cadastrado antes de importar seus lançamentos."
+            )
         
         # Extrair competência
         competencia_idx = column_indices.get('COMPETENCIA')
         competencia = str(row[competencia_idx]).strip() if row[competencia_idx] else ''
         
         if not competencia:
-            raise ValueError(f"Competência não informada")
+            raise ValueError(f"Competência não informada. Use o formato MM/YYYY (ex: 01/2026)")
         
         # Validar formato MM/YYYY
         try:
@@ -261,12 +291,14 @@ class LancamentoImportService:
             mes = int(mes)
             ano = int(ano)
             if mes < 1 or mes > 12:
-                raise ValueError("Mês inválido")
+                raise ValueError("Mês deve estar entre 01 e 12")
             if ano < 1900 or ano > 2100:
                 raise ValueError("Ano inválido")
             competencia = f"{mes:02d}/{ano}"
+        except ValueError as ve:
+            raise ValueError(f"Competência inválida: '{competencia}'. Use o formato MM/YYYY (ex: 01/2026). {str(ve)}")
         except Exception:
-            raise ValueError(f"Competência inválida: {competencia}. Use formato MM/YYYY")
+            raise ValueError(f"Competência inválida: '{competencia}'. Use o formato MM/YYYY (ex: 01/2026)")
         
         # Extrair base FGTS
         base_fgts_idx = column_indices.get('BASE_FGTS')
@@ -278,11 +310,11 @@ class LancamentoImportService:
             else:
                 base_fgts_str = str(base_fgts_value).strip().replace(',', '.')
                 base_fgts = Decimal(base_fgts_str)
-        except (InvalidOperation, ValueError):
-            raise ValueError(f"Base FGTS inválida: {base_fgts_value}")
+        except (InvalidOperation, ValueError, AttributeError):
+            raise ValueError(f"Base FGTS inválida: '{base_fgts_value}'. Use valores numéricos com ponto decimal (ex: 3500.00)")
         
         if base_fgts < 0:
-            raise ValueError(f"Base FGTS não pode ser negativa")
+            raise ValueError(f"Base FGTS não pode ser negativa: {base_fgts}")
         
         # Calcular ou extrair valor FGTS
         valor_fgts_idx = column_indices.get('VALOR_FGTS')
@@ -309,6 +341,7 @@ class LancamentoImportService:
             'pago': False,
             'data_pagto': None,
             'valor_pago': None,
+            'parcela_13': None,
         }
         
         # Processar campo PAGO (opcional)
@@ -342,6 +375,20 @@ class LancamentoImportService:
                     valor_pago_str = str(valor_pago_value).strip().replace(',', '.')
                     lancamento_data['valor_pago'] = Decimal(valor_pago_str)
             except (InvalidOperation, ValueError):
+                pass  # Ignorar valor inválido
+        
+        # Processar PARCELA_13 (opcional)
+        # Aceita valores: 1, 2, "1", "2", "SIM" (= 1), "PRIMEIRA" (= 1), "SEGUNDA" (= 2), etc.
+        parcela_13_idx = column_indices.get('PARCELA_13')
+        if parcela_13_idx is not None and row[parcela_13_idx]:
+            try:
+                parcela_value = str(row[parcela_13_idx]).strip().upper()
+                if parcela_value in ['1', 'PRIMEIRA', 'ADIANTAMENTO', 'SIM']:
+                    lancamento_data['parcela_13'] = 1
+                elif parcela_value in ['2', 'SEGUNDA', 'DEZEMBRO']:
+                    lancamento_data['parcela_13'] = 2
+                # Caso contrário deixa None (competência normal)
+            except Exception:
                 pass  # Ignorar valor inválido
         
         return lancamento_data

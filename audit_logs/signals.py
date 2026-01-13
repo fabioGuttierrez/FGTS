@@ -54,6 +54,10 @@ def log_action(user, action, content_type=None, object_id=None, object_repr='',
 @receiver(post_save, sender=Empresa)
 def log_empresa_save(sender, instance, created, **kwargs):
     """Log para criação/atualização de Empresa"""
+    # Aguardar que a instância tenha sido completamente salva
+    if not instance.pk:
+        return
+    
     if created:
         action = 'CREATE'
         object_repr = f"Empresa: {instance.nome}"
@@ -66,7 +70,7 @@ def log_empresa_save(sender, instance, created, **kwargs):
         user=None,  # Será preenchido via middleware
         action=action,
         content_type=content_type,
-        object_id=instance.id,
+        object_id=instance.pk,
         object_repr=object_repr
     )
 
@@ -74,6 +78,9 @@ def log_empresa_save(sender, instance, created, **kwargs):
 @receiver(post_save, sender=Funcionario)
 def log_funcionario_save(sender, instance, created, **kwargs):
     """Log para criação/atualização de Funcionário"""
+    if not instance.pk:
+        return
+    
     if created:
         action = 'CREATE'
     else:
@@ -84,7 +91,7 @@ def log_funcionario_save(sender, instance, created, **kwargs):
         user=None,
         action=action,
         content_type=content_type,
-        object_id=instance.id,
+        object_id=instance.pk,
         object_repr=f"Funcionário: {instance.nome} - CPF: {instance.cpf}"
     )
 
@@ -92,18 +99,26 @@ def log_funcionario_save(sender, instance, created, **kwargs):
 @receiver(post_save, sender=Lancamento)
 def log_lancamento_save(sender, instance, created, **kwargs):
     """Log para criação/atualização de Lançamento"""
+    if not instance.pk:
+        return
+    
     if created:
         action = 'CREATE'
     else:
         action = 'UPDATE'
     
     content_type = ContentType.objects.get_for_model(Lancamento)
+    try:
+        funcionario_nome = instance.funcionario.nome
+    except:
+        funcionario_nome = f"Funcionário ID {instance.funcionario_id}"
+    
     log_action(
         user=None,
         action=action,
         content_type=content_type,
-        object_id=instance.id,
-        object_repr=f"Lançamento: {instance.funcionario.nome} - Competência: {instance.competencia}"
+        object_id=instance.pk,
+        object_repr=f"Lançamento: {funcionario_nome} - Competência: {instance.competencia}"
     )
 
 
@@ -111,10 +126,15 @@ def log_lancamento_save(sender, instance, created, **kwargs):
 def log_lancamento_delete(sender, instance, **kwargs):
     """Log para exclusão de Lançamento"""
     content_type = ContentType.objects.get_for_model(Lancamento)
+    try:
+        funcionario_nome = instance.funcionario.nome
+    except:
+        funcionario_nome = f"Funcionário ID {instance.funcionario_id}"
+    
     log_action(
         user=None,
         action='DELETE',
         content_type=content_type,
         object_id=instance.id,
-        object_repr=f"Lançamento: {instance.funcionario.nome} - Competência: {instance.competencia}"
+        object_repr=f"Lançamento: {funcionario_nome} - Competência: {instance.competencia}"
     )

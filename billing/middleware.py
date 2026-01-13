@@ -22,18 +22,9 @@ class TrialWarningMiddleware:
         if request.user.is_authenticated:
             try:
                 # Encontrar billing customer pela empresa do usuário
-                from empresas.models import Empresa, UsuarioEmpresa
-                
-                # Verificar se usuário tem empresa
-                user_empresas = UsuarioEmpresa.objects.filter(
-                    usuario=request.user
-                ).values_list('empresa__codigo', flat=True)
-                
-                if user_empresas:
-                    empresa_codigo = user_empresas.first()
-                    billing_customer = BillingCustomer.objects.filter(
-                        empresa__codigo=empresa_codigo
-                    ).first()
+                empresa_id = getattr(request.user, 'empresa_id', None)
+                if empresa_id:
+                    billing_customer = BillingCustomer.objects.filter(empresa_id=empresa_id).first()
                     
                     if billing_customer:
                         # Adicionar ao request para usar em templates

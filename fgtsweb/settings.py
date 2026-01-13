@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'indices',
     'coefjam',
     'audit_logs',
+    'monitoring',
 ]
 
 MIDDLEWARE = [
@@ -70,6 +71,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'audit_logs.middleware.AuditLogsMiddleware',
     'billing.middleware.TrialWarningMiddleware',
+    'monitoring.middleware.PerformanceTrackingMiddleware',
 ]
 
 ROOT_URLCONF = 'fgtsweb.urls'

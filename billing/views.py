@@ -255,17 +255,26 @@ class FeedbackCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
     template_name = 'billing/feedback_form.html'
     
     def form_valid(self, form):
-        # Obter empresa do usuário
-        empresas_ids = [e['codigo'] for e in Empresa.objects.filter(
-            usuarioempresa__usuario=self.request.user
-        ).values('codigo')]
-        
-        if not empresas_ids:
+        # Descobrir a empresa do usuário (multi-tenant seguro)
+        # 1) empresa principal do usuário
+        empresa_user = getattr(self.request.user, 'empresa', None)
+        # 2) primeira empresa permitida (caso multiempresa)
+        empresa_permitida = (
+            self.request.user.empresas_permitidas.all().first()
+            if hasattr(self.request.user, 'empresas_permitidas') else None
+        )
+
+        empresa = empresa_user or empresa_permitida
+
+        if not empresa:
             messages.error(self.request, 'Você não tem empresa associada.')
             return redirect('dashboard')
-        
-        # Usar primeira empresa do usuário
-        empresa = Empresa.objects.get(codigo=empresas_ids[0])
+
+        # Garantir escopo permitido
+        if not is_empresa_allowed(self.request.user, empresa.codigo):
+            messages.error(self.request, 'Empresa não permitida para este usuário.')
+            return redirect('dashboard')
+
         form.instance.empresa = empresa
         
         response = super().form_valid(form)

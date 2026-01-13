@@ -22,22 +22,55 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             funcs_total = Funcionario.objects.count()
             lancs_total = Lancamento.objects.count()
             lancs_pendentes = Lancamento.objects.filter(pago=False).count()
+            empresa = None
+            billing_customer = None
         else:
-            # Usuário comum: mostrar apenas da sua empresa (primeira)
-            empresa = Empresa.objects.filter(usuarios=self.request.user).first()
+            # Usuário comum: buscar empresa associada
+            empresa = None
+            billing_customer = None
+            
+            # Tentar primeiro a empresa principal do usuário (verificar ID antes)
+            if self.request.user.empresa_id:
+                try:
+                    # Buscar empresa pelo código/ID
+                    empresa = Empresa.objects.get(pk=self.request.user.empresa_id)
+                except (Empresa.DoesNotExist, Exception):
+                    empresa = None
+            
+            # Se não tem empresa principal, tenta as empresas permitidas
+            if not empresa:
+                try:
+                    empresa = self.request.user.empresas_permitidas.first()
+                except Exception:
+                    empresa = None
+            
             if empresa:
                 funcs_total = Funcionario.objects.filter(empresa=empresa).count()
                 lancs_total = Lancamento.objects.filter(empresa=empresa).count()
                 lancs_pendentes = Lancamento.objects.filter(empresa=empresa, pago=False).count()
+                # Buscar informações de billing/trial através da empresa
+                try:
+                    billing_customer = BillingCustomer.objects.filter(empresa=empresa).first()
+                except Exception:
+                    billing_customer = None
             else:
                 funcs_total = lancs_total = lancs_pendentes = 0
+                billing_customer = None
 
-        current_plan = PricingPlan.objects.filter(active=True).order_by('sort_order', '-updated_at').first()
+        # Definir plano atual baseado em billing_customer
+        current_plan = None
+        if billing_customer:
+            current_plan = billing_customer.plan
+        else:
+            # Fallback para plano padrão ativo
+            current_plan = PricingPlan.objects.filter(active=True).order_by('sort_order', '-updated_at').first()
 
         ctx.update({
             'funcs_total': funcs_total,
             'lancs_total': lancs_total,
             'lancs_pendentes': lancs_pendentes,
+            'empresa': empresa,
+            'billing_customer': billing_customer,
             'current_plan': current_plan,
             'now': now,
         })

@@ -19,7 +19,7 @@ class FuncionarioImportService:
     
     OPTIONAL_COLUMNS = [
         'MATRICULA', 'PIS', 'CBO', 'CARTEIRA_PROFISSIONAL', 
-        'SERIE_CARTEIRA', 'DATA_NASCIMENTO', 'DATA_DEMISSAO', 'OBSERVACAO'
+        'SERIE_CARTEIRA', 'DATA_NASCIMENTO', 'DATA_DEMISSAO', 'OBSERVACAO', 'SALARIO'
     ]
     
     @staticmethod
@@ -65,6 +65,7 @@ class FuncionarioImportService:
             "1990-05-10",  # DATA_NASCIMENTO
             "",  # DATA_DEMISSAO
             "Informações adicionais",  # OBSERVACAO
+            "3500.00",  # SALARIO
         ]
         
         for col_idx, value in enumerate(example_data, 1):
@@ -90,6 +91,8 @@ class FuncionarioImportService:
             "• Para ver o código da sua empresa, acesse a lista de empresas no sistema",
             "• PIS deve estar no formato XXX.XXX.XXX-XX",
             "• DATA_DEMISSAO deixar em branco se o funcionário está ativo",
+            "• SALARIO: se preenchido, cria automaticamente o primeiro lançamento de FGTS",
+            "• SALARIO formato: número com ponto (ex: 3500.00)",
             "• Não altere os nomes das colunas ou a ordem delas",
             "• Apague a linha de exemplo antes de importar seus dados",
         ]
@@ -224,8 +227,11 @@ class FuncionarioImportService:
                                 f"Entre em contato com o administrador para regularizar."
                             )
                         
-                        # VALIDAÇÃO 3: Verificar limite de funcionários do plano
-                        if billing_customer.plan:
+                        # ✅ EMPRESAS EM TRIAL TÊM LIMITE ILIMITADO!
+                        if billing_customer.status == 'trial':
+                            pass  # Pula validação de limite para empresas trial
+                        # VALIDAÇÃO 3: Verificar limite de funcionários do plano (apenas para empresas active)
+                        elif billing_customer.plan:
                             # Contar funcionários ativos da empresa
                             active_count = empresa.funcionarios.filter(data_demissao__isnull=True).count()
                             
@@ -287,6 +293,41 @@ class FuncionarioImportService:
                     funcionario = Funcionario(**funcionario_data)
                     funcionario.full_clean()
                     funcionario.save()
+                    
+                    # Criar primeiro lançamento automaticamente se salário foi informado
+                    salario_str = row_data.get('SALARIO')
+                    if salario_str:
+                        try:
+                            from decimal import Decimal
+                            from lancamentos.models import Lancamento
+                            
+                            salario = Decimal(str(salario_str).strip())
+                            if salario > 0:
+                                data_admissao = funcionario.data_admissao
+                                competencia = data_admissao.strftime('%m/%Y')
+                                
+                                # Verificar se já existe lançamento
+                                existe = Lancamento.objects.filter(
+                                    empresa=empresa,
+                                    funcionario=funcionario,
+                                    competencia=competencia,
+                                    parcela_13__isnull=True
+                                ).exists()
+                                
+                                if not existe:
+                                    valor_fgts = salario * Decimal('0.08')
+                                    Lancamento.objects.create(
+                                        empresa=empresa,
+                                        funcionario=funcionario,
+                                        competencia=competencia,
+                                        base_fgts=salario,
+                                        valor_fgts=valor_fgts,
+                                        pago=False
+                                    )
+                        except Exception as e:
+                            # Log do erro mas não interrompe a importação
+                            error_msg = f"Linha {row_idx}: Funcionário criado, mas erro ao criar lançamento: {str(e)}"
+                            result['errors'].append(error_msg)
                     
                     result['success'] += 1
                     result['created_funcionarios'].append(funcionario.id)

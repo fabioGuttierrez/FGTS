@@ -1,8 +1,11 @@
 from django.urls import path
 from .views import CheckoutPlanoView, checkout_empresa, asaas_webhook, FeedbackCreateView, FeedbackListView
 
+app_name = 'billing'
+
 urlpatterns = [
-    # Checkout público - selecionar plano
+    # Checkout público - selecionar plano (pricing page)
+    path('pricing/', CheckoutPlanoView.as_view(), name='pricing'),
     path('checkout/', CheckoutPlanoView.as_view(), name='checkout-plano'),
     path('checkout/<str:plan_type>/', CheckoutPlanoView.as_view(), name='checkout-plano-tipo'),
     

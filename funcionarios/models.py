@@ -29,6 +29,10 @@ class Funcionario(models.Model):
             try:
                 billing_customer = self.empresa.billing_customer
                 
+                # ✅ EMPRESAS EM TRIAL TÊM ACESSO ILIMITADO!
+                if billing_customer.status == 'trial':
+                    return  # Permite criar sem verificar limites
+                
                 # Se não tem plano, não permite criar
                 if not billing_customer.plan:
                     raise ValidationError(
@@ -51,7 +55,7 @@ class Funcionario(models.Model):
                         f'Você já possui {active_count}. '
                         f'Faça upgrade para adicionar mais.'
                     )
-            except:
+            except AttributeError:
                 # Se não existe billing_customer, deixa falhar naturalmente
                 pass
     

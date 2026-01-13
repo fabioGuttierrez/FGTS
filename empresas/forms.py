@@ -6,7 +6,7 @@ class EmpresaForm(forms.ModelForm):
         model = Empresa
         fields = ['nome', 'cnpj', 'endereco', 'numero', 'bairro', 'cep', 'cidade', 'uf', 
                   'nome_contato', 'fone_contato', 'cnae', 'percentual_rat', 'optante_simples', 
-                  'fpas', 'outras_entidades', 'email']
+                  'fpas', 'outras_entidades', 'email', 'paga_13_aniversario']
         widgets = {
             'nome': forms.TextInput(attrs={'class': 'form-control'}),
             'cnpj': forms.TextInput(attrs={'class': 'form-control'}),
@@ -24,4 +24,5 @@ class EmpresaForm(forms.ModelForm):
             'fpas': forms.TextInput(attrs={'class': 'form-control'}),
             'outras_entidades': forms.TextInput(attrs={'class': 'form-control'}),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'paga_13_aniversario': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }

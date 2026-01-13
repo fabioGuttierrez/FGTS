@@ -7,7 +7,9 @@ class Empresa(models.Model):
 		(2, 'Optante'),
 	]
 	
-	codigo = models.AutoField(primary_key=True)
+	# OBS: o banco atual usa PK na coluna "id". Mantemos o atributo "codigo"
+	# por compatibilidade no código, mapeando para a coluna correta.
+	codigo = models.AutoField(primary_key=True, db_column='id')
 	nome = models.CharField(max_length=255, verbose_name='Nome')
 	cnpj = models.CharField(max_length=20, unique=True, verbose_name='CNPJ')
 	endereco = models.CharField(max_length=255, blank=True, verbose_name='Endereço')
@@ -24,6 +26,11 @@ class Empresa(models.Model):
 	fpas = models.CharField(max_length=10, blank=True, verbose_name='FPAS')
 	outras_entidades = models.CharField(max_length=10, blank=True, verbose_name='Outras Entidades')
 	email = models.EmailField(blank=True, verbose_name='e-Mail')
+	paga_13_aniversario = models.BooleanField(
+		default=False,
+		verbose_name='Paga 1ª parcela do 13º no mês de aniversário?',
+		help_text='Se marcado, a 1ª parcela do 13º será paga no mês de aniversário do colaborador (ao invés de novembro). A 2ª parcela continua sendo paga em dezembro.'
+	)
 
 	def __str__(self):
 		return self.nome

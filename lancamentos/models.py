@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from decimal import Decimal
 from empresas.models import Empresa
 from funcionarios.models import Funcionario
@@ -7,9 +8,21 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
 class Lancamento(models.Model):
+	PARCELA_CHOICES = [
+		(None, 'Competência Normal (01-12)'),
+		(1, '13º Salário - 1ª Parcela'),
+		(2, '13º Salário - 2ª Parcela'),
+	]
+	
 	empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='lancamentos')
 	funcionario = models.ForeignKey(Funcionario, on_delete=models.CASCADE, related_name='lancamentos')
-	competencia = models.CharField(max_length=7)  # Ex: MM/YYYY
+	competencia = models.CharField(max_length=7)  # Ex: MM/YYYY ou 13/YYYY para 13º
+	parcela_13 = models.PositiveSmallIntegerField(
+		null=True, 
+		blank=True, 
+		choices=PARCELA_CHOICES,
+		help_text="Se preenchido, indica que é uma das 2 parcelas do 13º salário"
+	)
 	base_fgts = models.DecimalField(max_digits=12, decimal_places=2)
 	valor_fgts = models.DecimalField(max_digits=12, decimal_places=2)
 	pago = models.BooleanField(default=False, help_text="FGTS foi pago?")
@@ -50,6 +63,37 @@ class Lancamento(models.Model):
 		# Se houve mudança na base_fgts, atualizar todos os lançamentos posteriores
 		if base_fgts_mudou:
 			self.atualizar_lancamentos_posteriores()
+
+	def clean(self):
+		super().clean()
+
+		if not self.competencia:
+			return
+
+		try:
+			mes, ano = map(int, self.competencia.split('/'))
+		except Exception:
+			raise ValidationError({'competencia': 'Competência deve estar no formato MM/YYYY.'})
+
+		if mes < 1 or mes > 12:
+			raise ValidationError({'competencia': 'Mês deve estar entre 01 e 12.'})
+
+		# Validação das parcelas do 13º
+		if self.parcela_13:
+			if self.parcela_13 == 1:
+				mes_esperado = 11
+				if getattr(self.empresa, 'paga_13_aniversario', False):
+					aniversario = getattr(self.funcionario, 'data_nascimento', None)
+					if aniversario:
+						mes_esperado = aniversario.month
+				if mes != mes_esperado:
+					raise ValidationError({'competencia': f"1ª parcela do 13º deve ser em {mes_esperado:02d}/{ano}."})
+			elif self.parcela_13 == 2:
+				if mes != 12:
+					raise ValidationError({'competencia': '2ª parcela do 13º deve ser em 12.'})
+		else:
+			# Competência normal já validada pelo intervalo do mês acima
+			pass
 	
 	def atualizar_lancamentos_posteriores(self):
 		"""
@@ -120,5 +164,5 @@ class Lancamento(models.Model):
 	class Meta:
 		verbose_name = 'Lançamento'
 		verbose_name_plural = 'Lançamentos'
-		# Permite apenas um lançamento por funcionário por competência
-		unique_together = ('funcionario', 'competencia')
+		# Permite apenas um lançamento por funcionário por competência/parcela
+		unique_together = ('funcionario', 'competencia', 'parcela_13')

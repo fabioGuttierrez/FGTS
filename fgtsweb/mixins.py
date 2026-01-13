@@ -91,7 +91,13 @@ class PlanFeatureRequiredMixin(UserPassesTestMixin):
             return False
         
         try:
-            plan = self.request.user.empresa.billing_customer.plan
+            billing_customer = self.request.user.empresa.billing_customer
+            
+            # ✅ EMPRESAS EM TRIAL TÊM ACESSO TOTAL!
+            if billing_customer.status == 'trial':
+                return True
+            
+            plan = billing_customer.plan
         except:
             return False
         

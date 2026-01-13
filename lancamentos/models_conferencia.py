@@ -5,8 +5,9 @@ Validação obrigatória antes de consolidar/pagar
 
 from decimal import Decimal
 from datetime import datetime
+from typing import Tuple
 from django.db import models, transaction
-from django.contrib.auth.models import User
+from django.conf import settings
 from lancamentos.models import Lancamento
 
 
@@ -29,7 +30,7 @@ class ConferenciaLancamento(models.Model):
     
     # Quem conferiu
     conferido_por = models.ForeignKey(
-        User,
+        settings.AUTH_USER_MODEL,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -59,7 +60,7 @@ class ConferenciaLancamento(models.Model):
     def __str__(self):
         return f"Conferência {self.lancamento} - {self.status}"
 
-    def conferir(self, usuario: User, valor_conferido: Decimal = None, observacoes: str = "") -> bool:
+    def conferir(self, usuario, valor_conferido: Decimal = None, observacoes: str = "") -> bool:
         """
         Marca lançamento como conferido
 
@@ -87,7 +88,7 @@ class ConferenciaLancamento(models.Model):
         self.save()
         return self.status == 'CONFERIDO'
 
-    def rejeitar(self, usuario: User, motivo: str = ""):
+    def rejeitar(self, usuario, motivo: str = ""):
         """Marca lançamento como rejeitado"""
         self.conferido_por = usuario
         self.data_conferencia = datetime.now()
@@ -197,106 +198,3 @@ class ConferenciaLancamento(models.Model):
             return True, msg
 
         return True, "Todas as conferências OK - Pronto para consolidar"
-
-
-# ===== VIEWS E FORMS =====
-
-from django import forms
-from django.contrib.auth.decorators import login_required, permission_required
-from django.shortcuts import render, redirect, get_object_or_404
-from django.views.decorators.http import require_http_methods
-from django.messages import success, error, warning
-
-
-class ConferenciaLancamentoForm(forms.ModelForm):
-    """Form para entrada de dados de conferência"""
-    
-    class Meta:
-        model = ConferenciaLancamento
-        fields = ['valor_conferido', 'observacoes']
-        widgets = {
-            'valor_conferido': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'step': '0.01',
-                'placeholder': 'Deixe em branco se for igual ao calculado'
-            }),
-            'observacoes': forms.Textarea(attrs={
-                'class': 'form-control',
-                'rows': 4,
-                'placeholder': 'Notas da conferência...'
-            }),
-        }
-
-
-@login_required
-@require_http_methods(["GET"])
-def listar_conferencias(request, empresa_id: int):
-    """Lista lançamentos pendentes de conferência"""
-    from empresas.models import Empresa
-    
-    empresa = get_object_or_404(Empresa, pk=empresa_id)
-    
-    # Filtros
-    competencia = request.GET.get('competencia')
-    status_filtro = request.GET.get('status', 'PENDENTE')
-    
-    conferencias = ConferenciaLancamento.objects.filter(
-        lancamento__empresa=empresa
-    ).select_related('lancamento__funcionario', 'conferido_por')
-    
-    if competencia:
-        conferencias = conferencias.filter(lancamento__competencia=competencia)
-    
-    if status_filtro and status_filtro != 'TODOS':
-        conferencias = conferencias.filter(status=status_filtro)
-    
-    # Relatório
-    relatorio = ConferenciaLancamento.gerar_relatorio_conferencia(empresa, competencia)
-    
-    return render(request, 'lancamentos/conferencia_lista.html', {
-        'conferencias': conferencias,
-        'empresa': empresa,
-        'competencia': competencia,
-        'relatorio': relatorio,
-    })
-
-
-@login_required
-@require_http_methods(["GET", "POST"])
-def conferir_lancamento(request, conferencia_id: int):
-    """Formulário para conferência individual de lançamento"""
-    conferencia = get_object_or_404(ConferenciaLancamento, pk=conferencia_id)
-    
-    if request.method == "POST":
-        form = ConferenciaLancamentoForm(request.POST, instance=conferencia)
-        if form.is_valid():
-            valor = form.cleaned_data.get('valor_conferido')
-            obs = form.cleaned_data.get('observacoes', '')
-            
-            valido = conferencia.conferir(request.user, valor, obs)
-            
-            msg = f"Lançamento {'CONFERIDO' if valido else 'COM PROBLEMAS'}"
-            (success if valido else warning)(request, msg)
-            
-            return redirect('listar_conferencias', empresa_id=conferencia.lancamento.empresa_id)
-    else:
-        form = ConferenciaLancamentoForm(instance=conferencia)
-    
-    return render(request, 'lancamentos/conferencia_form.html', {
-        'form': form,
-        'conferencia': conferencia,
-        'lancamento': conferencia.lancamento,
-    })
-
-
-@login_required
-@require_http_methods(["POST"])
-def rejeitar_lancamento(request, conferencia_id: int):
-    """Rejeita um lançamento"""
-    conferencia = get_object_or_404(ConferenciaLancamento, pk=conferencia_id)
-    motivo = request.POST.get('motivo', 'Motivo não informado')
-    
-    conferencia.rejeitar(request.user, motivo)
-    error(request, f"Lançamento {conferencia.lancamento} foi REJEITADO")
-    
-    return redirect('listar_conferencias', empresa_id=conferencia.lancamento.empresa_id)

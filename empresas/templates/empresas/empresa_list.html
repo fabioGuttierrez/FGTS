@@ -50,7 +50,10 @@
                 {% endif %}
               </td>
               <td>
-                <form method="post" action="{% url 'billing-checkout-empresa' empresa.pk %}" class="d-inline">
+                <a href="{% url 'empresa-update' empresa.pk %}" class="btn btn-sm btn-outline-primary">
+                  <i class="bi bi-pencil"></i> Editar
+                </a>
+                <form method="post" action="{% url 'billing-checkout-empresa' empresa.pk %}" class="d-inline ms-1">
                   {% csrf_token %}
                   <button type="submit" class="btn btn-sm btn-primary">
                     <i class="bi bi-credit-card"></i> Assinar
