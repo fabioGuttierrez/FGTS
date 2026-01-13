@@ -144,6 +144,15 @@
                             </select>
                         </div>
                         <div class="col-md-2">
+                            <label for="ano" class="form-label small fw-bold">Ano</label>
+                            <select class="form-select form-select-sm" id="ano" name="ano">
+                                <option value="">-- Todos --</option>
+                                {% for ano in anos %}
+                                    <option value="{{ ano }}" {% if ano|stringformat:"s" == ano_filtro %}selected{% endif %}>{{ ano }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
                             <label for="status_pagto" class="form-label small fw-bold">Status Pgto</label>
                             <select class="form-select form-select-sm" id="status_pagto" name="status_pagto">
                                 <option value="">-- Todos --</option>
@@ -156,6 +165,8 @@
                             <select class="form-select form-select-sm" id="ordem" name="ordem">
                                 <option value="-competencia" {% if ordem_filtro == '-competencia' %}selected{% endif %}>Competência (↓)</option>
                                 <option value="competencia_asc" {% if ordem_filtro == 'competencia_asc' %}selected{% endif %}>Competência (↑)</option>
+                                <option value="ano_desc" {% if ordem_filtro == 'ano_desc' %}selected{% endif %}>Ano (↓)</option>
+                                <option value="ano_asc" {% if ordem_filtro == 'ano_asc' %}selected{% endif %}>Ano (↑)</option>
                                 <option value="funcionario_asc" {% if ordem_filtro == 'funcionario_asc' %}selected{% endif %}>Funcionário A-Z</option>
                                 <option value="funcionario_desc" {% if ordem_filtro == 'funcionario_desc' %}selected{% endif %}>Funcionário Z-A</option>
                             </select>
@@ -217,6 +228,11 @@
                             </td>
                             <td class="py-3 px-4">
                                 <span class="badge bg-info text-dark fw-bold">{{ lancamento.competencia }}</span>
+                                {% if lancamento.parcela_13 %}
+                                    <span class="badge bg-warning text-dark ms-1">
+                                        13º - {{ lancamento.parcela_13|yesno:"1ª parcela,2ª parcela" }}
+                                    </span>
+                                {% endif %}
                             </td>
                             <td class="py-3 px-4">
                                 <div class="fw-bold text-dark">{{ lancamento.funcionario.nome }}</div>
@@ -236,7 +252,7 @@
                                     </span>
                                     {% if lancamento.pago_em %}
                                         <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
-                                            {{ lancamento.pago_em|date:"d/m/Y H:i" }}
+                                            {{ lancamento.pago_em|date:"d/m/Y" }}
                                         </small>
                                     {% endif %}
                                 {% else %}
@@ -253,9 +269,12 @@
                                     <a href="{% url 'lancamento-update' lancamento.id %}" class="btn btn-outline-primary" title="Editar" data-bs-toggle="tooltip">
                                         <i class="bi bi-pencil"></i>
                                     </a>
-                                    <button class="btn btn-outline-danger" title="Excluir" data-bs-toggle="tooltip">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
+                                    <form method="post" action="{% url 'lancamento-delete' lancamento.id %}" style="display: inline;">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-outline-danger" title="Excluir" data-bs-toggle="tooltip" onclick="return confirm('Excluir lançamento {{ lancamento.competencia }} de {{ lancamento.funcionario.nome }}?');">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
                                     {% if lancamento.is_ultima_competencia %}
                                     <form method="post" action="{% url 'lancamento-gerar-automatico' lancamento.funcionario.id %}" style="display: inline;" onsubmit="return confirm('Gerar lançamentos automáticos para {{ lancamento.funcionario.nome }}?')">
                                         {% csrf_token %}

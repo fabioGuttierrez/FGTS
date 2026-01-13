@@ -29,11 +29,33 @@ from .services.calculo import (
 )
 from .services.importacao import LancamentoImportService
 from .services.sefip_export import gerar_sefip_conteudo, SefipFilters
+from .services.competencia_13 import Competencia13Service
 from django.conf import settings
 from indices.services.indice_service import IndiceFGTSService
 from funcionarios.models import Funcionario
 from fgtsweb.mixins import get_allowed_empresa_ids, is_empresa_allowed, EmpresaScopeMixin
 from django.http import HttpResponseForbidden, HttpResponse
+from django.db.models.functions import Substr
+
+
+class LancamentoDeleteView(LoginRequiredMixin, EmpresaScopeMixin, View):
+    """Exclui um lançamento específico via POST."""
+
+    def post(self, request, pk):
+        try:
+            lancamento = get_object_or_404(Lancamento, pk=pk)
+
+            # Permissão por empresa
+            if not is_empresa_allowed(request.user, lancamento.empresa.codigo):
+                messages.error(request, '❌ Você não tem permissão para excluir este lançamento.')
+                return redirect('lancamento-list')
+
+            lancamento.delete()
+            messages.success(request, '🗑️ Lançamento excluído com sucesso.')
+        except Exception as e:
+            messages.error(request, f'❌ Erro ao excluir lançamento: {str(e)}')
+
+        return redirect('lancamento-list')
 
 
 class LancamentoCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
@@ -90,6 +112,7 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
 
     def get_queryset(self):
         qs = super().get_queryset().select_related('empresa', 'funcionario')
+        qs = qs.annotate(ano_comp=Substr('competencia', 4, 4))
         
         # Filtra apenas lançamentos de empresas permitidas
         allowed_ids = get_allowed_empresa_ids(self.request.user)
@@ -100,6 +123,7 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         competencia = self.request.GET.get('competencia', '').strip()
         funcionario_id = self.request.GET.get('funcionario', '').strip()
         empresa_id = self.request.GET.get('empresa', '').strip()
+        ano = self.request.GET.get('ano', '').strip()
         status_pagto = self.request.GET.get('status_pagto', '').strip()
         
         if competencia:
@@ -113,6 +137,9 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         
         if status_pagto in ['pago', 'nao_pago']:
             qs = qs.filter(pago=(status_pagto == 'pago'))
+
+        if ano:
+            qs = qs.filter(ano_comp=ano)
         
         # Aplicar ordenação
         ordem = self.request.GET.get('ordem', '-competencia').strip()
@@ -120,6 +147,10 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
             qs = qs.order_by('competencia')
         elif ordem == 'competencia_desc':
             qs = qs.order_by('-competencia')
+        elif ordem == 'ano_asc':
+            qs = qs.order_by('ano_comp', 'competencia')
+        elif ordem == 'ano_desc':
+            qs = qs.order_by('-ano_comp', '-competencia')
         elif ordem == 'funcionario_asc':
             qs = qs.order_by('funcionario__nome')
         elif ordem == 'funcionario_desc':
@@ -137,14 +168,20 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         if allowed_ids is not None:
             context['empresas'] = Empresa.objects.filter(codigo__in=allowed_ids)
             context['funcionarios'] = Funcionario.objects.filter(empresa__codigo__in=allowed_ids).order_by('nome')
+            anos_qs = Lancamento.objects.filter(empresa__codigo__in=allowed_ids)
         else:
             context['empresas'] = Empresa.objects.all()
             context['funcionarios'] = Funcionario.objects.all().order_by('nome')
+            anos_qs = Lancamento.objects.all()
+
+        anos_qs = anos_qs.annotate(ano_comp=Substr('competencia', 4, 4)).values_list('ano_comp', flat=True).distinct()
+        context['anos'] = sorted([a for a in anos_qs if a], reverse=True)
         
         # Passar parâmetros de filtro para o template
         context['competencia_filtro'] = self.request.GET.get('competencia', '')
         context['funcionario_filtro'] = self.request.GET.get('funcionario', '')
         context['empresa_filtro'] = self.request.GET.get('empresa', '')
+        context['ano_filtro'] = self.request.GET.get('ano', '')
         context['status_pagto_filtro'] = self.request.GET.get('status_pagto', '')
         context['ordem_filtro'] = self.request.GET.get('ordem', '-competencia')
         
@@ -219,6 +256,7 @@ class GerarLancamentosAutomaticosView(LoginRequiredMixin, EmpresaScopeMixin, Vie
             
             # Gerar lançamentos mês a mês
             lancamentos_criados = 0
+            lancamentos_13_criados = 0
             data_atual = data_ultimo + relativedelta(months=1)
             base_fgts_anterior = ultimo_lancamento.base_fgts
             
@@ -239,16 +277,44 @@ class GerarLancamentosAutomaticosView(LoginRequiredMixin, EmpresaScopeMixin, Vie
                     lancamentos_criados += 1
                 
                 data_atual += relativedelta(months=1)
+
+            # Gerar automaticamente as duas parcelas do 13º para os anos entre o último lançamento e o ano atual
+            ano_inicio = data_ultimo.year
+            ano_fim = data_hoje.year
+
+            for ano_ref in range(ano_inicio, ano_fim + 1):
+                competencias_13 = Competencia13Service.gerar_competencias_13(funcionario.empresa, ano_ref, funcionario)
+                for comp_str, parcela in competencias_13:
+                    if not Lancamento.objects.filter(funcionario=funcionario, competencia=comp_str, parcela_13=parcela).exists():
+                        base_13_total = base_fgts_anterior
+                        primeira_parcela_valor = base_13_total * Decimal('0.5')
+                        base_13 = primeira_parcela_valor if parcela == 1 else (base_13_total - primeira_parcela_valor)
+                        Lancamento.objects.create(
+                            empresa=funcionario.empresa,
+                            funcionario=funcionario,
+                            competencia=comp_str,
+                            parcela_13=parcela,
+                            base_fgts=base_13,
+                            valor_fgts=base_13 * Decimal('0.08'),
+                            pago=False,
+                        )
+                        lancamentos_13_criados += 1
             
             if lancamentos_criados > 0:
                 messages.success(
                     request, 
-                    f'✅ {lancamentos_criados} lançamento(s) gerado(s) automaticamente para {funcionario.nome}!'
+                    f'✅ {lancamentos_criados} lançamento(s) mensal(is) gerado(s) automaticamente para {funcionario.nome}!'
                 )
             else:
                 messages.info(
                     request,
                     f'ℹ️ Todos os lançamentos de {funcionario.nome} já estão cadastrados até hoje.'
+                )
+
+            if lancamentos_13_criados > 0:
+                messages.success(
+                    request,
+                    f'✅ {lancamentos_13_criados} lançamento(s) de 13º gerado(s) automaticamente para {funcionario.nome}!'
                 )
             
         except Funcionario.DoesNotExist:

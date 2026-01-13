@@ -70,6 +70,12 @@ class Lancamento(models.Model):
 		if not self.competencia:
 			return
 
+		# Garantir que empresa e funcionário estejam definidos antes das validações
+		if not self.empresa_id:
+			raise ValidationError({'empresa': 'Empresa é obrigatória.'})
+		if not self.funcionario_id:
+			raise ValidationError({'funcionario': 'Funcionário é obrigatório.'})
+
 		try:
 			mes, ano = map(int, self.competencia.split('/'))
 		except Exception:
