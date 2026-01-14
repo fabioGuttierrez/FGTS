@@ -105,7 +105,7 @@ SUPABASE_HOST = os.getenv('SUPABASE_HOST')
 SUPABASE_DB = os.getenv('SUPABASE_DB')
 SUPABASE_USER = os.getenv('SUPABASE_USER')
 SUPABASE_PASSWORD = os.getenv('SUPABASE_PASSWORD')
-SUPABASE_PORT = os.getenv('SUPABASE_PORT', '5432')
+SUPABASE_PORT = os.getenv('SUPABASE_PORT', '6543')  # Porta 6543 (pooler) por padrão
 # Supabase REST API (para leitura quando conexão Postgres não estiver configurada)
 SUPABASE_API_URL = os.getenv('SUPABASE_URL')  # ex: https://xyzcompany.supabase.co
 SUPABASE_API_KEY = os.getenv('SUPABASE_KEY')  # service_role ou anon conforme necessidade
@@ -122,7 +122,7 @@ if SUPABASE_HOST and SUPABASE_DB and SUPABASE_USER and SUPABASE_PASSWORD:
             'USER': SUPABASE_USER,
             'PASSWORD': SUPABASE_PASSWORD,
             'OPTIONS': {
-                'sslmode': 'prefer',
+                'sslmode': 'require',
             },
         }
     }
