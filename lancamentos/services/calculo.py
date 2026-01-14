@@ -50,6 +50,57 @@ def aplicar_jam(valor_fgts: Decimal, jam_coef: Decimal) -> Decimal:
     return (valor_fgts * jam_coef).quantize(Decimal('0.01'))
 
 
+def aplicar_plano_economico_legacy(valor_fgts: Decimal, competencia: date) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+    """Replica a lógica do VB6 (mdlCalculo.vb) para planos econômicos.
+
+    Passos do legado:
+    1) Multiplica por fatores de mar-jun/1994.
+    2) Divide por conversões monetárias conforme faixa de competência.
+
+    Args:
+        valor_fgts: FGTS do mês (já 8% da base)
+        competencia: data da competência (primeiro dia do mês)
+
+    Returns:
+        valor_ajustado, multiplicador_aplicado, divisor_aplicado, fator_liquido
+    """
+    ano = competencia.year
+    mes = competencia.month
+
+    multiplicadores = {
+        (1994, 3): Decimal('948.93'),
+        (1994, 4): Decimal('1389.94'),
+        (1994, 5): Decimal('1946.13'),
+        (1994, 6): Decimal('2750'),
+    }
+
+    multiplicador = multiplicadores.get((ano, mes), Decimal('1'))
+    ajustado = valor_fgts * multiplicador
+
+    divisor = Decimal('1')
+    if 1967 < ano < 1986:
+        divisor = Decimal('2750000000000')
+    elif 1985 < ano < 1989:
+        divisor = Decimal('2750000000')
+    elif ano == 1988 and mes == 12:
+        divisor = Decimal('2750000')
+    elif 1988 < ano < 1993:
+        divisor = Decimal('2750000')
+    elif ano == 1993 and mes < 8:
+        divisor = Decimal('2750000')
+    elif ano == 1993 and mes > 7:
+        divisor = Decimal('2750')
+    elif ano == 1994 and mes < 7:
+        divisor = Decimal('2750')
+
+    if divisor != Decimal('1'):
+        ajustado = ajustado / divisor
+
+    fator_liquido = (multiplicador / divisor) if divisor != Decimal('0') else Decimal('1')
+
+    return ajustado, multiplicador, divisor, fator_liquido
+
+
 def calcular_jam_composto(acumulado_anterior: Decimal, valor_fgts: Decimal, jam_coef: Decimal) -> tuple[Decimal, Decimal]:
     """Replica o comportamento legado do JAM (cálculo composto).
 
@@ -115,6 +166,9 @@ def calcular_fgts_atualizado(valor_fgts: Decimal,
                               indice: Decimal,
                               jam_coef: Decimal,
                               valor_jam_override: Decimal | None = None,
+                              aplicar_plano_economico: bool = True,
+                              fator_plano_info: tuple[Decimal, Decimal, Decimal] | None = None,
+                              valor_fgts_base: Decimal | None = None,
                               **kwargs) -> dict:
     """Cálculo FGTS simplificado:
     O índice representa a correção aplicada ao valor FGTS.
@@ -123,6 +177,18 @@ def calcular_fgts_atualizado(valor_fgts: Decimal,
     - JAM = Calculado separadamente
     - Total = Valor FGTS + Correção + JAM
     """
+    fator_mult = Decimal('1')
+    fator_div = Decimal('1')
+    fator_liquido = Decimal('1')
+    valor_fgts_original = valor_fgts
+    if aplicar_plano_economico:
+        valor_fgts, fator_mult, fator_div, fator_liquido = aplicar_plano_economico_legacy(valor_fgts, competencia)
+    elif fator_plano_info:
+        fator_mult, fator_div, fator_liquido = fator_plano_info
+
+    # Garantir casas decimais de moeda após ajustes
+    valor_fgts = valor_fgts.quantize(Decimal('0.01'))
+
     # Usa o índice específico para competência + data_pagamento
     # Se não houver índice, usa 1.0 (sem correção)
     indice_final = indice if indice is not None else Decimal('1.0')
@@ -142,6 +208,10 @@ def calcular_fgts_atualizado(valor_fgts: Decimal,
     return {
         'indice': indice_final,
         'valor_fgts': valor_fgts,
+        'valor_fgts_base': valor_fgts_base if valor_fgts_base is not None else valor_fgts_original,
+        'fator_plano_economico_multiplicador': fator_mult,
+        'fator_plano_economico_divisor': fator_div,
+        'fator_plano_economico': fator_liquido,
         'valor_corrigido': valor_corrigido,  # Correção total (FGTS × índice)
         'valor_jam': valor_jam,
         'total': total,  # FGTS + Correção + JAM
@@ -151,7 +221,11 @@ def calcular_fgts_atualizado(valor_fgts: Decimal,
 def gerar_memoria_calculo(funcionario_nome: str, funcionario_cpf: str, data_admissao: date,
                          valor_fgts: Decimal, competencia_str: str, data_pagamento: date,
                          indice: Decimal, valor_jam: Decimal, valor_corrigido: Decimal, 
-                         total: Decimal, data_admissao_mes: str) -> str:
+                         total: Decimal, data_admissao_mes: str,
+                         salario_colaborador: Decimal | None = None,
+                         fator_plano_economico: Decimal = Decimal('1'),
+                         fator_plano_mult: Decimal = Decimal('1'),
+                         fator_plano_div: Decimal = Decimal('1')) -> str:
     """Gera memória de cálculo detalhada em formato texto.
     
     Args:
@@ -190,7 +264,18 @@ def gerar_memoria_calculo(funcionario_nome: str, funcionario_cpf: str, data_admi
     # Seção 2: Dados Base
     memoria.append("2. DADOS BASE")
     memoria.append("-" * 80)
-    memoria.append(f"   Valor FGTS (Mês): R$ {valor_fgts:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+    if salario_colaborador is not None:
+        memoria.append(f"   Salário/Remuneração base: R$ {salario_colaborador:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+        fgts_teorico = (salario_colaborador * Decimal('0.08')).quantize(Decimal('0.01'))
+        memoria.append(f"   FGTS do mês (8% sobre salário): R$ {fgts_teorico:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+    memoria.append(f"   Valor FGTS (após ajustes): R$ {valor_fgts:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+    if fator_plano_economico and fator_plano_economico != Decimal('1'):
+        fgts_sem_fator = (valor_fgts / fator_plano_economico).quantize(Decimal('0.01'))
+        memoria.append(f"   Ajuste plano econômico legado:")
+        memoria.append(f"     - Multiplicador: ×{fator_plano_mult}")
+        memoria.append(f"     - Divisor: ÷{fator_plano_div}")
+        memoria.append(f"     - Fator líquido: ×{fator_plano_economico}")
+        memoria.append(f"   FGTS antes do ajuste: R$ {fgts_sem_fator:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
     memoria.append("")
     
     # Seção 3: Cálculo do FGTS Corrigido

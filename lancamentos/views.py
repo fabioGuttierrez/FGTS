@@ -26,6 +26,7 @@ from .services.calculo import (
     gerar_memoria_calculo,
     get_config_numeric,
     get_config_str,
+    aplicar_plano_economico_legacy,
 )
 from .services.importacao import LancamentoImportService
 from .services.sefip_export import gerar_sefip_conteudo, SefipFilters
@@ -519,6 +520,12 @@ class RelatorioCompetenciaView(LoginRequiredMixin, FormView):
                     'primeira_comp': is_primeira_competencia
                 }
             
+            # Ajuste de plano econômico legado (multiplica e divide conforme VB6)
+            valor_fgts_ajustado, fator_mult, fator_div, fator_liquido = aplicar_plano_economico_legacy(
+                l.valor_fgts,
+                competencia_date,
+            )
+
             # Calcular JAM
             if jam_state[funcionario_key]['primeira_comp']:
                 # Primeira competência: JAM = 0
@@ -534,16 +541,19 @@ class RelatorioCompetenciaView(LoginRequiredMixin, FormView):
             jam_state[funcionario_key]['acumulado'] = (
                 jam_state[funcionario_key]['acumulado'] + 
                 valor_jam + 
-                l.valor_fgts
+                valor_fgts_ajustado
             )
 
             calc = calcular_fgts_atualizado(
-                valor_fgts=l.valor_fgts,
+                valor_fgts=valor_fgts_ajustado,
                 competencia=competencia_date,
                 pagamento=data_pagamento,
                 indice=indice_valor,
                 jam_coef=None,
                 valor_jam_override=valor_jam,
+                aplicar_plano_economico=False,
+                fator_plano_info=(fator_mult, fator_div, fator_liquido),
+                valor_fgts_base=l.valor_fgts,
                 juros_tipo=juros_tipo,
                 juros_mensal=juros_mensal,
                 juros_diario=juros_diario,
@@ -681,6 +691,7 @@ class RelatorioCompetenciaView(LoginRequiredMixin, FormView):
             contexto = {
                 'form': form,
                 'empresa': empresa,
+                'funcionario': funcionario,
                 'competencias': competencias_display,
                 'competencias_param': competencias_param,
                 'competencia_primeira': competencia_primeira,
@@ -818,6 +829,8 @@ def export_relatorio_competencia_csv(request):
     
     empresa_id = request.GET.get('empresa')
     competencias_multi = request.GET.get('competencias', '')
+    competencia_unica = request.GET.get('competencia', '')
+    competencia_unica = request.GET.get('competencia', '')
     funcionario_id = request.GET.get('funcionario')
     data_pagamento_str = request.GET.get('data_pagamento')
     agrupamento = request.GET.get('agrupamento', 'competencia')
@@ -947,6 +960,7 @@ def export_relatorio_competencia_pdf(request):
     
     empresa_id = request.GET.get('empresa')
     competencias_multi = request.GET.get('competencias', '')
+    competencia_unica = request.GET.get('competencia', '')
     funcionario_id = request.GET.get('funcionario')
     data_pagamento_str = request.GET.get('data_pagamento')
     agrupamento = request.GET.get('agrupamento', 'competencia')
@@ -964,6 +978,10 @@ def export_relatorio_competencia_pdf(request):
     # Parse competências como dicionários com parcela_13
     # Separar por \n ou %0A (pode vir URL-encoded)
     competencias_raw = [c.strip() for c in competencias_multi.replace('%0A', '\n').split('\n') if c.strip()]
+
+    if competencia_unica and not competencias_raw:
+        competencias_raw = [competencia_unica.strip()]
+
     competencias_list = []
     for entry in competencias_raw:
         comp_str = entry
@@ -977,23 +995,19 @@ def export_relatorio_competencia_pdf(request):
                 except ValueError:
                     parc_val = None
         competencias_list.append({'competencia': comp_str, 'parcela_13': parc_val})
-    
-    # Se não houver competências especificadas, buscar todas em aberto
+
+    # Deduplicar competências (competencia, parcela_13)
+    dedup = {}
+    for c in competencias_list:
+        key = (c['competencia'], c.get('parcela_13'))
+        dedup[key] = c
+    competencias_list = list(dedup.values())
+
+    # Se não houver competências especificadas, não exportar para evitar incluir dados não solicitados
     if not competencias_list:
-        lancamentos_qs = Lancamento.objects.filter(empresa=empresa, pago=False)
-        if funcionario:
-            lancamentos_qs = lancamentos_qs.filter(funcionario=funcionario)
-        
-        # Extrair competências únicas com parcela_13
-        competencias_unicas = (
-            lancamentos_qs.values('competencia', 'parcela_13')
-            .distinct()
-            .order_by('competencia', 'parcela_13')
-        )
-        competencias_list = [
-            {'competencia': item['competencia'], 'parcela_13': item['parcela_13']}
-            for item in competencias_unicas
-        ]
+        resp = HttpResponse('Nenhuma competência informada para exportação.', status=400)
+        resp['Content-Type'] = 'text/plain; charset=utf-8'
+        return resp
 
     # Ordenar competências para respeitar o acumulado de JAM
     def _parse_comp(c: str):
@@ -1241,16 +1255,22 @@ def download_memoria_calculo(request):
     if indice_valor is None:
         indice_valor = Decimal('1.0')
     
+    # Ajuste plano econômico legado (multiplica e divide conforme VB6)
+    valor_fgts_ajustado, fator_mult, fator_div, fator_liquido = aplicar_plano_economico_legacy(
+        lancamento.valor_fgts,
+        competencia_date,
+    )
+
     # Calcula JAM
     valor_jam = calcular_jam_periodo(
-        lancamento.valor_fgts,
+        valor_fgts_ajustado,
         competencia_date,
         data_pagamento,
         funcionario.data_admissao
     )
-    
+
     # Calcula valores
-    valor_corrigido = (lancamento.valor_fgts * indice_valor).quantize(Decimal('0.01'))
+    valor_corrigido = (valor_fgts_ajustado * indice_valor).quantize(Decimal('0.01'))
     total = (valor_corrigido + valor_jam).quantize(Decimal('0.01'))
     
     # Formata data de admissão para competência
@@ -1261,14 +1281,18 @@ def download_memoria_calculo(request):
         funcionario_nome=funcionario.nome,
         funcionario_cpf=funcionario.cpf,
         data_admissao=funcionario.data_admissao,
-        valor_fgts=lancamento.valor_fgts,
+        valor_fgts=valor_fgts_ajustado,
         competencia_str=competencia_str,
         data_pagamento=data_pagamento,
         indice=indice_valor,
         valor_jam=valor_jam,
         valor_corrigido=valor_corrigido,
         total=total,
-        data_admissao_mes=data_admissao_mes
+        data_admissao_mes=data_admissao_mes,
+        salario_colaborador=lancamento.base_fgts,
+        fator_plano_economico=fator_liquido,
+        fator_plano_mult=fator_mult,
+        fator_plano_div=fator_div,
     )
     
     # Retorna arquivo para download
