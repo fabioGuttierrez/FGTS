@@ -20,38 +20,8 @@ class Migration(migrations.Migration):
                 null=True,
             ),
         ),
-        migrations.SeparateDatabaseAndState(
-            state_operations=[
-                migrations.AlterUniqueTogether(
-                    name='lancamento',
-                    unique_together={('funcionario', 'competencia', 'parcela_13')},
-                ),
-            ],
-            database_operations=[
-                migrations.RunSQL(
-                    sql=(
-                        "ALTER TABLE lancamentos_lancamento "
-                        "DROP CONSTRAINT IF EXISTS lancamentos_lancamento_funcionario_id_competencia_key;"
-                    ),
-                    reverse_sql=(
-                        "ALTER TABLE lancamentos_lancamento "
-                        "ADD CONSTRAINT lancamentos_lancamento_funcionario_id_competencia_key "
-                        "UNIQUE (funcionario_id, competencia);"
-                    ),
-                ),
-                migrations.RunSQL(
-                    sql=(
-                        "ALTER TABLE lancamentos_lancamento "
-                        "ADD CONSTRAINT "
-                        "lancamentos_lancamento_funcionario_id_competencia_parcela_13_key "
-                        "UNIQUE (funcionario_id, competencia, parcela_13);"
-                    ),
-                    reverse_sql=(
-                        "ALTER TABLE lancamentos_lancamento "
-                        "DROP CONSTRAINT IF EXISTS "
-                        "lancamentos_lancamento_funcionario_id_competencia_parcela_13_key;"
-                    ),
-                ),
-            ],
+        migrations.AlterUniqueTogether(
+            name='lancamento',
+            unique_together={('funcionario', 'competencia', 'parcela_13')},
         ),
     ]
