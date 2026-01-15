@@ -20,8 +20,4 @@ class Migration(migrations.Migration):
                 null=True,
             ),
         ),
-        migrations.AlterUniqueTogether(
-            name='lancamento',
-            unique_together={('funcionario', 'competencia', 'parcela_13')},
-        ),
     ]

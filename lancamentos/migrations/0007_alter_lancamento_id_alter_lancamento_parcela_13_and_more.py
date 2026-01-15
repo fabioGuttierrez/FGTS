@@ -21,7 +21,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='lancamento',
             name='parcela_13',
-            field=models.PositiveSmallIntegerField(blank=True, choices=[(None, 'Competência Normal (01-12)'), (1, '13º Salário - 1ª Parcela'), (2, '13º Salário - 2ª Parcela')], help_text='Se preenchido, indica que é uma das 2 parcelas do 13º salário', null=True),
+            field=models.PositiveSmallIntegerField(blank=True, choices=[(1, '13º Salário - 1ª Parcela'), (2, '13º Salário - 2ª Parcela')], help_text='Se preenchido, indica que é uma das 2 parcelas do 13º salário', null=True),
         ),
         migrations.CreateModel(
             name='ConferenciaLancamento',
