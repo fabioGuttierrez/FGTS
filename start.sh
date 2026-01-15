@@ -91,10 +91,10 @@ EOF
 echo ""
 echo "📊 Informações do sistema:"
 echo "  → Python: $(python --version)"
-echo "  → Django: $(python -c 'import django; print(django.get_version())')"
+echo "  → Django: $(DJANGO_SETTINGS_MODULE=fgtsweb.settings python -c 'import django; print(django.get_version())')"
 
 # Verificar qual banco está sendo usado
-DB_ENGINE=$(python -c "from django.conf import settings; print(settings.DATABASES['default']['ENGINE'])")
+DB_ENGINE=$(DJANGO_SETTINGS_MODULE=fgtsweb.settings python -c "from django.conf import settings; print(settings.DATABASES['default']['ENGINE'])")
 if [[ "$DB_ENGINE" == *"postgresql"* ]]; then
     echo "  → Banco: PostgreSQL/Supabase ✅"
 elif [[ "$DB_ENGINE" == *"sqlite"* ]]; then
