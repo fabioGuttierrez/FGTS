@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'coefjam',
     'audit_logs',
     'monitoring',
+    'emails',
 ]
 
 MIDDLEWARE = [
@@ -179,3 +180,15 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Email Configuration (Brevo/Sendinblue)
+# https://docs.djangoproject.com/en/6.0/topics/email/
+
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp-relay.brevo.com')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@bildee.com.br')
+SERVER_EMAIL = DEFAULT_FROM_EMAIL  # Para emails de erro do servidor
