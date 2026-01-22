@@ -29,7 +29,6 @@ from .services.calculo import (
     aplicar_plano_economico_legacy,
 )
 from .services.importacao import LancamentoImportService
-from .services.sefip_export import gerar_sefip_conteudo, SefipFilters
 from .services.competencia_13 import Competencia13Service
 from django.conf import settings
 from indices.services.indice_service import IndiceFGTSService
@@ -438,8 +437,37 @@ class RelatorioCompetenciaView(LoginRequiredMixin, FormView):
         return grupos_ordenados
 
     def _compute_for(self, empresa, competencia_str, parcela_13, data_pagamento, funcionario=None, jam_state=None):
-        if jam_state is None:
-            jam_state = {}
+        try:
+            if jam_state is None:
+                jam_state = {}
+
+            # BLOQUEIO: Validar se data_pagamento está dentro do range de data_base disponível para a competência/tabela
+            from indices.models import SupabaseIndice
+            from indices.services.indice_service import IndiceFGTSService
+            try:
+                competencia_date = datetime.strptime(competencia_str, '%m/%Y').date().replace(day=1)
+            except ValueError:
+                return None, None, 'Competência inválida. Use MM/YYYY.', jam_state, []
+
+            tabela = int(IndiceFGTSService.determinar_tabela(competencia_date))
+            qs_indices = SupabaseIndice.objects.filter(competencia=competencia_date, tabela=tabela)
+            datas_base = list(qs_indices.values_list('data_base', flat=True))
+            if not datas_base:
+                return None, None, f'Nenhum índice cadastrado para competência {competencia_str} (tabela {tabela}).', jam_state, []
+            data_base_min = min(datas_base)
+            data_base_max = max(datas_base)
+            if data_pagamento < data_base_min or data_pagamento > data_base_max:
+                msg = (
+                    f'❌ Não é possível calcular para a data de pagamento {data_pagamento.strftime("%d/%m/%Y")}.'
+                    f' O intervalo permitido para competência {competencia_str} (tabela {tabela}) é de '
+                    f'{data_base_min.strftime("%d/%m/%Y")} até {data_base_max.strftime("%d/%m/%Y")}.'
+                    ' Geralmente, as datas vão do dia 21 ao dia 20 do mês seguinte.'
+                )
+                return None, None, msg, jam_state, []
+            # ...existing code...
+            # (todo o restante do método permanece igual)
+        except Exception as e:
+            return None, None, f'Erro inesperado ao processar relatório: {str(e)}', jam_state if jam_state else {}, []
         avisos = []
         
         # 🛡️ Verificar se há loop infinito
@@ -454,17 +482,24 @@ class RelatorioCompetenciaView(LoginRequiredMixin, FormView):
         except ValueError:
             return None, None, 'Competência inválida. Use MM/YYYY.', jam_state, avisos
 
+
         # Buscar lançamentos pela competência armazenada como string 'MM/YYYY'
-        # O modelo `Lancamento.competencia` é CharField, então devemos filtrar por `competencia_str`
         lancs_qs = (Lancamento.objects
             .filter(empresa=empresa, competencia=competencia_str, parcela_13=parcela_13, pago=False)
             .select_related('funcionario')
             .order_by('funcionario_id'))
         if funcionario:
             lancs_qs = lancs_qs.filter(funcionario=funcionario)
-        
+
+        # LOG DE DEPURAÇÃO TEMPORÁRIO
+        print(f"[DEBUG FGTS] _compute_for: empresa={empresa}, competencia={competencia_str}, parcela_13={parcela_13}, pago=False")
+        print(f"[DEBUG FGTS] Queryset count: {lancs_qs.count()}")
+        for l in lancs_qs:
+            print(f"[DEBUG FGTS] Lancamento ID={l.id} | Func={l.funcionario_id} | Base FGTS={l.base_fgts} | Valor FGTS={l.valor_fgts}")
+
         # ⚡ Se não há lançamentos para esta competência, pular silenciosamente
         if not lancs_qs.exists():
+            print(f"[DEBUG FGTS] Nenhum lançamento encontrado para competência/parcela/empresa/funcionario/pago=False")
             return [], {k: Decimal('0') for k in ['valor_corrigido', 'valor_jam', 'total']}, None, jam_state, avisos
 
         # REGRA DE NEGÓCIO IMUTÁVEL: Buscar índice EXATO
@@ -493,9 +528,14 @@ class RelatorioCompetenciaView(LoginRequiredMixin, FormView):
 
         # Buscar coeficiente JAM para esta competência (campo é string MM/YYYY)
         from coefjam.models import CoefJam
-        jam_coef_obj = CoefJam.objects.filter(competencia=competencia_str).first()
+        # Converter MM/YYYY para YYYY-MM para buscar no banco
+        try:
+            comp_parts = competencia_str.split('/')
+            competencia_str_db = f"{comp_parts[1]}-{comp_parts[0]}" if len(comp_parts) == 2 else competencia_str
+        except Exception:
+            competencia_str_db = competencia_str
+        jam_coef_obj = CoefJam.objects.filter(competencia=competencia_str_db).first()
         jam_coef = jam_coef_obj.valor if jam_coef_obj else Decimal('0')
-        
         # Se não há coeficiente JAM, registrar aviso
         if not jam_coef_obj:
             avisos.append(f"⚠️ Coeficiente JAM não encontrado para competência {competencia_str}. Usando JAM=0.")
@@ -670,9 +710,19 @@ class RelatorioCompetenciaView(LoginRequiredMixin, FormView):
                     # ⚠️ NÃO SOMAR AQUI - os subtotais serão calculados na agregação
             
             if not resultados:
+                # Montar mensagem detalhada de filtros
+                filtros_info = f"<br><strong>Filtros utilizados:</strong>"\
+                    f"<br>Empresa: {empresa.nome} (ID: {empresa.pk})"\
+                    f"<br>Funcionário: {funcionario.nome if funcionario else 'Todos'}"\
+                    f"<br>Competências: {', '.join([c['competencia'] for c in competencias_list])}"\
+                    f"<br>Data de Pagamento: {data_pagamento.strftime('%d/%m/%Y')}"\
+                    f"<br>Status: Não Pago (pago=False)"
+                erro_msg = 'Nenhum lançamento encontrado com os filtros aplicados.' \
+                    ' Verifique se há lançamentos com status "Não Pago" para as competências selecionadas.' \
+                    + filtros_info
                 return render(self.request, self.template_name, {
                     'form': form,
-                    'erro': 'Nenhum lançamento encontrado com os filtros aplicados. Verifique se há lançamentos com status "Não Pago" para as competências selecionadas.'
+                    'erro': erro_msg
                 })
 
             # Aplicar agrupamento
@@ -785,15 +835,22 @@ def relatorio_por_ids(request):
     for comp_data in competencias_list:
         comp = comp_data['competencia']
         parc = comp_data.get('parcela_13')
-        
-        res, tot, err, jam_state, avisos = view._compute_for(empresa, comp, parc, data_pagamento, None, jam_state)
+        # Padronizar competência para MM/YYYY
+        comp_parts = comp.split('/')
+        if len(comp_parts) == 2:
+            mes, ano = comp_parts
+            if len(mes) == 1:
+                comp = f"0{mes}/{ano}"
+        try:
+            res, tot, err, jam_state, avisos = view._compute_for(empresa, comp, parc, data_pagamento, None, jam_state)
+        except Exception as e:
+            err = f'Erro inesperado ao processar relatório: {str(e)}'
+            res, tot, avisos = None, None, []
         if err:
             avisos_total.append(f"Erro ao processar {comp}: {err}")
             continue
-        
         if avisos:
             avisos_total.extend(avisos)
-        
         if res:
             resultados.extend(res)
             for k in totais.keys():
@@ -809,9 +866,11 @@ def relatorio_por_ids(request):
     competencias_display = [f"{c['competencia']}" + (f" (13º {c['parcela_13']}ª)" if c.get('parcela_13') else "") 
                            for c in competencias_list]
     
+    competencias_param = [f"{c['competencia']}|{c.get('parcela_13') or ''}" for c in competencias_list]
     contexto = {
         'empresa': empresa,
         'competencias': competencias_display,
+        'competencias_param': competencias_param,
         'data_pagamento': data_pagamento,
         'resultados': resultados,
         'resultados_agrupados': resultados_agrupados,
@@ -923,7 +982,7 @@ def export_relatorio_competencia_csv(request):
             return f"{label}"
         return f"Competência: {label}"
     
-    writer.writerow(['Empresa', 'Competência', 'Funcionário', 'FGTS Valor', 'Índice', 'Correção', 'JAM', 'Total'])
+    writer.writerow(['Empresa', 'Competência', 'Funcionário', 'Base FGTS', 'FGTS Valor', 'Índice', 'Correção', 'JAM', 'Total'])
     
     for _chave, grupo in resultados_agrupados:
         writer.writerow([])
@@ -937,6 +996,7 @@ def export_relatorio_competencia_csv(request):
                 empresa.nome,
                 comp_out,
                 l.funcionario.nome,
+                f"{l.base_fgts}",
                 f"{c.get('valor_fgts', l.valor_fgts)}",
                 f"{c.get('indice', '')}",
                 f"{c['valor_corrigido']}",
@@ -1079,6 +1139,7 @@ def export_relatorio_competencia_pdf(request):
             [
                 "Competência",
                 "Funcionário",
+                "Base FGTS",
                 "FGTS Valor",
                 "Correção",
                 "JAM",
@@ -1093,6 +1154,7 @@ def export_relatorio_competencia_pdf(request):
             table_data.append([
                 comp_label,
                 l.funcionario.nome,
+                f"{l.base_fgts}",
                 f"{c.get('valor_fgts', l.valor_fgts)}",
                 f"{c['valor_corrigido']}",
                 f"{c['valor_jam']}",
