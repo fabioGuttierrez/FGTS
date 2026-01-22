@@ -1,5 +1,6 @@
-
 from django.db import models
+from .models_feature import * 
+from .models_grupo import *
 
 class Empresa(models.Model):
 	OPTANTE_SIMPLES_CHOICES = [
@@ -10,6 +11,7 @@ class Empresa(models.Model):
 	# OBS: o banco atual usa PK na coluna "id". Mantemos o atributo "codigo"
 	# por compatibilidade no código, mapeando para a coluna correta.
 	codigo = models.AutoField(primary_key=True, db_column='id')
+	grupo = models.ForeignKey('GrupoEmpresa', null=True, blank=True, on_delete=models.SET_NULL, related_name='empresas', verbose_name='Grupo Econômico')
 	nome = models.CharField(max_length=255, verbose_name='Nome')
 	cnpj = models.CharField(max_length=20, unique=True, verbose_name='CNPJ')
 	endereco = models.CharField(max_length=255, blank=True, verbose_name='Endereço')

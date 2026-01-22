@@ -1,3 +1,4 @@
+print('DEBUG: Arquivo views.py carregado', flush=True)
 from django.shortcuts import render, redirect
 from django.urls import reverse_lazy
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
@@ -15,6 +16,9 @@ from .services import FuncionarioImportService
 from empresas.models import Empresa
 from billing.models import BillingCustomer
 from io import BytesIO
+from django.core.cache import cache
+from django.views.generic.detail import DetailView
+from empresas.models_grupo import TransferenciaFuncionario, FuncionarioVinculo
 
 class FuncionarioCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
     model = Funcionario
@@ -42,29 +46,22 @@ class FuncionarioCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
     def form_valid(self, form):
         from lancamentos.models import Lancamento
         from decimal import Decimal
-        
         empresa = form.cleaned_data.get('empresa')
         if empresa and not is_empresa_allowed(self.request.user, empresa.codigo):
             return HttpResponseForbidden('Empresa não permitida para este usuário.')
-        
         funcionario = form.save()
-        
         # Criar primeiro lançamento automaticamente se salário inicial foi informado
         salario_inicial = form.cleaned_data.get('salario_inicial')
-        if salario_inicial and salario_inicial > 0:
-            data_admissao = funcionario.data_admissao
+        data_admissao = form.cleaned_data.get('data_admissao')
+        if salario_inicial and salario_inicial > 0 and data_admissao:
             competencia = data_admissao.strftime('%m/%Y')
-            
-            # Verificar se já existe lançamento nesta competência para este funcionário
             existe = Lancamento.objects.filter(
                 empresa=empresa,
                 funcionario=funcionario,
                 competencia=competencia,
                 parcela_13__isnull=True
             ).exists()
-            
             if not existe:
-                # Criar o lançamento inicial
                 valor_fgts = salario_inicial * Decimal('0.08')
                 Lancamento.objects.create(
                     empresa=empresa,
@@ -83,7 +80,6 @@ class FuncionarioCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
                 messages.success(self.request, f'✅ Funcionário "{funcionario.nome}" cadastrado com sucesso!')
         else:
             messages.success(self.request, f'✅ Funcionário "{funcionario.nome}" cadastrado com sucesso!')
-        
         return super().form_valid(form)
 
 class FuncionarioListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
@@ -91,23 +87,80 @@ class FuncionarioListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
     template_name = 'funcionarios/funcionario_list.html'
     context_object_name = 'funcionarios'
     paginate_by = 20
-    
+
     def get_queryset(self):
-        qs = super().get_queryset().select_related('empresa')
-        # Filtra empresas permitidas e com assinatura ativa ou em trial
-        active_empresa_ids = get_active_empresa_ids()
-        return self.filter_queryset_by_empresa(qs).filter(empresa__codigo__in=active_empresa_ids)
-    
+        # Sempre retorna todos os funcionários antes do filtro
+        qs = Funcionario.objects.all()
+        user = self.request.user
+        if user.is_superuser or user.is_staff:
+            return qs
+        empresa_id = None
+        if hasattr(user, 'empresa_id') and user.empresa_id:
+            empresa_id = user.empresa_id
+        elif hasattr(user, 'empresas_permitidas') and user.empresas_permitidas.exists():
+            empresa_id = user.empresas_permitidas.first().codigo
+        print(f"DEBUG: empresa_id usado no filtro: {empresa_id}", flush=True)
+        if empresa_id:
+            # Testa o nome do related_name: vinculos
+            return qs.filter(vinculos__empresa_id=empresa_id).distinct()
+        return qs.none()
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['form'] = FuncionarioForm()
-        
-        # Contar funcionários ativos e demitidos
+        # ...existing code...
         queryset = self.get_queryset()
-        context['ativos_count'] = queryset.filter(data_demissao__isnull=True).count()
-        context['demitidos_count'] = queryset.filter(data_demissao__isnull=False).count()
+        context['ativos_count'] = queryset.filter(vinculos__data_demissao__isnull=True).distinct().count()
+        context['demitidos_count'] = queryset.filter(vinculos__data_demissao__isnull=False).distinct().count()
         context['total_count'] = queryset.count()
-        
+        context['form'] = FuncionarioForm()
+        allowed_ids = get_allowed_empresa_ids(self.request.user)
+        if allowed_ids is None:
+            empresas = Empresa.objects.all()
+        else:
+            empresas = Empresa.objects.filter(codigo__in=allowed_ids)
+        context['empresas_permitidas'] = empresas.values('codigo', 'nome')
+        # Permissões de recursos para botões de ação
+        from empresas.models_feature import empresa_tem_recurso
+        empresa = None
+        user = self.request.user
+        if not (user.is_superuser or user.is_staff):
+            if user.empresa_id:
+                try:
+                    empresa = Empresa.objects.get(pk=user.empresa_id)
+                except (Empresa.DoesNotExist, Exception):
+                    empresa = None
+            if not empresa:
+                try:
+                    empresa = user.empresas_permitidas.first()
+                except Exception:
+                    empresa = None
+        context['can_add_funcionario'] = empresa_tem_recurso(empresa, 'criar_funcionario')
+        context['can_gerar_relatorio'] = empresa_tem_recurso(empresa, 'gerar_relatorio')
+        return context
+        context['form'] = FuncionarioForm()
+        allowed_ids = get_allowed_empresa_ids(self.request.user)
+        if allowed_ids is None:
+            empresas = Empresa.objects.all()
+        else:
+            empresas = Empresa.objects.filter(codigo__in=allowed_ids)
+        context['empresas_permitidas'] = empresas.values('codigo', 'nome')
+        # Permissões de recursos para botões de ação
+        from empresas.models_feature import empresa_tem_recurso
+        empresa = None
+        user = self.request.user
+        if not (user.is_superuser or user.is_staff):
+            if user.empresa_id:
+                try:
+                    empresa = Empresa.objects.get(pk=user.empresa_id)
+                except (Empresa.DoesNotExist, Exception):
+                    empresa = None
+            if not empresa:
+                try:
+                    empresa = user.empresas_permitidas.first()
+                except Exception:
+                    empresa = None
+        context['can_add_funcionario'] = empresa_tem_recurso(empresa, 'criar_funcionario')
+        context['can_gerar_relatorio'] = empresa_tem_recurso(empresa, 'gerar_relatorio')
         return context
 
 
@@ -235,5 +288,60 @@ class FuncionarioUploadImportView(LoginRequiredMixin, EmpresaScopeMixin, View):
             logger.error(f"Erro na importação: {str(e)}", exc_info=True)
             return JsonResponse({'success': False, 'error': f'Erro ao processar arquivo: {str(e)}'}, status=400)
 
+
+class FuncionarioDetailView(LoginRequiredMixin, EmpresaScopeMixin, DetailView):
+    model = Funcionario
+    template_name = 'funcionarios/funcionario_detail.html'
+    context_object_name = 'funcionario'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['historico_vinculos'] = self.object.historico_vinculos()
+        return context
+
+class FuncionarioTransferenciaView(LoginRequiredMixin, EmpresaScopeMixin, View):
+    template_name = 'funcionarios/funcionario_transferencia.html'
+
+    def get(self, request, pk):
+        funcionario = Funcionario.objects.get(pk=pk)
+        form = TransferenciaFuncionarioForm(funcionario)
+        return render(request, self.template_name, {'form': form, 'funcionario': funcionario})
+
+    def post(self, request, pk):
+        funcionario = Funcionario.objects.get(pk=pk)
+        form = TransferenciaFuncionarioForm(funcionario, request.POST)
+        if form.is_valid():
+            empresa_origem = funcionario.empresa
+            empresa_destino = form.cleaned_data['empresa_destino']
+            data_transferencia = form.cleaned_data['data_transferencia']
+            cargo = form.cleaned_data.get('cargo')
+            salario = form.cleaned_data.get('salario')
+            observacoes = form.cleaned_data.get('observacoes')
+            # Encerrar vínculo atual
+            vinculo_atual = funcionario.vinculo_atual()
+            if vinculo_atual:
+                vinculo_atual.data_demissao = data_transferencia
+                vinculo_atual.motivo_saida = 'transferencia'
+                vinculo_atual.save()
+            # Criar novo vínculo
+            FuncionarioVinculo.objects.create(
+                funcionario=funcionario,
+                empresa=empresa_destino,
+                data_admissao=data_transferencia,
+                cargo=cargo,
+                salario=salario,
+                observacoes=observacoes
+            )
+            # Registrar auditoria
+            TransferenciaFuncionario.objects.create(
+                funcionario=funcionario,
+                empresa_origem=empresa_origem,
+                empresa_destino=empresa_destino,
+                usuario_responsavel=request.user,
+                observacoes=observacoes
+            )
+            messages.success(request, f'Transferência realizada com sucesso!')
+            return redirect('funcionario-detail', pk=funcionario.pk)
+        return render(request, self.template_name, {'form': form, 'funcionario': funcionario})
 
 from datetime import datetime

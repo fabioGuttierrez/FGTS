@@ -4,8 +4,6 @@ from django.core.exceptions import ValidationError
 
 
 class Funcionario(models.Model):
-    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='funcionarios', verbose_name='Empresa')
-    matricula = models.CharField(max_length=20, blank=True, verbose_name='Matrícula')
     nome = models.CharField(max_length=255, verbose_name='Nome')
     pis = models.CharField(max_length=15, blank=True, verbose_name='PIS')
     cpf = models.CharField(max_length=14, verbose_name='CPF')
@@ -13,9 +11,36 @@ class Funcionario(models.Model):
     carteira_profissional = models.CharField(max_length=20, blank=True, verbose_name='Carteira Profissional')
     serie_carteira = models.CharField(max_length=10, blank=True, verbose_name='Série Carteira')
     data_nascimento = models.DateField(null=True, blank=True, verbose_name='Data Nascimento')
-    data_admissao = models.DateField(verbose_name='Data Admissão')
-    data_demissao = models.DateField(null=True, blank=True, verbose_name='Data Demissão')
     observacao = models.TextField(blank=True, verbose_name='Observação')
+
+    def vinculo_atual(self):
+        # Retorna o vínculo mais recente, mesmo que esteja demitido
+        return self.vinculos.order_by('-data_admissao').first()
+
+    def historico_vinculos(self):
+        return self.vinculos.order_by('-data_admissao')
+
+    @property
+    def empresa(self):
+        v = self.vinculo_atual()
+        return v.empresa if v else None
+
+    @property
+    def data_admissao(self):
+        v = self.vinculo_atual()
+        return v.data_admissao if v else None
+
+    @property
+    def data_demissao(self):
+        v = self.vinculo_atual()
+        return v.data_demissao if v else None
+
+    @property
+    def status(self):
+        v = self.vinculo_atual()
+        if v and v.data_demissao:
+            return 'demitido'
+        return 'ativo'
 
     def __str__(self):
         return self.nome

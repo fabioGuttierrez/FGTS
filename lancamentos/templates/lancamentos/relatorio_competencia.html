@@ -111,6 +111,9 @@
                 <tr>
                   <th>Competência</th>
                   <th>Funcionário</th>
+                  <th>Empresa do Vínculo</th>
+                  <th>Admissão</th>
+                  <th>Demissão</th>
                   <th>Base FGTS</th>
                   <th>FGTS Valor</th>
                   <th>Índice</th>
@@ -125,6 +128,11 @@
                 <tr>
                   <td><span class="badge bg-info">{{ item.competencia_display|default:item.competencia }}</span></td>
                   <td>{{ item.lancamento.funcionario.nome }}</td>
+                  {% with vinculo=item.lancamento.funcionario.vinculos.all|get_vinculo_for_competencia:item.lancamento.empresa item.competencia %}
+                  <td>{{ vinculo.empresa.nome if vinculo else item.lancamento.empresa.nome }}</td>
+                  <td>{% if vinculo and vinculo.data_admissao %}{{ vinculo.data_admissao|date:'d/m/Y' }}{% endif %}</td>
+                  <td>{% if vinculo and vinculo.data_demissao %}{{ vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
+                  {% endwith %}
                   <td>R$ {{ item.lancamento.base_fgts|floatformat:2 }}</td>
                   <td>R$ {{ item.lancamento.valor_fgts }}</td>
                   <td>{{ item.calc.indice }}</td>
@@ -184,6 +192,9 @@
                 <tr>
                   <th>Competência</th>
                   <th>Funcionário</th>
+                  <th>Empresa do Vínculo</th>
+                  <th>Admissão</th>
+                  <th>Demissão</th>
                   <th>FGTS Valor</th>
                   <th>Índice</th>
                   <th>Correção</th>
@@ -197,6 +208,11 @@
               <tr>
                 <td><span class="badge bg-info">{{ item.competencia_display|default:item.competencia }}</span></td>
                 <td>{{ item.lancamento.funcionario.nome }}</td>
+                {% with vinculo=item.lancamento.funcionario.vinculos.all|get_vinculo_for_competencia:item.lancamento.empresa item.competencia %}
+                <td>{{ vinculo.empresa.nome if vinculo else item.lancamento.empresa.nome }}</td>
+                <td>{% if vinculo and vinculo.data_admissao %}{{ vinculo.data_admissao|date:'d/m/Y' }}{% endif %}</td>
+                <td>{% if vinculo and vinculo.data_demissao %}{{ vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
+                {% endwith %}
                 <td>R$ {{ item.lancamento.valor_fgts }}</td>
                 <td>{{ item.calc.indice }}</td>
                 <td>R$ {{ item.calc.valor_corrigido }}</td>

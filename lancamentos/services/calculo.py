@@ -265,7 +265,7 @@ def gerar_memoria_calculo(funcionario_nome: str, funcionario_cpf: str, data_admi
     memoria.append("2. DADOS BASE")
     memoria.append("-" * 80)
     if salario_colaborador is not None:
-        memoria.append(f"   Salário/Remuneração base: R$ {salario_colaborador:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+        memoria.append(f"   Base FGTS: R$ {salario_colaborador:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
         fgts_teorico = (salario_colaborador * Decimal('0.08')).quantize(Decimal('0.01'))
         memoria.append(f"   FGTS do mês (8% sobre salário): R$ {fgts_teorico:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
     memoria.append(f"   Valor FGTS (após ajustes): R$ {valor_fgts:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
@@ -314,7 +314,7 @@ def gerar_memoria_calculo(funcionario_nome: str, funcionario_cpf: str, data_admi
     # Rodapé
     memoria.append("=" * 80)
     memoria.append("Data de Geração: " + date.today().strftime("%d/%m/%Y às %H:%M:%S"))
-    memoria.append("Sistema: FGTS Web - Cálculo Automático")
+    memoria.append("Sistema: Bildee FGTS Web - Cálculo Automático")
     memoria.append("=" * 80)
     
     return "\n".join(memoria)

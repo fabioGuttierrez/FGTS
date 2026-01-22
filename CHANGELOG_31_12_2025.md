@@ -217,6 +217,49 @@ lancs_qs = (Lancamento.objects
 
 ---
 
+## 🆕 21/01/2026 - Melhorias de Robustez e UX
+
+### Bloqueio de cálculo fora do range de índices FGTS
+- Implementado bloqueio no cálculo do relatório para impedir processamento quando a data de pagamento está fora do intervalo de datas disponíveis na tabela `indices_fgts` (Supabase).
+- Mensagem clara e amigável exibida ao usuário, informando o período permitido para cada competência/tabela.
+- Regra cobre tanto datas anteriores à primeira data_base quanto posteriores à última data_base cadastrada.
+
+### Tratamento de erros inesperados no relatório
+- Adicionado tratamento de exceções abrangente no método `_compute_for` e na view `relatorio_por_ids`.
+- Qualquer erro inesperado (ex: erro de banco, tipo, lógica) agora exibe mensagem amigável ao usuário, sem mostrar traceback do Django.
+
+### Correção de tipo no filtro SupabaseIndice
+- Garantido que o campo `tabela` seja sempre filtrado como inteiro, evitando erro de tipo (text = integer) no PostgreSQL.
+
+### Experiência do usuário
+- Usuário nunca mais verá tela de exceção do Django ao gerar relatórios.
+- Mensagens de erro e bloqueio são exibidas de forma clara e orientativa.
+
+---
+
+## 🆕 21/01/2026 - Limpeza de Workflows e Continuação
+
+### Remoção Completa do Workflow SEFIP (.RE)
+- Botão SEFIP (.RE) removido da interface de relatórios (relatorio_competencia.html)
+- Rota e view de exportação SEFIP removidas de fgtsweb/urls.py
+- Serviço backend de exportação SEFIP removido (lancamentos/services/sefip_export.py)
+- Todos os fluxos, templates e referências ao SEFIP eliminados do sistema
+
+### Status do Projeto
+- Todas as alterações de hoje foram commitadas (remover SEFIP, melhorias de robustez, UX, JAM, Base FGTS nos relatórios)
+- Sistema pronto para próxima etapa de desenvolvimento
+
+### 🚩 PONTO DE CONTINUAÇÃO PARA AMANHÃ (22/01/2026)
+- [ ] Implementar exportação de relatórios por IDs selecionados (garantir que exportação CSV/PDF corresponda exatamente à seleção da tela)
+- [ ] Refatorar lógica de seleção e exportação para maior robustez
+- [ ] Testar todos os fluxos de exportação após remoção do SEFIP
+- [ ] Validar se não há mais referências ao SEFIP no código
+
+**Resumo:**
+Todas as alterações de hoje foram salvas e commitadas. Próximo passo: iniciar exportação por IDs e garantir robustez dos relatórios.
+
+---
+
 ## 📁 ARQUIVOS MODIFICADOS
 
 ### Models

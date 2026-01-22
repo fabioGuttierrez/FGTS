@@ -8,6 +8,9 @@ from lancamentos.models import Lancamento
 from indices.models import Indice
 from coefjam.models import CoefJam
 from billing.models import BillingCustomer, Subscription, Payment, PricingPlan
+from django.core.cache import cache
+from datetime import timedelta
+from django.utils import timezone
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):
@@ -17,56 +20,90 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         ctx = super().get_context_data(**kwargs)
         now = timezone.now()
 
-        # Se superuser/staff, mostrar dados globais; senão, apenas da empresa do usuário
+        # Chave de cache depende do tipo de usuário/empresa
         if self.request.user.is_superuser or self.request.user.is_staff:
-            funcs_total = Funcionario.objects.count()
-            lancs_total = Lancamento.objects.count()
-            lancs_pendentes = Lancamento.objects.filter(pago=False).count()
+            cache_key = 'dashboard_counts_global'
             empresa = None
-            billing_customer = None
         else:
-            # Usuário comum: buscar empresa associada
             empresa = None
-            billing_customer = None
-            
-            # Tentar primeiro a empresa principal do usuário (verificar ID antes)
             if self.request.user.empresa_id:
                 try:
-                    # Buscar empresa pelo código/ID
                     empresa = Empresa.objects.get(pk=self.request.user.empresa_id)
                 except (Empresa.DoesNotExist, Exception):
                     empresa = None
-            
-            # Se não tem empresa principal, tenta as empresas permitidas
             if not empresa:
                 try:
                     empresa = self.request.user.empresas_permitidas.first()
                 except Exception:
                     empresa = None
-            
-            if empresa:
-                funcs_total = Funcionario.objects.filter(empresa=empresa).count()
+            cache_key = f'dashboard_counts_empresa_{empresa.pk if empresa else "none"}'
+
+        # Tenta obter do cache
+        counts = cache.get(cache_key)
+        if not counts:
+            if self.request.user.is_superuser or self.request.user.is_staff:
+                ativos_count = Funcionario.objects.filter(vinculos__data_demissao__isnull=True).distinct().count()
+                demitidos_count = Funcionario.objects.filter(vinculos__data_demissao__isnull=False).distinct().count()
+                total_count = Funcionario.objects.all().count()
+                lancs_total = Lancamento.objects.count()
+                lancs_pendentes = Lancamento.objects.filter(pago=False).count()
+            elif empresa:
+                ativos_count = Funcionario.objects.filter(vinculos__empresa=empresa, vinculos__data_demissao__isnull=True).distinct().count()
+                demitidos_count = Funcionario.objects.filter(vinculos__empresa=empresa, vinculos__data_demissao__isnull=False).distinct().count()
+                total_count = Funcionario.objects.filter(vinculos__empresa=empresa).distinct().count()
                 lancs_total = Lancamento.objects.filter(empresa=empresa).count()
                 lancs_pendentes = Lancamento.objects.filter(empresa=empresa, pago=False).count()
-                # Buscar informações de billing/trial através da empresa
-                try:
-                    billing_customer = BillingCustomer.objects.filter(empresa=empresa).first()
-                except Exception:
-                    billing_customer = None
             else:
-                funcs_total = lancs_total = lancs_pendentes = 0
+                ativos_count = demitidos_count = total_count = lancs_total = lancs_pendentes = 0
+            counts = {
+                'ativos_count': ativos_count,
+                'demitidos_count': demitidos_count,
+                'total_count': total_count,
+                'lancs_total': lancs_total,
+                'lancs_pendentes': lancs_pendentes,
+            }
+            cache.set(cache_key, counts, timeout=30)  # 30 segundos
+        else:
+            ativos_count = counts.get('ativos_count', 0)
+            demitidos_count = counts.get('demitidos_count', 0)
+            total_count = counts.get('total_count', 0)
+            lancs_total = counts.get('lancs_total', 0)
+            lancs_pendentes = counts.get('lancs_pendentes', 0)
+
+        ctx['ativos_count'] = ativos_count
+        ctx['demitidos_count'] = demitidos_count
+        ctx['total_count'] = total_count
+        ctx['lancs_total'] = lancs_total
+        ctx['lancs_pendentes'] = lancs_pendentes
+
+        # Buscar informações de billing/trial através da empresa
+        billing_customer = None
+        if empresa:
+            try:
+                billing_customer = BillingCustomer.objects.filter(empresa=empresa).first()
+            except Exception:
                 billing_customer = None
 
         # Definir plano atual baseado em billing_customer
         current_plan = None
+        # Corrigir: se trial expirou, não mostrar plano premium/trial
         if billing_customer:
-            current_plan = billing_customer.plan
+            # Se trial expirou, não mostrar plano premium
+            if billing_customer.trial_active and hasattr(billing_customer, 'trial_expires') and billing_customer.trial_expires:
+                from datetime import date
+                if date.today() > billing_customer.trial_expires:
+                    billing_customer.trial_active = False
+                    billing_customer.status = 'pending'
+                    billing_customer.save()
+            if billing_customer.trial_active:
+                current_plan = billing_customer.plan
+            else:
+                # Se não tem assinatura ativa, não mostrar plano premium
+                current_plan = None
         else:
-            # Fallback para plano padrão ativo
             current_plan = PricingPlan.objects.filter(active=True).order_by('sort_order', '-updated_at').first()
 
         ctx.update({
-            'funcs_total': funcs_total,
             'lancs_total': lancs_total,
             'lancs_pendentes': lancs_pendentes,
             'empresa': empresa,

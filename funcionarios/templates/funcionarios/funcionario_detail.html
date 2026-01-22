@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block title %}Detalhes do Funcionário{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h2 class="fw-bold mb-3">{{ funcionario.nome }} <small class="text-muted">({{ funcionario.cpf }})</small></h2>
+  <div class="mb-4">
+    <strong>PIS:</strong> {{ funcionario.pis }}<br>
+    <strong>Data de Nascimento:</strong> {{ funcionario.data_nascimento|date:'d/m/Y' }}<br>
+    <strong>Observação:</strong> {{ funcionario.observacao|default:'—' }}
+  </div>
+  {% if funcionario.empresa and funcionario.empresa.grupo and funcionario.empresa.grupo.empresas.count > 1 %}
+    <a href="{% url 'funcionario-transferir' funcionario.id %}" class="btn btn-warning mb-3">Transferir para outra empresa do grupo</a>
+  {% endif %}
+  <h4 class="mt-4">Histórico de Vínculos</h4>
+  <table class="table table-bordered mt-2">
+    <thead>
+      <tr>
+        <th>Empresa</th>
+        <th>Admissão</th>
+        <th>Demissão</th>
+        <th>Cargo</th>
+        <th>Salário</th>
+        <th>Motivo Saída</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for vinculo in funcionario.historico_vinculos %}
+      <tr>
+        <td>{{ vinculo.empresa.nome }}</td>
+        <td>{{ vinculo.data_admissao|date:'d/m/Y' }}</td>
+        <td>{{ vinculo.data_demissao|date:'d/m/Y' }}</td>
+        <td>{{ vinculo.cargo|default:'—' }}</td>
+        <td>{% if vinculo.salario %}R$ {{ vinculo.salario|floatformat:2 }}{% else %}—{% endif %}</td>
+        <td>{{ vinculo.get_motivo_saida_display|default:'—' }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="text-center">Nenhum vínculo encontrado.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

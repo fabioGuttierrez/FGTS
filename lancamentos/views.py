@@ -982,20 +982,34 @@ def export_relatorio_competencia_csv(request):
             return f"{label}"
         return f"Competência: {label}"
     
-    writer.writerow(['Empresa', 'Competência', 'Funcionário', 'Base FGTS', 'FGTS Valor', 'Índice', 'Correção', 'JAM', 'Total'])
-    
+    writer.writerow(['Empresa', 'Competência', 'Funcionário', 'Empresa do Vínculo', 'Admissão', 'Demissão', 'Base FGTS', 'FGTS Valor', 'Índice', 'Correção', 'JAM', 'Total'])
+
     for _chave, grupo in resultados_agrupados:
         writer.writerow([])
         writer.writerow([_grupo_label(grupo.get('label'))])
-        
+
         for item in grupo['items']:
             l = item['lancamento']
             c = item['calc']
             comp_out = item.get('competencia_display', item.get('competencia'))
+            funcionario = l.funcionario
+            # Buscar vínculo do funcionário para a competência do lançamento
+            vinculo = funcionario.vinculos.filter(
+                empresa=l.empresa,
+                data_admissao__lte=l.competencia,
+            ).order_by('-data_admissao').first()
+            if vinculo and vinculo.data_demissao and vinculo.data_demissao < l.competencia:
+                vinculo = None
+            empresa_vinculo = vinculo.empresa.nome if vinculo else l.empresa.nome
+            data_admissao = vinculo.data_admissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_admissao else ''
+            data_demissao = vinculo.data_demissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_demissao else ''
             writer.writerow([
                 empresa.nome,
                 comp_out,
-                l.funcionario.nome,
+                funcionario.nome,
+                empresa_vinculo,
+                data_admissao,
+                data_demissao,
                 f"{l.base_fgts}",
                 f"{c.get('valor_fgts', l.valor_fgts)}",
                 f"{c.get('indice', '')}",
@@ -1003,9 +1017,9 @@ def export_relatorio_competencia_csv(request):
                 f"{c['valor_jam']}",
                 f"{c['total']}",
             ])
-    
+
     writer.writerow([])
-    writer.writerow(['Totais', '', '', totais['valor_fgts'], '', totais['valor_corrigido'], totais['valor_jam'], totais['total']])
+    writer.writerow(['Totais', '', '', '', '', '', totais['valor_fgts'], '', totais['valor_corrigido'], totais['valor_jam'], totais['total']])
     return resp
 
 def export_relatorio_competencia_pdf(request):
@@ -1139,6 +1153,9 @@ def export_relatorio_competencia_pdf(request):
             [
                 "Competência",
                 "Funcionário",
+                "Empresa do Vínculo",
+                "Admissão",
+                "Demissão",
                 "Base FGTS",
                 "FGTS Valor",
                 "Correção",
@@ -1151,9 +1168,22 @@ def export_relatorio_competencia_pdf(request):
             l = item['lancamento']
             c = item['calc']
             comp_label = item.get('competencia_display', item.get('competencia'))
+            funcionario = l.funcionario
+            vinculo = funcionario.vinculos.filter(
+                empresa=l.empresa,
+                data_admissao__lte=l.competencia,
+            ).order_by('-data_admissao').first()
+            if vinculo and vinculo.data_demissao and vinculo.data_demissao < l.competencia:
+                vinculo = None
+            empresa_vinculo = vinculo.empresa.nome if vinculo else l.empresa.nome
+            data_admissao = vinculo.data_admissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_admissao else ''
+            data_demissao = vinculo.data_demissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_demissao else ''
             table_data.append([
                 comp_label,
-                l.funcionario.nome,
+                funcionario.nome,
+                empresa_vinculo,
+                data_admissao,
+                data_demissao,
                 f"{l.base_fgts}",
                 f"{c.get('valor_fgts', l.valor_fgts)}",
                 f"{c['valor_corrigido']}",
@@ -1163,8 +1193,7 @@ def export_relatorio_competencia_pdf(request):
 
         table = Table(
             table_data,
-            # Larguras ajustadas para caber em A4 com margens de 20mm (largura útil ~170mm)
-            colWidths=[24 * mm, 42 * mm, 24 * mm, 20 * mm, 18 * mm, 24 * mm],
+            colWidths=[20*mm, 32*mm, 32*mm, 18*mm, 18*mm, 20*mm, 18*mm, 18*mm, 18*mm, 20*mm],
             hAlign='LEFT',
             repeatRows=1,
         )
@@ -1174,8 +1203,8 @@ def export_relatorio_competencia_pdf(request):
                     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f5f5f5')),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#333333')),
                     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),
-                    ('ALIGN', (0, 0), (1, -1), 'LEFT'),
+                    ('ALIGN', (5, 1), (-1, -1), 'RIGHT'),
+                    ('ALIGN', (0, 0), (4, -1), 'LEFT'),
                     ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#cccccc')),
                     ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#fbfbfb')]),
                     ('FONTSIZE', (0, 0), (-1, -1), 9),

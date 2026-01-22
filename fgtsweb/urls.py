@@ -31,7 +31,6 @@ from lancamentos.views import (
     LancamentoDownloadTemplateView,
     export_relatorio_competencia_csv, 
     export_relatorio_competencia_pdf,
-    export_sefip,
     download_memoria_calculo,
     relatorio_por_ids
 )
@@ -64,7 +63,6 @@ urlpatterns = [
     path('lancamentos/relatorio/export/csv', export_relatorio_competencia_csv, name='relatorio-competencia-export-csv'),
     path('lancamentos/relatorio/export/pdf', export_relatorio_competencia_pdf, name='relatorio-competencia-export-pdf'),
     path('lancamentos/relatorio/memoria-calculo', download_memoria_calculo, name='relatorio-memoria-calculo'),
-    path('lancamentos/sefip/export', export_sefip, name='sefip-export'),
     path('indices/', IndiceListView.as_view(), name='indice-list'),
     path('coefjam/', include('coefjam.urls')),
     path('configuracoes/', ConfiguracaoListView.as_view(), name='configuracao-list'),

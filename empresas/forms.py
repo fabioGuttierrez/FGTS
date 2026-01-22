@@ -1,13 +1,15 @@
 from django import forms
 from .models import Empresa
+from .models_grupo import GrupoEmpresa
 
 class EmpresaForm(forms.ModelForm):
     class Meta:
         model = Empresa
-        fields = ['nome', 'cnpj', 'endereco', 'numero', 'bairro', 'cep', 'cidade', 'uf', 
+        fields = ['grupo', 'nome', 'cnpj', 'endereco', 'numero', 'bairro', 'cep', 'cidade', 'uf', 
                   'nome_contato', 'fone_contato', 'cnae', 'percentual_rat', 'optante_simples', 
                   'fpas', 'outras_entidades', 'email', 'paga_13_aniversario']
         widgets = {
+            'grupo': forms.Select(attrs={'class': 'form-select'}),
             'nome': forms.TextInput(attrs={'class': 'form-control'}),
             'cnpj': forms.TextInput(attrs={'class': 'form-control'}),
             'endereco': forms.TextInput(attrs={'class': 'form-control'}),
