@@ -50,7 +50,13 @@
                         </div>
                         <div>
                             <small class="text-muted">Última Atualização</small>
-                            <h5 class="mb-0 fw-bold">{{ ultimo_lancamento|default:"—" }}</h5>
+                            <h5 class="mb-0 fw-bold">
+                                {% if ultima_atualizacao_indices_fgts %}
+                                    {{ ultima_atualizacao_indices_fgts|date:'d/m/Y H:i' }}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </h5>
                         </div>
                     </div>
                 </div>
@@ -145,11 +151,11 @@
                         </div>
                         <div class="col-md-2">
                             <label for="ano" class="form-label small fw-bold">Ano</label>
-                            <select class="form-select form-select-sm" id="ano" name="ano">
-                                <option value="">-- Todos --</option>
-                                {% for ano in anos %}
-                                    <option value="{{ ano }}" {% if ano|stringformat:"s" == ano_filtro %}selected{% endif %}>{{ ano }}</option>
-                                {% endfor %}
+                                <select class="form-select form-select-sm" id="ano" name="ano">
+                                    <option value="">-- Todos --</option>
+                                    {% for ano in anos_todos %}
+                                        <option value="{{ ano }}" {% if ano_filtro == ano %}selected{% endif %}>{{ ano }}</option>
+                                    {% endfor %}
                             </select>
                         </div>
                         <div class="col-md-2">
@@ -222,7 +228,7 @@
                                 <div class="form-check">
                                     <input class="form-check-input lancamento-checkbox" type="checkbox" 
                                            value="{{ lancamento.id }}" 
-                                           data-empresa="{{ lancamento.empresa.id }}"
+                                           data-empresa="{{ lancamento.empresa.pk }}"
                                            data-competencia="{{ lancamento.competencia }}">
                                 </div>
                             </td>
@@ -328,7 +334,10 @@
                     <i class="bi bi-inbox fs-1 text-muted"></i>
                 </div>
                 <h5 class="text-dark mb-2">Nenhum lançamento registrado</h5>
-                <p class="text-muted mb-4">Comece adicionando um novo lançamento mensal</p>
+                <p class="text-muted mb-2">
+                    Nenhum lançamento foi encontrado para os filtros selecionados.<br>
+                    <strong>Se você cadastrou lançamentos e eles não aparecem, verifique se o funcionário possui vínculo ativo na empresa para a competência do lançamento.</strong>
+                </p>
                 <a href="{% url 'lancamento-create' %}" class="btn btn-primary btn-lg rounded-3">
                     <i class="bi bi-plus-circle me-2"></i> Registrar Primeiro Lançamento
                 </a>

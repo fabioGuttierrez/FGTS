@@ -79,9 +79,9 @@ class LancamentoForm(forms.ModelForm):
 
         # Filtrar funcionários conforme empresa selecionada ou escopo permitido
         if empresa_id:
-            self.fields['funcionario'].queryset = Funcionario.objects.filter(empresa_id=empresa_id)
+            self.fields['funcionario'].queryset = Funcionario.objects.filter(vinculos__empresa_id=empresa_id).distinct()
         elif allowed_ids is not None:
-            self.fields['funcionario'].queryset = Funcionario.objects.filter(empresa__codigo__in=allowed_ids)
+            self.fields['funcionario'].queryset = Funcionario.objects.filter(vinculos__empresa__codigo__in=allowed_ids).distinct()
         else:
             self.fields['funcionario'].queryset = Funcionario.objects.all()
     
@@ -149,12 +149,12 @@ class RelatorioCompetenciaForm(forms.Form):
         if 'data' in kwargs and kwargs['data'].get('empresa'):
             try:
                 empresa_id = int(kwargs['data'].get('empresa'))
-                self.fields['funcionario'].queryset = Funcionario.objects.filter(empresa_id=empresa_id)
+                self.fields['funcionario'].queryset = Funcionario.objects.filter(vinculos__empresa_id=empresa_id).distinct()
             except (ValueError, TypeError):
                 self.fields['funcionario'].queryset = Funcionario.objects.none()
         elif user is not None and allowed_ids is not None:
             # Se não tem empresa selecionada, mostra todos das empresas permitidas
-            self.fields['funcionario'].queryset = Funcionario.objects.filter(empresa__codigo__in=allowed_ids)
+            self.fields['funcionario'].queryset = Funcionario.objects.filter(vinculos__empresa__codigo__in=allowed_ids).distinct()
 
 
 class LegacyImportForm(forms.Form):

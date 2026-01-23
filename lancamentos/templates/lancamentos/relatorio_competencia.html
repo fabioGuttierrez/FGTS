@@ -1,4 +1,11 @@
 {% extends 'base.html' %}
+{% load lancamento_extras %}
+{% if debug_alert %}
+  <div class="alert alert-info" style="white-space: pre-line;">
+    <strong>DEBUG:</strong><br>
+    {{ debug_alert }}
+  </div>
+{% endif %}
 {% block title %}Relatório por Competência{% endblock %}
 {% block content %}
 <div class="container mt-4">
@@ -128,11 +135,16 @@
                 <tr>
                   <td><span class="badge bg-info">{{ item.competencia_display|default:item.competencia }}</span></td>
                   <td>{{ item.lancamento.funcionario.nome }}</td>
-                  {% with vinculo=item.lancamento.funcionario.vinculos.all|get_vinculo_for_competencia:item.lancamento.empresa item.competencia %}
-                  <td>{{ vinculo.empresa.nome if vinculo else item.lancamento.empresa.nome }}</td>
+                  {% get_vinculo_for_competencia item.lancamento.funcionario.vinculos.all item.lancamento.empresa item.competencia as vinculo %}
+                  <td>
+                    {% if vinculo %}
+                      {{ vinculo.empresa.nome }}
+                    {% else %}
+                      {{ item.lancamento.empresa.nome }}
+                    {% endif %}
+                  </td>
                   <td>{% if vinculo and vinculo.data_admissao %}{{ vinculo.data_admissao|date:'d/m/Y' }}{% endif %}</td>
                   <td>{% if vinculo and vinculo.data_demissao %}{{ vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
-                  {% endwith %}
                   <td>R$ {{ item.lancamento.base_fgts|floatformat:2 }}</td>
                   <td>R$ {{ item.lancamento.valor_fgts }}</td>
                   <td>{{ item.calc.indice }}</td>
@@ -208,11 +220,16 @@
               <tr>
                 <td><span class="badge bg-info">{{ item.competencia_display|default:item.competencia }}</span></td>
                 <td>{{ item.lancamento.funcionario.nome }}</td>
-                {% with vinculo=item.lancamento.funcionario.vinculos.all|get_vinculo_for_competencia:item.lancamento.empresa item.competencia %}
-                <td>{{ vinculo.empresa.nome if vinculo else item.lancamento.empresa.nome }}</td>
+                {% get_vinculo_for_competencia item.lancamento.funcionario.vinculos.all item.lancamento.empresa item.competencia as vinculo %}
+                <td>
+                  {% if vinculo %}
+                    {{ vinculo.empresa.nome }}
+                  {% else %}
+                    {{ item.lancamento.empresa.nome }}
+                  {% endif %}
+                </td>
                 <td>{% if vinculo and vinculo.data_admissao %}{{ vinculo.data_admissao|date:'d/m/Y' }}{% endif %}</td>
                 <td>{% if vinculo and vinculo.data_demissao %}{{ vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
-                {% endwith %}
                 <td>R$ {{ item.lancamento.valor_fgts }}</td>
                 <td>{{ item.calc.indice }}</td>
                 <td>R$ {{ item.calc.valor_corrigido }}</td>
@@ -266,3 +283,13 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
+
+{% if kpi_fim or kpi_tempo or kpi_lancamentos or kpi_competencias %}
+  <div class="alert alert-secondary mt-3" role="alert">
+    <strong>KPIs de Performance:</strong><br>
+    {% if kpi_fim %}Fim: <b>{{ kpi_fim }}</b><br>{% endif %}
+    {% if kpi_tempo %}Tempo total: <b>{{ kpi_tempo }}</b><br>{% endif %}
+    {% if kpi_lancamentos is not None %}Lançamentos processados: <b>{{ kpi_lancamentos }}</b><br>{% endif %}
+    {% if kpi_competencias is not None %}Competências processadas: <b>{{ kpi_competencias }}</b><br>{% endif %}
+  </div>
+{% endif %}
