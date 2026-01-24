@@ -32,48 +32,114 @@
             background: #f5f6fa;
             color: var(--dark);
         }
-
-        /* Navbar Styling */
-        .navbar {
-            background: linear-gradient(135deg, var(--dark) 0%, var(--primary) 100%) !important;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            padding: 1rem 0;
+        {% if not request.user.is_authenticated %}
+        body {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%) !important;
         }
+        {% endif %}
 
-        .navbar-brand {
+        /* Sidebar Styling */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 230px;
+            background: linear-gradient(135deg, var(--dark) 0%, var(--primary) 100%) !important;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.10);
+            z-index: 1040;
+            display: flex;
+            flex-direction: column;
+            padding-top: 1.5rem;
+        }
+        .sidebar .sidebar-brand {
             font-weight: 700;
             font-size: 1.4rem;
-            letter-spacing: -0.5px;
             color: white !important;
+            margin-bottom: 2rem;
+            text-align: center;
         }
-
-        .navbar-brand i {
+        .sidebar .sidebar-brand i {
             margin-right: 0.5rem;
             font-size: 1.6rem;
         }
-
-        .nav-link {
-            color: rgba(255, 255, 255, 0.85) !important;
+        .sidebar-nav {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            flex: 1;
+        }
+        .sidebar-nav .nav-item {
+            margin-bottom: 0.5rem;
+        }
+        .sidebar-nav .nav-link {
+            display: flex;
+            align-items: center;
+            color: rgba(255,255,255,0.85) !important;
             font-weight: 500;
-            margin: 0 0.25rem;
-            border-radius: 6px;
-            transition: all 0.3s ease;
-            position: relative;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px 0 0 6px;
+            transition: all 0.2s;
+            text-decoration: none;
         }
-
-        .nav-link:hover {
-            color: white !important;
-            background-color: rgba(255, 255, 255, 0.1);
+        .sidebar-nav .nav-link:hover, .sidebar-nav .nav-link.active {
+            color: #fff !important;
+            background: rgba(255,255,255,0.10);
         }
-
-        .nav-link i {
-            margin-right: 0.5rem;
+        .sidebar-nav .nav-link i {
+            margin-right: 0.7rem;
+            font-size: 1.2rem;
         }
-
-        /* Content Area */
+        .sidebar-bottom {
+            margin-bottom: 2rem;
+            text-align: left;
+            padding-left: 0.5rem;
+        }
+        .sidebar-bottom .nav-link {
+            color: #fff !important;
+            padding: 0.5rem 1.5rem;
+            text-align: left;
+            display: flex;
+            align-items: center;
+        }
+        @media (max-width: 991.98px) {
+            .sidebar {
+                position: relative;
+                width: 100%;
+                height: auto;
+                flex-direction: row;
+                padding: 0.5rem 0;
+            }
+            .sidebar-nav {
+                flex-direction: row;
+                display: flex;
+                justify-content: space-around;
+            }
+            .sidebar-nav .nav-link {
+                border-radius: 6px;
+                padding: 0.5rem 0.8rem;
+            }
+        }
+        .content-wrapper {
+        {% if request.user.is_authenticated %}
+        .content-wrapper {
+            margin-left: 230px;
+            min-height: calc(100vh - 60px);
+        }
+        @media (max-width: 991.98px) {
+            .content-wrapper {
+                margin-left: 0;
+            }
+        }
+        {% else %}
+        .content-wrapper {
+            min-height: 0;
+            padding-top: 0;
+        }
+        {% endif %}
         .content-wrapper {
             padding: 2rem 0;
-            min-height: calc(100vh - 60px);
+            transition: margin-left 0.2s;
         }
 
         /* Alerts */
@@ -245,101 +311,58 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <!-- Navigation Bar -->
-    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
-        <div class="container-lg">
-            <a class="navbar-brand" href="/">
-                <i class="bi bi-bank2"></i> FGTS Web
-            </a>
-            {% if request.user.is_authenticated %}
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
+    <div style="min-height: 100vh; display: flex;">
+        {% if request.user.is_authenticated %}
+            <div class="sidebar">
+                <div class="sidebar-brand">
+                    <a href="/" class="sidebar-brand text-decoration-none">
+                        <i class="bi bi-bank2"></i> FGTS Web
+                    </a>
+                </div>
+                <ul class="sidebar-nav">
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'dashboard' %}">
-                            <i class="bi bi-speedometer2"></i> Dashboard
-                        </a>
+                        <a class="nav-link" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'funcionario-list' %}">
-                            <i class="bi bi-people"></i> Funcionários
-                        </a>
+                        <a class="nav-link" href="{% url 'funcionario-list' %}"><i class="bi bi-people"></i> Funcionários</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'lancamento-list' %}">
-                            <i class="bi bi-receipt"></i> Lançamentos
-                        </a>
+                        <a class="nav-link" href="{% url 'lancamento-list' %}"><i class="bi bi-cash-coin"></i> Lançamentos</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'relatorio-competencia' %}">
-                            <i class="bi bi-graph-up"></i> Relatório
-                        </a>
+                        <a class="nav-link" href="{% url 'relatorio-competencia' %}"><i class="bi bi-bar-chart"></i> Relatório</a>
                     </li>
+                    {% if is_admin_empresa %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'painel-admin-empresa' user.empresa.codigo %}"><i class="bi bi-building-gear"></i> Administração da Empresa</a>
+                    </li>
+                    {% endif %}
                     {% if request.user.is_staff or request.user.is_superuser %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'audit_logs:auditlog-list' %}">
-                            <i class="bi bi-shield-check"></i> Auditoria
-                        </a>
+                        <a class="nav-link" href="{% url 'audit_logs:auditlog-list' %}"><i class="bi bi-shield-check"></i> Auditoria</a>
                     </li>
                     {% endif %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'billing:feedback-criar' %}" title="Envie seu feedback">
-                            <i class="bi bi-chat-left-dots"></i> Feedback
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <span class="nav-link text-white-50">
-                            <i class="bi bi-person-circle"></i> {{ request.user.username }}
-                        </span>
-                    </li>
-                    <li class="nav-item">
-                        <form method="post" action="{% url 'logout' %}" style="display: inline;" onsubmit="return confirm('Deseja realmente sair?')">
-                            {% csrf_token %}
-                            <button type="submit" class="nav-link btn btn-link" style="border: none; background: none; color: rgba(255, 255, 255, 0.85); cursor: pointer;">
-                                <i class="bi bi-box-arrow-right"></i> Sair
-                            </button>
-                        </form>
+                        <a class="nav-link" href="{% url 'billing:feedback-criar' %}" title="Envie seu feedback"><i class="bi bi-chat-left-dots"></i> Feedback</a>
                     </li>
                 </ul>
+                <div class="sidebar-bottom">
+                    <div class="mb-2 text-white-50 ps-2"><i class="bi bi-person-circle"></i> {{ request.user.username }}</div>
+                    <form method="post" action="{% url 'logout' %}" onsubmit="return confirm('Deseja realmente sair?')">
+                        {% csrf_token %}
+                        <button type="submit" class="nav-link btn btn-link p-0 w-100 text-start" style="border: none; background: none; color: rgba(255,255,255,0.85); cursor: pointer;">
+                            <i class="bi bi-box-arrow-right"></i> Sair
+                        </button>
+                    </form>
+                </div>
             </div>
-            {% else %}
-            <div class="ms-auto">
-                <a href="{% url 'login' %}" class="nav-link text-white">
-                    <i class="bi bi-box-arrow-in-right"></i> Login
-                </a>
-            </div>
-            {% endif %}
-        </div>
-    </nav>
-
-    <!-- Messages Section -->
-    <div class="content-wrapper">
-        {% if messages %}
-        <div class="container-lg">
-            {% for message in messages %}
-            <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
-                <i class="bi bi-info-circle-fill me-2"></i>
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-            {% endfor %}
-        </div>
         {% endif %}
-
-        <!-- Banner de Trial com Aviso LGPD -->
-        {% if request.user.is_authenticated and request.trial_customer %}
-            {% if request.trial_customer.is_trial_active %}
-            <div class="container-lg mb-3">
-                    {# Trial banner removido #}
-            </div>
-            {% endif %}
-        {% endif %}
-
-        <!-- Main Content -->
-        {% block content %}{% endblock %}
+        <div class="content-wrapper" style="flex: 1; min-height: 100vh; padding: 32px 40px 32px 40px; max-width: 1200px; margin: 0 auto;">
+            {% block content %}{% endblock %}
+        </div>
     </div>
+
+    <!-- Mensagens e banners removidos para versão pública -->
 
     <!-- Footer -->
     <footer class="mt-auto">
