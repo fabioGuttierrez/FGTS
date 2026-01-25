@@ -9,7 +9,51 @@ from fgtsweb.mixins import EmpresaScopeMixin
 from .models import Empresa
 from .forms import EmpresaForm
 from billing.models import Plan, BillingCustomer
+from usuarios.models import EmpresaUsuarioRole, Usuario
+from django.views import View
 
+class PainelAdminEmpresaView(LoginRequiredMixin, View):
+    def get(self, request, empresa_id):
+        empresa = Empresa.objects.get(pk=empresa_id)
+        is_admin = EmpresaUsuarioRole.objects.filter(usuario=request.user, empresa=empresa, role=EmpresaUsuarioRole.ADMIN).exists()
+        context = {
+            'empresa': empresa,
+            'user': request.user,
+            'is_admin_empresa': is_admin,
+        }
+        if not is_admin:
+            return HttpResponseForbidden('Acesso restrito ao administrador da empresa.')
+        return render(request, 'empresas/painel_admin_empresa.html', context)
+
+    def post(self, request, empresa_id):
+        empresa = Empresa.objects.get(pk=empresa_id)
+        is_admin = EmpresaUsuarioRole.objects.filter(usuario=request.user, empresa=empresa, role=EmpresaUsuarioRole.ADMIN).exists()
+        if not is_admin:
+            return HttpResponseForbidden('Acesso restrito ao administrador da empresa.')
+        action = request.POST.get('action')
+        username = request.POST.get('username')
+        role = request.POST.get('role')
+        target_id = request.POST.get('target_id')
+        # Adicionar usuário
+        if action == 'add' and username and role:
+            try:
+                usuario = Usuario.objects.get(username=username)
+                EmpresaUsuarioRole.objects.update_or_create(usuario=usuario, empresa=empresa, defaults={'role': role})
+                messages.success(request, f'Usuário {usuario.username} adicionado como {role}.')
+            except Usuario.DoesNotExist:
+                messages.error(request, 'Usuário não encontrado.')
+        # Remover usuário
+        elif action == 'remove' and target_id:
+            EmpresaUsuarioRole.objects.filter(id=target_id, empresa=empresa).delete()
+            messages.success(request, 'Usuário removido da empresa.')
+        # Promover usuário
+        elif action == 'promote' and target_id:
+            role_obj = EmpresaUsuarioRole.objects.filter(id=target_id, empresa=empresa).first()
+            if role_obj:
+                role_obj.role = EmpresaUsuarioRole.ADMIN
+                role_obj.save()
+                messages.success(request, f'Usuário {role_obj.usuario.username} promovido a administrador.')
+        return redirect('painel-admin-empresa', empresa_id=empresa.id)
 
 class EmpresaCreateView(LoginRequiredMixin, CreateView):
     model = Empresa

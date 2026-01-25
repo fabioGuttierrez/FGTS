@@ -47,7 +47,7 @@ urlpatterns = [
     path('usuario/', include('usuarios.urls')),
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('billing/', include(('billing.urls', 'billing'))),
-    path('empresas/', EmpresaListView.as_view(), name='empresa-list'),
+    path('empresas/', include('empresas.urls')),
     path('empresas/novo/', EmpresaCreateView.as_view(), name='empresa-create'),
     path('empresas/<int:pk>/editar/', EmpresaUpdateView.as_view(), name='empresa-update'),
     path('funcionarios/', include('funcionarios.urls')),

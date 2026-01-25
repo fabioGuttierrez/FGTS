@@ -26,3 +26,27 @@ class Usuario(AbstractUser):
 
 	def __str__(self):
 		return self.username
+
+
+# Controle de papéis do usuário por empresa
+class EmpresaUsuarioRole(models.Model):
+	ADMIN = 'admin'
+	GESTOR = 'gestor'
+	OPERADOR = 'operador'
+	ROLE_CHOICES = [
+		(ADMIN, 'Administrador'),
+		(GESTOR, 'Gestor'),
+		(OPERADOR, 'Operador'),
+	]
+	usuario = models.ForeignKey('Usuario', on_delete=models.CASCADE, related_name='roles_empresas')
+	empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='usuarios_roles')
+	role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+	criado_em = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		unique_together = ('usuario', 'empresa')
+		verbose_name = 'Permissão de Usuário por Empresa'
+		verbose_name_plural = 'Permissões de Usuário por Empresa'
+
+	def __str__(self):
+		return f"{self.usuario.username} - {self.empresa.nome} ({self.get_role_display()})"

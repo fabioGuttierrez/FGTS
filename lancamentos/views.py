@@ -115,12 +115,25 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
     def get_queryset(self):
         from empresas.models_grupo import FuncionarioVinculo
         from django.db import models
-        from django.db.models import OuterRef, Exists, Q, DateField, Value, F, Func
+        from django.db.models import OuterRef, Exists, Q, DateField, Value, F, Func, Case, When
         from django.db.models.functions import Substr, Cast
         import datetime
 
         qs = super().get_queryset().select_related('empresa', 'funcionario')
-        qs = qs.annotate(ano_comp=Substr('competencia', 1, 4))
+        qs = qs.annotate(
+            ano_comp=Case(
+                When(
+                    competencia__regex=r'^\d{2}/\d{4}$',
+                    then=Substr('competencia', 4, 4)
+                ),
+                When(
+                    competencia__regex=r'^\d{4}-\d{2}$',
+                    then=Substr('competencia', 1, 4)
+                ),
+                default=Substr('competencia', 1, 4),
+                output_field=models.CharField()
+            )
+        )
 
         allowed_ids = get_allowed_empresa_ids(self.request.user)
         if allowed_ids is not None:
@@ -238,14 +251,24 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         status_pagto = self.request.GET.get('status_pagto', '').strip()
         # Não aplicar filtro de competência para o filtro de ano, para garantir que todos os anos presentes sejam exibidos
 
+        def extract_ano(comp):
+            if not comp:
+                return None
+            if '/' in comp:
+                candidate = comp.split('/')[-1]
+            elif '-' in comp:
+                parts = comp.split('-')
+                candidate = parts[0] if len(parts[0]) == 4 else parts[-1]
+            else:
+                candidate = comp[:4]
+            return candidate if len(candidate) == 4 and candidate.isdigit() else None
+
         competencias_para_anos = base_qs.values_list('competencia', flat=True).distinct()
         anos_todos = set()
         for comp in competencias_para_anos:
-            if not comp:
-                continue
-            ano = comp[:4]
-            if len(ano) == 4 and ano.isdigit():
-                anos_todos.add(ano)
+            ano_extraido = extract_ano(comp)
+            if ano_extraido:
+                anos_todos.add(ano_extraido)
         context['anos_todos'] = sorted(anos_todos, reverse=True)
 
         # Agora sim, aplicar o filtro de competência para a listagem
@@ -263,51 +286,9 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         competencias = base_qs.values_list('competencia', flat=True).distinct()
         anos_validos = set()
         for comp in competencias:
-            if not comp:
-                continue
-            # Para formato YYYY-MM, pega os 4 primeiros caracteres
-            ano = comp[:4]
-            if len(ano) == 4 and ano.isdigit():
-                anos_validos.add(ano)
-        context['anos'] = sorted(anos_validos, reverse=True)
-
-        from django.db.models import Func, F, Value, IntegerField
-        from django.db.models.functions import Cast
-        from django.db.models import Case, When
-        import re
-
-        class AnoFromCompetencia(Func):
-            function = 'SUBSTR'
-            arity = 3
-            def __init__(self, expression, **extra):
-                # Se tiver barra, pega depois da barra, se não, pega depois do hífen
-                # SUBSTR(competencia, INSTR(competencia, '/')+1, 4)
-                super().__init__(
-                    expression,
-                    F('competencia').__class__.db_functions['INSTR']('competencia', Value('/')) + Value(1),
-                    Value(4),
-                    **extra
-                )
-
-        # Se o banco não suporta INSTR, faz fallback para Right
-
-        from django.db.models import CharField
-        from django.db.models.functions import Right
-        competencias = base_qs.values_list('competencia', flat=True).distinct()
-        anos_validos = set()
-        for comp in competencias:
-            if not comp:
-                continue
-            # Tenta extrair o ano após a barra
-            if '/' in comp:
-                ano = comp.split('/')[-1]
-            elif '-' in comp:
-                ano = comp.split('-')[-1]
-            else:
-                ano = ''
-            # Só adiciona se for 4 dígitos e realmente existir na competência
-            if len(ano) == 4 and ano.isdigit():
-                anos_validos.add(ano)
+            ano_extraido = extract_ano(comp)
+            if ano_extraido:
+                anos_validos.add(ano_extraido)
         context['anos'] = sorted(anos_validos, reverse=True)
 
         # Passar parâmetros de filtro para o template
@@ -595,17 +576,23 @@ class RelatorioCompetenciaView(FormView):
 
     def _compute_for(self, empresa, competencia_str, parcela_13, data_pagamento, funcionario=None, jam_state=None):
         import time
+        from django.db.models import Q
         inicio_timestamp = time.time()
         inicio_str = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         try:
             if jam_state is None:
                 jam_state = {}
 
+            if parcela_13 in [0, '0', '', None]:
+                parcela_13 = None
+
+            competencia_norm = self.normalizar_competencia(competencia_str)
+
             # BLOQUEIO: Validar se data_pagamento está dentro do range de data_base disponível para a competência/tabela
             from indices.models import SupabaseIndice
             from indices.services.indice_service import IndiceFGTSService
             try:
-                competencia_date = datetime.strptime(competencia_str, '%m/%Y').date().replace(day=1)
+                competencia_date = datetime.strptime(competencia_norm, '%m/%Y').date().replace(day=1)
             except ValueError:
                 return None, None, 'Competência inválida. Use MM/YYYY.', jam_state, []
 
@@ -613,13 +600,13 @@ class RelatorioCompetenciaView(FormView):
             qs_indices = SupabaseIndice.objects.filter(competencia=competencia_date, tabela=tabela)
             datas_base = list(qs_indices.values_list('data_base', flat=True))
             if not datas_base:
-                return None, None, f'Nenhum índice cadastrado para competência {competencia_str} (tabela {tabela}).', jam_state, []
+                return None, None, f'Nenhum índice cadastrado para competência {competencia_norm} (tabela {tabela}).', jam_state, []
             data_base_min = min(datas_base)
             data_base_max = max(datas_base)
             if data_pagamento < data_base_min or data_pagamento > data_base_max:
                 msg = (
                     f'❌ Não é possível calcular para a data de pagamento {data_pagamento.strftime("%d/%m/%Y")}.'
-                    f' O intervalo permitido para competência {competencia_str} (tabela {tabela}) é de '
+                    f' O intervalo permitido para competência {competencia_norm} (tabela {tabela}) é de '
                     f'{data_base_min.strftime("%d/%m/%Y")} até {data_base_max.strftime("%d/%m/%Y")}.'
                     ' Geralmente, as datas vão do dia 21 ao dia 20 do mês seguinte.'
                 )
@@ -632,13 +619,13 @@ class RelatorioCompetenciaView(FormView):
         
         # 🛡️ Verificar se há loop infinito
         try:
-            loop_key = competencia_str if parcela_13 is None else f"{competencia_str}|{parcela_13}"
+            loop_key = competencia_norm if parcela_13 is None else f"{competencia_norm}|{parcela_13}"
             self._verificar_loop(loop_key)
         except Exception as e:
             return None, None, str(e), jam_state, avisos
         
         try:
-            competencia_date = datetime.strptime(competencia_str, '%m/%Y').date().replace(day=1)
+            competencia_date = datetime.strptime(competencia_norm, '%m/%Y').date().replace(day=1)
         except ValueError:
             return None, None, 'Competência inválida. Use MM/YYYY.', jam_state, avisos
 
@@ -646,8 +633,22 @@ class RelatorioCompetenciaView(FormView):
         # Buscar lançamentos pela competência armazenada como string 'MM/YYYY'
 
         # Busca por competencia como string 'MM/YYYY'
+        # Aceita competências armazenadas como MM/YYYY ou YYYY-MM
+        comp_iso = None
+        try:
+            mes_norm, ano_norm = competencia_norm.split('/')
+            comp_iso = f"{ano_norm}-{mes_norm.zfill(2)}"
+        except Exception:
+            comp_iso = None
+
+        filtro_comp = Q(competencia=competencia_norm)
+        if comp_iso:
+            filtro_comp |= Q(competencia=comp_iso)
+
         lancs_qs = (Lancamento.objects
-            .filter(empresa=empresa, competencia=competencia_str, parcela_13=parcela_13, pago=False)
+            .filter(empresa=empresa)
+            .filter(filtro_comp)
+            .filter(parcela_13=parcela_13, pago=False)
             .select_related('funcionario')
             .order_by('funcionario_id'))
         if funcionario:
@@ -660,7 +661,7 @@ class RelatorioCompetenciaView(FormView):
             vinculos = getattr(l.funcionario, 'vinculos', None)
             if not vinculos:
                 continue
-            if any(v.empresa_id == empresa.pk and v.is_ativo_em_competencia(competencia_str) for v in vinculos.all()):
+            if any(v.empresa_id == empresa.pk and v.is_ativo_em_competencia(competencia_norm) for v in vinculos.all()):
                 lancamentos_filtrados.append(l)
 
         # ⚡ Se não há lançamentos para esta competência, pular silenciosamente
@@ -677,10 +678,33 @@ class RelatorioCompetenciaView(FormView):
             data_pagamento=data_pagamento
             # tabela determinada automaticamente pelo serviço
         )
-        
+
         if indice_valor is None:
-            # ⚠️ AVISO: Índice não encontrado, pular a competência mas notificar o usuário
-            aviso = f"⚠️ Nenhum índice FGTS encontrado para competência {competencia_str}. Competência foi pulada."
+            # Diagnóstico: listar datas_base disponíveis para a mesma competência/tabela
+            try:
+                from indices.models import SupabaseIndice
+                datas_disponiveis = list(
+                    SupabaseIndice.objects.filter(
+                        competencia=competencia_date,
+                        tabela=tabela
+                    ).order_by('data_base').values_list('data_base', flat=True)
+                )
+            except Exception:
+                datas_disponiveis = []
+
+            # ⚠️ AVISO: Índice não encontrado, pular a competência mas notificar o usuário com as datas disponíveis
+            if datas_disponiveis:
+                datas_str = ', '.join([d.strftime('%d/%m/%Y') for d in datas_disponiveis])
+                aviso = (
+                    f"⚠️ Nenhum índice FGTS encontrado para competência {competencia_norm} na data de pagamento {data_pagamento.strftime('%d/%m/%Y')} "
+                    f"(tabela {tabela}). Datas disponíveis na indices_fgts: {datas_str}."
+                )
+            else:
+                aviso = (
+                    f"⚠️ Nenhum índice FGTS encontrado para competência {competencia_norm} na data de pagamento {data_pagamento.strftime('%d/%m/%Y')} "
+                    f"(tabela {tabela})."
+                )
+
             avisos.append(aviso)
             return [], {k: Decimal('0') for k in ['valor_corrigido', 'valor_jam', 'total']}, None, jam_state, avisos
 
@@ -696,21 +720,21 @@ class RelatorioCompetenciaView(FormView):
         from coefjam.models import CoefJam
         # Converter MM/YYYY para YYYY-MM para buscar no banco
         try:
-            comp_parts = competencia_str.split('/')
-            competencia_str_db = f"{comp_parts[1]}-{comp_parts[0]}" if len(comp_parts) == 2 else competencia_str
+            comp_parts = competencia_norm.split('/')
+            competencia_str_db = f"{comp_parts[1]}-{comp_parts[0]}" if len(comp_parts) == 2 else competencia_norm
         except Exception:
-            competencia_str_db = competencia_str
+            competencia_str_db = competencia_norm
         jam_coef_obj = CoefJam.objects.filter(competencia=competencia_str_db).first()
         jam_coef = jam_coef_obj.valor if jam_coef_obj else Decimal('0')
         # Se não há coeficiente JAM, registrar aviso
         if not jam_coef_obj:
-            avisos.append(f"⚠️ Coeficiente JAM não encontrado para competência {competencia_str}. Usando JAM=0.")
+            avisos.append(f"⚠️ Coeficiente JAM não encontrado para competência {competencia_norm}. Usando JAM=0.")
 
-        comp_display = competencia_str
+        comp_display = competencia_norm
         if parcela_13 == 1:
-            comp_display = f"{competencia_str} (13º 1ª)"
+            comp_display = f"{competencia_norm} (13º 1ª)"
         elif parcela_13 == 2:
-            comp_display = f"{competencia_str} (13º 2ª)"
+            comp_display = f"{competencia_norm} (13º 2ª)"
 
         for l in lancs_qs:
             funcionario_key = f"func_{l.funcionario.pk}"
@@ -768,7 +792,7 @@ class RelatorioCompetenciaView(FormView):
             resultados.append({
                 'lancamento': l,
                 'calc': calc,
-                'competencia': competencia_str,
+                'competencia': competencia_norm,
                 'parcela_13': parcela_13,
                 'competencia_display': comp_display,
             })
@@ -974,174 +998,163 @@ class RelatorioCompetenciaView(FormView):
             })
 
 def relatorio_por_ids(request):
-        debug_alert = None
-        from django.http import HttpResponse
-        from django.shortcuts import render
-        lancamentos_filtrados = []
-        from collections import defaultdict
-        grupos = defaultdict(list)
-        resultados = []
-        from decimal import Decimal
-        totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
-        avisos_total = []
-        empresa = None
-        if request.GET.get('debug', '') == '1':
-            debug_info = []
-            debug_info.append('--- Detalhamento dos lançamentos selecionados ---')
-            allowed_ids = get_allowed_empresa_ids(request.user)
-            for lanc in lancamentos:
-                funcionario = getattr(lanc, 'funcionario', None)
-                colaborador = getattr(funcionario, 'nome', funcionario)
-                competencia = lanc.competencia
-                empresa = lanc.empresa
-                empresa_nome = getattr(empresa, 'nome', empresa)
-                pago = lanc.pago
-                data_pagamento = lanc.data_pagto if lanc.data_pagto else '-'
-                # Permissão de usuário
-                permissao = 'Sim' if (allowed_ids is None or empresa.codigo in allowed_ids) else 'Não'
-                # Vínculo ativo
-                vinculo_ativo = False
-                vinculos = getattr(funcionario, 'vinculos', None)
-                competencia_norm = competencia
-                import re
-                match = re.match(r'^(\d{2})/(\d{4})$', competencia)
-                if match:
-                    mes, ano = match.groups()
-                    competencia_norm = f"{ano}-{mes}"
-                elif re.match(r'^13/\d{4}$', competencia):
-                    ano = competencia[-4:]
-                    competencia_norm = f"{ano}-12"
-                if vinculos:
-                    for v in vinculos.all():
-                        empresa_id = getattr(empresa, 'id', None) or getattr(empresa, 'codigo', None)
-                        if (str(v.empresa_id) == str(empresa_id)) and v.is_ativo_em_competencia(competencia_norm):
-                            vinculo_ativo = True
-                            break
-                debug_info.append(
-                    f"ID: {lanc.id} | Colaborador: {colaborador} | Competência: {competencia} | Data Pgto: {data_pagamento} | Empresa: {empresa_nome} | Vínculo Ativo: {'Sim' if vinculo_ativo else 'Não'} | Não Pago: {'Sim' if not pago else 'Não'} | Permissão Usuário: {permissao}"
-                )
-            debug_alert = '\n'.join(debug_info)
-            # --- Continuação do processamento normal ---
-            from django.http import HttpResponse
-            from django.shortcuts import render
-            ids_str = request.GET.get('ids', '')
-            if not ids_str:
-                return HttpResponse('Nenhum lançamento selecionado.', status=400)
+    from django.http import HttpResponse
+    from django.shortcuts import render
+    from collections import defaultdict
+    from decimal import Decimal
+
+    debug_detalhado = request.GET.get('debug', '') == '1'
+    debug_lancamentos = []
+    ids_str = request.GET.get('ids', '')
+    if not ids_str:
+        return HttpResponse('Nenhum lançamento selecionado.', status=400)
+    try:
+        ids = [int(id_str.strip()) for id_str in ids_str.split(',') if id_str.strip()]
+    except ValueError:
+        return HttpResponse('IDs inválidos.', status=400)
+    if not ids:
+        return HttpResponse('Nenhum lançamento selecionado.', status=400)
+
+    # Buscar lançamentos pelos IDs e apenas não pagos
+    lancamentos = Lancamento.objects.filter(id__in=ids, pago=False).select_related('empresa', 'funcionario')
+    if not lancamentos.exists():
+        return HttpResponse('Nenhum lançamento encontrado.', status=404)
+
+    # Verificar permissões multi-tenant
+    allowed_ids = get_allowed_empresa_ids(request.user)
+    if allowed_ids is not None:
+        lancamentos = lancamentos.filter(empresa__codigo__in=allowed_ids)
+        if not lancamentos.exists():
+            return HttpResponse('Você não tem permissão para acessar esses lançamentos.', status=403)
+
+    # Filtrar por vínculo ativo na competência e não pago
+    lancamentos_filtrados = []
+    avisos_total = []
+    empresa = None
+    data_pagamento = date.today()
+
+    from empresas.models_grupo import FuncionarioVinculo  # noqa: F401 (usado para is_ativo_em_competencia)
+    import re
+
+    for lanc in lancamentos:
+        competencia = lanc.competencia
+        empresa = lanc.empresa
+        funcionario = lanc.funcionario
+        vinculos = getattr(funcionario, 'vinculos', None)
+        competencia_norm = competencia
+        match = re.match(r'^(\d{2})/(\d{4})$', competencia)
+        if match:
+            mes, ano = match.groups()
+            competencia_norm = f"{ano}-{mes}"
+        elif re.match(r'^13/\d{4}$', competencia):
+            ano = competencia[-4:]
+            competencia_norm = f"{ano}-12"
+        motivo = []
+        vinculo_ativo = False
+        if vinculos:
+            for v in vinculos.all():
+                empresa_id = getattr(empresa, 'id', None) or getattr(empresa, 'codigo', None)
+                if (str(v.empresa_id) == str(empresa_id)) and v.is_ativo_em_competencia(competencia_norm):
+                    vinculo_ativo = True
+                    break
+        if not vinculos:
+            motivo.append('Sem vínculos cadastrados')
+        elif vinculo_ativo:
+            motivo.append('Vínculo ativo OK')
+        else:
+            motivo.append('Sem vínculo ativo na competência')
+        if not lanc.pago:
+            motivo.append('Não pago')
+        else:
+            motivo.append('Já pago')
+
+        if (vinculo_ativo or not vinculos) and not lanc.pago:
+            lancamentos_filtrados.append(lanc)
+            status = 'Incluído'
+        else:
+            status = 'Excluído'
+
+        if debug_detalhado:
+            debug_lancamentos.append({
+                'id': lanc.id,
+                'colaborador': getattr(funcionario, 'nome', str(funcionario)),
+                'competencia': competencia,
+                'empresa': getattr(empresa, 'nome', str(empresa)),
+                'motivo': ', '.join(motivo),
+                'status': status
+            })
+
+    print('DEBUG lancamentos_filtrados:', [(l.id, l.competencia, getattr(l, 'parcela_13', None)) for l in lancamentos_filtrados])
+
+    grupos = defaultdict(list)
+    resultados = []
+    totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
+
+    for lanc in lancamentos_filtrados:
+        if empresa is None:
+            empresa = lanc.empresa
+        comp = lanc.competencia
+        if '-' in comp:
             try:
-                ids = [int(id_str.strip()) for id_str in ids_str.split(',') if id_str.strip()]
-            except ValueError:
-                return HttpResponse('IDs inválidos.', status=400)
-            if not ids:
-                return HttpResponse('Nenhum lançamento selecionado.', status=400)
-            # Buscar lançamentos pelos IDs e apenas não pagos
-            lancamentos = Lancamento.objects.filter(id__in=ids, pago=False).select_related('empresa', 'funcionario')
-
-            if not lancamentos.exists():
-                return HttpResponse('Nenhum lançamento encontrado.', status=404)
-
-            # Verificar permissões multi-tenant
-            allowed_ids = get_allowed_empresa_ids(request.user)
-            if allowed_ids is not None:
-                lancamentos = lancamentos.filter(empresa__codigo__in=allowed_ids)
-                if not lancamentos.exists():
-                    return HttpResponse('Você não tem permissão para acessar esses lançamentos.', status=403)
-
-            # Filtrar por vínculo ativo na competência
-            lancamentos_filtrados = []
-            removidos_por_vinculo = []
-            from empresas.models_grupo import FuncionarioVinculo
-            import re
-            for lanc in lancamentos:
-                competencia = lanc.competencia
-                empresa = lanc.empresa
-                funcionario = lanc.funcionario
-                vinculos = getattr(funcionario, 'vinculos', None)
-                # Normalizar competência para YYYY-MM se for MM/YYYY ou 13/YYYY
-                competencia_norm = competencia
-                match = re.match(r'^(\d{2})/(\d{4})$', competencia)
-                if match:
-                    mes, ano = match.groups()
-                    competencia_norm = f"{ano}-{mes}"
-                elif re.match(r'^13/\d{4}$', competencia):
-                    ano = competencia[-4:]
-                    competencia_norm = f"{ano}-12"
-                # Filtro de vínculo ativo
-                vinculo_ativo = False
-                if vinculos:
-                    for v in vinculos.all():
-                        empresa_id = getattr(empresa, 'id', None) or getattr(empresa, 'codigo', None)
-                        if (str(v.empresa_id) == str(empresa_id)) and v.is_ativo_em_competencia(competencia_norm):
-                            vinculo_ativo = True
-                            break
-                if vinculo_ativo or not vinculos:
-                    lancamentos_filtrados.append(lanc)
-            # Processar diretamente os lançamentos filtrados, agrupando por competência/parcela
-            from collections import defaultdict
-            data_pagamento = date.today()
-            resultados = []
-            totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
-            avisos_total = []
-            grupos = defaultdict(list)
-            empresa = None
-        print('DEBUG lancamentos_filtrados:', [(l.id, l.competencia, getattr(l, 'parcela_13', None)) for l in lancamentos_filtrados])
-        for lanc in lancamentos_filtrados:
-            if empresa is None:
-                empresa = lanc.empresa
-            comp = lanc.competencia
-            if '-' in comp:
-                try:
-                    ano, mes = comp.split('-')
-                    comp = f"{mes}/{ano}"
-                except Exception:
-                    pass
-            key = (comp, lanc.parcela_13 or 0)
-            grupos[key].append(lanc)
-        # Para cada grupo, calcular totais e montar resultados
-        for (comp, parcela_13), lancs in grupos.items():
-            for lanc in lancs:
-                resultado = {
-                    'lancamento': lanc,
-                    'competencia': comp,
-                    'parcela_13': parcela_13,
-                    'calc': {
-                        'valor_fgts': lanc.valor_fgts,
-                        'valor_corrigido': lanc.valor_fgts,  # Corrigido igual ao valor para simplificação
-                        'valor_jam': Decimal('0'),
-                        'total': lanc.valor_fgts,
-                    },
-                    'competencia_display': comp,
-                }
-                resultados.append(resultado)
-                for k in totais.keys():
-                    totais[k] += resultado['calc'][k]
-        if not resultados:
-            return HttpResponse('Nenhum resultado calculado para os lançamentos selecionados.', status=404)
-        # Agrupar resultados por competência
-        def parse_comp_key(key):
-            try:
-                return datetime.strptime(key[0], '%m/%Y').date()
+                ano, mes = comp.split('-')
+                comp = f"{mes}/{ano}"
             except Exception:
-                return datetime(1900, 1, 1).date()
-        resultados_agrupados = sorted(
-            ((f"{k[0]}|{k[1]}", {'label': k[0], 'items': [r for r in resultados if r['competencia'] == k[0] and r['parcela_13'] == k[1]], 'totais': {k2: sum(r['calc'][k2] for r in resultados if r['competencia'] == k[0] and r['parcela_13'] == k[1]) for k2 in totais.keys()}})
-            for k in grupos.keys()),
-            key=lambda x: parse_comp_key(x[0].split('|'))
-        )
-        competencias_display = [k[0] for k in grupos.keys()]
-        competencias_param = [f"{k[0]}|{k[1]}" for k in grupos.keys()]
-        contexto = {
-            'empresa': empresa,
-            'competencias': competencias_display,
-            'competencias_param': competencias_param,
-            'data_pagamento': data_pagamento,
-            'resultados': resultados,
-            'resultados_agrupados': resultados_agrupados,
-            'agrupamento': 'competencia',
-            'totais': totais,
-            'avisos': avisos_total,
-            'from_selection': True,
-        }
-        return render(request, 'lancamentos/relatorio_competencia.html', contexto)
+                pass
+        key = (comp, lanc.parcela_13 or 0)
+        grupos[key].append(lanc)
+
+    # Para cada grupo, calcular totais e montar resultados
+    for (comp, parcela_13), lancs in grupos.items():
+        for lanc in lancs:
+            resultado = {
+                'lancamento': lanc,
+                'competencia': comp,
+                'parcela_13': parcela_13,
+                'calc': {
+                    'valor_fgts': lanc.valor_fgts,
+                    'valor_corrigido': lanc.valor_fgts,  # Corrigido igual ao valor para simplificação
+                    'valor_jam': Decimal('0'),
+                    'total': lanc.valor_fgts,
+                },
+                'competencia_display': comp,
+            }
+            resultados.append(resultado)
+            for k in totais.keys():
+                totais[k] += resultado['calc'][k]
+
+    if not resultados:
+        return HttpResponse('Nenhum resultado calculado para os lançamentos selecionados.', status=404)
+
+    # Agrupar resultados por competência
+    def parse_comp_key(key):
+        try:
+            return datetime.strptime(key[0], '%m/%Y').date()
+        except Exception:
+            return datetime(1900, 1, 1).date()
+
+    resultados_agrupados = sorted(
+        ((f"{k[0]}|{k[1]}", {'label': k[0], 'items': [r for r in resultados if r['competencia'] == k[0] and r['parcela_13'] == k[1]], 'totais': {k2: sum(r['calc'][k2] for r in resultados if r['competencia'] == k[0] and r['parcela_13'] == k[1]) for k2 in totais.keys()}})
+        for k in grupos.keys()),
+        key=lambda x: parse_comp_key(x[0].split('|'))
+    )
+
+    competencias_display = [k[0] for k in grupos.keys()]
+    competencias_param = [f"{k[0]}|{k[1]}" for k in grupos.keys()]
+
+    contexto = {
+        'empresa': empresa,
+        'competencias': competencias_display,
+        'competencias_param': competencias_param,
+        'data_pagamento': data_pagamento,
+        'resultados': resultados,
+        'resultados_agrupados': resultados_agrupados,
+        'agrupamento': 'competencia',
+        'totais': totais,
+        'avisos': avisos_total,
+        'from_selection': True,
+        'debug_lancamentos': debug_lancamentos if debug_detalhado else None,
+    }
+    return render(request, 'lancamentos/relatorio_competencia.html', contexto)
 
 def export_relatorio_competencia_csv(request):
     from django.http import HttpResponse
@@ -1179,6 +1192,8 @@ def export_relatorio_competencia_csv(request):
                     parc_val = int(parc_part)
                 except ValueError:
                     parc_val = None
+        if parc_val == 0:
+            parc_val = None
         competencias_list.append({'competencia': comp_str, 'parcela_13': parc_val})
     
     # Se não houver competências especificadas, buscar todas em aberto
@@ -1210,6 +1225,8 @@ def export_relatorio_competencia_csv(request):
     resultados = []
     totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
     jam_state = {}
+    first_error = None
+    first_error = None
     
     for comp_dict in competencias_list:
         comp = comp_dict['competencia']
@@ -1217,6 +1234,8 @@ def export_relatorio_competencia_csv(request):
         
         res, tot, err, jam_state, _avisos = view._compute_for(empresa, comp, parcela_13, data_pagamento, funcionario, jam_state)
         if err:
+            if first_error is None:
+                first_error = err
             continue
         
         resultados.extend(res)
@@ -1225,7 +1244,8 @@ def export_relatorio_competencia_csv(request):
             totais[k] += tot.get(k, Decimal('0'))
 
     if not resultados:
-        resp = HttpResponse('Nenhum lançamento encontrado para os filtros aplicados.', status=404)
+        mensagem = first_error or 'Nenhum lançamento encontrado para os filtros aplicados.'
+        resp = HttpResponse(mensagem, status=400 if first_error else 404)
         resp['Content-Type'] = 'text/plain; charset=utf-8'
         return resp
 
@@ -1342,6 +1362,8 @@ def export_relatorio_competencia_pdf(request):
                     parc_val = int(parc_part)
                 except ValueError:
                     parc_val = None
+        if parc_val == 0:
+            parc_val = None
         competencias_list.append({'competencia': comp_str, 'parcela_13': parc_val})
 
     # Deduplicar competências (competencia, parcela_13)
@@ -1390,6 +1412,7 @@ def export_relatorio_competencia_pdf(request):
     resultados = []
     totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
     jam_state = {}
+    first_error = None
 
     for comp_dict in competencias_list:
         comp = comp_dict['competencia']
@@ -1398,6 +1421,8 @@ def export_relatorio_competencia_pdf(request):
         res, tot, err, jam_state, _avisos = view._compute_for(empresa, comp, parcela_13, data_pagamento, funcionario, jam_state)
 
         if err or not res:
+            if err and first_error is None:
+                first_error = err
             continue
 
         resultados.extend(res)
@@ -1406,7 +1431,8 @@ def export_relatorio_competencia_pdf(request):
             totais[k] += tot.get(k, Decimal('0'))
 
     if not resultados:
-        resp = HttpResponse('Nenhum lançamento encontrado para os filtros aplicados.', status=404)
+        mensagem = first_error or 'Nenhum lançamento encontrado para os filtros aplicados.'
+        resp = HttpResponse(mensagem, status=400 if first_error else 404)
         resp['Content-Type'] = 'text/plain; charset=utf-8'
         return resp
 

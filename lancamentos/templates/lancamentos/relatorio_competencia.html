@@ -8,6 +8,35 @@
 {% endif %}
 {% block title %}Relatório por Competência{% endblock %}
 {% block content %}
+  {% if debug_lancamentos %}
+  <div class="alert alert-warning">
+    <b>DEBUG DETALHADO DOS LANÇAMENTOS:</b>
+    <table class="table table-sm table-bordered mt-2">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Colaborador</th>
+          <th>Competência</th>
+          <th>Empresa</th>
+          <th>Motivo</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for l in debug_lancamentos %}
+        <tr>
+          <td>{{ l.id }}</td>
+          <td>{{ l.colaborador }}</td>
+          <td>{{ l.competencia }}</td>
+          <td>{{ l.empresa }}</td>
+          <td>{{ l.motivo }}</td>
+          <td><b>{{ l.status }}</b></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
 <div class="container mt-4">
   <div id="loading-overlay" class="d-none" style="position: fixed; inset: 0; background: rgba(255,255,255,0.7); z-index: 1050; display: flex; align-items: center; justify-content: center;">
     <div class="text-center">
@@ -118,8 +147,6 @@
                 <tr>
                   <th>Competência</th>
                   <th>Funcionário</th>
-                  <th>Empresa do Vínculo</th>
-                  <th>Admissão</th>
                   <th>Demissão</th>
                   <th>Base FGTS</th>
                   <th>FGTS Valor</th>
@@ -136,14 +163,6 @@
                   <td><span class="badge bg-info">{{ item.competencia_display|default:item.competencia }}</span></td>
                   <td>{{ item.lancamento.funcionario.nome }}</td>
                   {% get_vinculo_for_competencia item.lancamento.funcionario.vinculos.all item.lancamento.empresa item.competencia as vinculo %}
-                  <td>
-                    {% if vinculo %}
-                      {{ vinculo.empresa.nome }}
-                    {% else %}
-                      {{ item.lancamento.empresa.nome }}
-                    {% endif %}
-                  </td>
-                  <td>{% if vinculo and vinculo.data_admissao %}{{ vinculo.data_admissao|date:'d/m/Y' }}{% endif %}</td>
                   <td>{% if vinculo and vinculo.data_demissao %}{{ vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
                   <td>R$ {{ item.lancamento.base_fgts|floatformat:2 }}</td>
                   <td>R$ {{ item.lancamento.valor_fgts }}</td>
@@ -163,7 +182,7 @@
               </tbody>
               <tfoot class="table-light">
                 <tr>
-                  <th colspan="4" class="text-end">Subtotal {{ grupo_data.label }}:</th>
+                  <th colspan="6" class="text-end">Subtotal {{ grupo_data.label }}:</th>
                   <th>R$ {{ grupo_data.totais.valor_corrigido }}</th>
                   <th>R$ {{ grupo_data.totais.valor_jam }}</th>
                   <th><strong>R$ {{ grupo_data.totais.total }}</strong></th>
@@ -204,8 +223,6 @@
                 <tr>
                   <th>Competência</th>
                   <th>Funcionário</th>
-                  <th>Empresa do Vínculo</th>
-                  <th>Admissão</th>
                   <th>Demissão</th>
                   <th>FGTS Valor</th>
                   <th>Índice</th>
@@ -221,14 +238,6 @@
                 <td><span class="badge bg-info">{{ item.competencia_display|default:item.competencia }}</span></td>
                 <td>{{ item.lancamento.funcionario.nome }}</td>
                 {% get_vinculo_for_competencia item.lancamento.funcionario.vinculos.all item.lancamento.empresa item.competencia as vinculo %}
-                <td>
-                  {% if vinculo %}
-                    {{ vinculo.empresa.nome }}
-                  {% else %}
-                    {{ item.lancamento.empresa.nome }}
-                  {% endif %}
-                </td>
-                <td>{% if vinculo and vinculo.data_admissao %}{{ vinculo.data_admissao|date:'d/m/Y' }}{% endif %}</td>
                 <td>{% if vinculo and vinculo.data_demissao %}{{ vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
                 <td>R$ {{ item.lancamento.valor_fgts }}</td>
                 <td>{{ item.calc.indice }}</td>
@@ -247,7 +256,7 @@
             </tbody>
             <tfoot>
               <tr class="table-secondary">
-                <th class="text-end" colspan="4">Totais:</th>
+                <th class="text-end" colspan="6">Totais:</th>
                 <th>R$ {{ totais.valor_corrigido }}</th>
                 <th>R$ {{ totais.valor_jam }}</th>
                 <th><strong>R$ {{ totais.total }}</strong></th>

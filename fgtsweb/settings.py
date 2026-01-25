@@ -40,6 +40,9 @@ CSRF_TRUSTED_ORIGINS = [
     'http://127.0.0.1:8000',
 ]
 
+
+# Configuração do tipo de primary key padrão para todos os models
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Application definition
 
 INSTALLED_APPS = [
@@ -88,6 +91,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'billing.context_processors.current_pricing',
+                'empresas.context_processors.is_admin_empresa',
             ],
         },
     },
@@ -112,29 +116,35 @@ SUPABASE_API_URL = os.getenv('SUPABASE_URL')  # ex: https://xyzcompany.supabase.
 SUPABASE_API_KEY = os.getenv('SUPABASE_KEY')  # service_role ou anon conforme necessidade
 
 # Configurar banco de dados
-if SUPABASE_HOST and SUPABASE_DB and SUPABASE_USER and SUPABASE_PASSWORD:
-    # Usar PostgreSQL/Supabase quando configurado
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'HOST': SUPABASE_HOST,
-            'PORT': int(SUPABASE_PORT),
-            'NAME': SUPABASE_DB,
-            'USER': SUPABASE_USER,
-            'PASSWORD': SUPABASE_PASSWORD,
-            'OPTIONS': {
-                'sslmode': 'require',
-            },
-        }
+missing_vars = []
+for var_name, var_value in [
+    ("SUPABASE_HOST", SUPABASE_HOST),
+    ("SUPABASE_DB", SUPABASE_DB),
+    ("SUPABASE_USER", SUPABASE_USER),
+    ("SUPABASE_PASSWORD", SUPABASE_PASSWORD),
+]:
+    if not var_value:
+        missing_vars.append(var_name)
+
+if missing_vars:
+    import sys
+    print(f"\n[ERRO CRÍTICO] Variáveis de ambiente do banco Supabase ausentes: {', '.join(missing_vars)}", file=sys.stderr)
+    print("Abortando inicialização do Django. Corrija o ambiente para evitar fallback para SQLite.", file=sys.stderr)
+    sys.exit(1)
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'HOST': SUPABASE_HOST,
+        'PORT': int(SUPABASE_PORT),
+        'NAME': SUPABASE_DB,
+        'USER': SUPABASE_USER,
+        'PASSWORD': SUPABASE_PASSWORD,
+        'OPTIONS': {
+            'sslmode': 'require',
+        },
     }
-else:
-    # Fallback para SQLite em desenvolvimento
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+}
 
 # Modelo de usuário customizado
 AUTH_USER_MODEL = 'usuarios.Usuario'

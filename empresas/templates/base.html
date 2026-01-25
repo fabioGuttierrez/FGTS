@@ -120,8 +120,8 @@
                 padding: 0.5rem 0.8rem;
             }
         }
-        .content-wrapper {
-        {% if request.user.is_authenticated %}
+        {% if request.user.is_authenticated and request.resolver_match %}
+        {% if request.resolver_match.view_name == 'dashboard' or request.resolver_match.view_name == 'funcionario-list' or request.resolver_match.view_name == 'lancamento-list' or request.resolver_match.view_name == 'relatorio-competencia' or request.resolver_match.view_name == 'relatorio-por-ids' or request.resolver_match.view_name == 'painel-admin-empresa' or request.resolver_match.view_name == 'audit_logs:auditlog-list' or request.resolver_match.view_name == 'billing:feedback-criar' %}
         .content-wrapper {
             margin-left: 230px;
             min-height: calc(100vh - 60px);
@@ -131,6 +131,12 @@
                 margin-left: 0;
             }
         }
+        {% else %}
+        .content-wrapper {
+            min-height: 0;
+            padding-top: 0;
+        }
+        {% endif %}
         {% else %}
         .content-wrapper {
             min-height: 0;
@@ -311,8 +317,11 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <div style="min-height: 100vh; display: flex;">
-        {% if request.user.is_authenticated %}
+
+    {% block sidebar %}{% endblock %}
+    {% if request.user.is_authenticated and request.resolver_match %}
+    {% if request.resolver_match.view_name == 'dashboard' or request.resolver_match.view_name == 'funcionario-list' or request.resolver_match.view_name == 'lancamento-list' or request.resolver_match.view_name == 'relatorio-competencia' or request.resolver_match.view_name == 'relatorio-por-ids' or request.resolver_match.view_name == 'painel-admin-empresa' or request.resolver_match.view_name == 'audit_logs:auditlog-list' or request.resolver_match.view_name == 'billing:feedback-criar' %}
+        <div style="min-height: 100vh; display: flex;">
             <div class="sidebar">
                 <div class="sidebar-brand">
                     <a href="/" class="sidebar-brand text-decoration-none">
@@ -356,11 +365,20 @@
                     </form>
                 </div>
             </div>
-        {% endif %}
-        <div class="content-wrapper" style="flex: 1; min-height: 100vh; padding: 32px 40px 32px 40px; max-width: 1200px; margin: 0 auto;">
+            <div class="content-wrapper" style="flex: 1; min-height: 100vh; padding: 32px 40px 32px 40px; max-width: 1200px; margin: 0 auto;">
+    {% else %}
+        <div class="content-wrapper" style="min-height: 100vh; width: 100vw; padding: 0; margin: 0; max-width: 100vw;">
+    {% endif %}
+    {% else %}
+        <div class="content-wrapper" style="min-height: 100vh; width: 100vw; padding: 0; margin: 0; max-width: 100vw;">
+    {% endif %}
             {% block content %}{% endblock %}
         </div>
-    </div>
+    {% if request.user.is_authenticated and request.resolver_match %}
+    {% if request.resolver_match.view_name == 'dashboard' or request.resolver_match.view_name == 'funcionario-list' or request.resolver_match.view_name == 'lancamento-list' or request.resolver_match.view_name == 'relatorio-competencia' or request.resolver_match.view_name == 'relatorio-por-ids' or request.resolver_match.view_name == 'painel-admin-empresa' or request.resolver_match.view_name == 'audit_logs:auditlog-list' or request.resolver_match.view_name == 'billing:feedback-criar' %}
+        </div>
+    {% endif %}
+    {% endif %}
 
     <!-- Mensagens e banners removidos para versão pública -->
 
