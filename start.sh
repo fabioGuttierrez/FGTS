@@ -93,15 +93,19 @@ echo "📊 Informações do sistema:"
 echo "  → Python: $(python --version)"
 echo "  → Django: $(DJANGO_SETTINGS_MODULE=fgtsweb.settings python -c 'import django; print(django.get_version())')"
 
-# Verificar qual banco está sendo usado
+# Verificar qual banco está sendo usado (usar POSIX sh)
 DB_ENGINE=$(DJANGO_SETTINGS_MODULE=fgtsweb.settings python -c "from django.conf import settings; print(settings.DATABASES['default']['ENGINE'])")
-if [[ "$DB_ENGINE" == *"postgresql"* ]]; then
-    echo "  → Banco: PostgreSQL/Supabase ✅"
-elif [[ "$DB_ENGINE" == *"sqlite"* ]]; then
-    echo "  → Banco: SQLite ⚠️  (deveria ser PostgreSQL em produção)"
-else
-    echo "  → Banco: $DB_ENGINE"
-fi
+case "$DB_ENGINE" in
+    *postgresql*)
+        echo "  → Banco: PostgreSQL/Supabase ✅"
+        ;;
+    *sqlite*)
+        echo "  → Banco: SQLite ⚠️  (deveria ser PostgreSQL em produção)"
+        ;;
+    *)
+        echo "  → Banco: $DB_ENGINE"
+        ;;
+esac
 
 # ============================================
 # 6. Iniciar servidor
