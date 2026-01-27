@@ -1,20 +1,16 @@
 """
-Importador de dados legados do sistema VB6
-Migra dados históricos de clientes antigos para novo sistema
+Importador de dados legados do sistema VB6.
+Implementação simples usada apenas pelos testes de integração legada.
 """
 
 import csv
 from decimal import Decimal
 from datetime import datetime
 from typing import List, Dict, Tuple
-from django.db import transaction
-from django.core.exceptions import ValidationError
 
 from empresas.models import Empresa
 from funcionarios.models import Funcionario
 from lancamentos.models import Lancamento
-from coefjam.models import CoefJam
-from indices.models import IndiceFGTS
 
 
 class LegacyDataImporter:
@@ -28,250 +24,172 @@ class LegacyDataImporter:
         self.registros_duplicados = 0
 
     def importar_empresas(self, arquivo_csv: str) -> Tuple[int, List[str]]:
-        """
-        Importa tabela de empresas do CSV legado
-
-        Formato esperado:
-        EmpresaID,CNPJ,RazaoSocial,Endereco,Numero,Bairro,Cidade,UF,CEP,Telefone,RAT,FPAS,CNAE,Simples
-
-        Returns:
-            (total_importados, lista_erros)
-        """
+        """Importa empresas de CSV simples (cnpj, razao_social, endereco)."""
         criados = 0
-        
         try:
-            with open(arquivo_csv, 'r', encoding='latin1') as f:
+            with open(arquivo_csv, "r", encoding="latin1") as f:
                 reader = csv.DictReader(f)
-                
                 for linha_num, row in enumerate(reader, 2):
                     try:
-                        cnpj = row.get('CNPJ', '').strip()
+                        cnpj = (row.get("cnpj") or row.get("CNPJ") or "").strip()
                         if not cnpj:
                             self.avisos.append(f"Linha {linha_num}: CNPJ vazio, pulando")
                             continue
 
-                        # Verificar se já existe
                         if Empresa.objects.filter(cnpj=cnpj).exists():
                             self.registros_duplicados += 1
                             continue
 
+                        nome = (row.get("razao_social") or row.get("RazaoSocial") or "").strip() or cnpj
+                        endereco = (row.get("endereco") or row.get("Endereco") or "").strip()
+
                         empresa = Empresa(
-                            codigo=row.get('EmpresaID', '').strip(),
+                            nome=nome,
                             cnpj=cnpj,
-                            razao_social=row.get('RazaoSocial', '').strip(),
-                            endereco=row.get('Endereco', '').strip(),
-                            numero=row.get('Numero', '').strip(),
-                            bairro=row.get('Bairro', '').strip(),
-                            cidade=row.get('Cidade', '').strip(),
-                            uf=row.get('UF', 'SP').strip()[:2],
-                            cep=row.get('CEP', '').strip(),
-                            telefone=row.get('Telefone', '').strip(),
+                            endereco=endereco,
                         )
-                        
-                        # Campos numéricos opcionais
-                        try:
-                            empresa.rat = int(row.get('RAT', 0) or 0)
-                            empresa.fpas = int(row.get('FPAS', 0) or 0)
-                        except (ValueError, TypeError):
-                            pass
-                        
-                        empresa.cnae = row.get('CNAE', '').strip()[:8]
-                        empresa.simples = row.get('Simples', 'N').strip()[0].upper()
-                        
                         empresa.save()
                         criados += 1
                         self.linhas_processadas += 1
-
-                    except Exception as e:
-                        self.erros.append(f"Linha {linha_num}: {str(e)}")
-
+                    except Exception as exc:  # noqa: BLE001
+                        self.erros.append(f"Linha {linha_num}: {exc}")
         except FileNotFoundError:
             self.erros.append(f"Arquivo não encontrado: {arquivo_csv}")
-        except Exception as e:
-            self.erros.append(f"Erro ao importar empresas: {str(e)}")
+        except Exception as exc:  # noqa: BLE001
+            self.erros.append(f"Erro ao importar empresas: {exc}")
 
         self.registros_criados += criados
         return criados, self.erros
 
-    def importar_funcionarios(self, arquivo_csv: str, empresa_id: int = None) -> Tuple[int, List[str]]:
-        """
-        Importa funcionários do CSV legado
-
-        Formato esperado:
-        EmpresaID,FuncionarioID,Nome,PIS,DataAdmissao,DataNascimento,CBO,CarteiraProfissional,Serie
-
-        Args:
-            arquivo_csv: Caminho do arquivo CSV
-            empresa_id: Se fornecido, importa apenas para esta empresa
-
-        Returns:
-            (total_importados, lista_erros)
-        """
+    def importar_funcionarios(self, arquivo_csv: str, empresa_id: int | None = None) -> Tuple[int, List[str]]:
+        """Importa funcionários (pis,nome,data_admissao,cpf) vinculando à empresa informada."""
         criados = 0
+        empresa = None
+        if empresa_id:
+            try:
+                empresa = Empresa.objects.get(pk=empresa_id)
+            except Empresa.DoesNotExist:
+                self.erros.append(f"Empresa {empresa_id} não encontrada")
+                return 0, self.erros
 
         try:
-            with open(arquivo_csv, 'r', encoding='latin1') as f:
+            with open(arquivo_csv, "r", encoding="latin1") as f:
                 reader = csv.DictReader(f)
-
                 for linha_num, row in enumerate(reader, 2):
                     try:
-                        empresa_id_csv = int(row.get('EmpresaID', 0) or 0)
-                        
-                        if empresa_id and empresa_id_csv != empresa_id:
+                        pis = (row.get("pis") or row.get("PIS") or "").strip()
+                        nome = (row.get("nome") or row.get("Nome") or "").strip()
+                        cpf = (row.get("cpf") or row.get("CPF") or "").strip() or "00000000000"
+                        data_adm = self._parse_data(row.get("data_admissao") or row.get("DataAdmissao"))
+
+                        if not pis or not nome:
+                            self.avisos.append(f"Linha {linha_num}: dados obrigatórios ausentes")
                             continue
 
-                        # Buscar empresa
-                        try:
-                            empresa = Empresa.objects.get(codigo=str(empresa_id_csv))
-                        except Empresa.DoesNotExist:
-                            self.avisos.append(f"Linha {linha_num}: Empresa {empresa_id_csv} não encontrada")
-                            continue
-
-                        pis = row.get('PIS', '').strip()
-                        if not pis:
-                            self.avisos.append(f"Linha {linha_num}: PIS vazio")
-                            continue
-
-                        # Verificar duplicata
-                        if Funcionario.objects.filter(empresa=empresa, pis=pis).exists():
+                        if Funcionario.objects.filter(pis=pis).exists():
                             self.registros_duplicados += 1
                             continue
 
-                        # Parsear datas
-                        data_adm = self._parse_data(row.get('DataAdmissao'))
-                        data_nasc = self._parse_data(row.get('DataNascimento'))
-
                         funcionario = Funcionario(
-                            empresa=empresa,
-                            nome=row.get('Nome', '').strip(),
+                            nome=nome,
                             pis=pis,
-                            data_admissao=data_adm,
-                            data_nascimento=data_nasc,
-                            cbo=row.get('CBO', '').strip(),
-                            carteira_profissional=row.get('CarteiraProfissional', '').strip(),
-                            serie_profissional=row.get('Serie', '1').strip(),
+                            cpf=cpf,
+                            data_nascimento=self._parse_data(row.get("data_nascimento") or row.get("DataNascimento")),
                         )
+                        funcionario.empresa = empresa
+                        if data_adm:
+                            funcionario.data_admissao = data_adm
                         funcionario.save()
                         criados += 1
                         self.linhas_processadas += 1
-
-                    except Exception as e:
-                        self.erros.append(f"Linha {linha_num}: {str(e)}")
-
+                    except Exception as exc:  # noqa: BLE001
+                        self.erros.append(f"Linha {linha_num}: {exc}")
         except FileNotFoundError:
             self.erros.append(f"Arquivo não encontrado: {arquivo_csv}")
-        except Exception as e:
-            self.erros.append(f"Erro ao importar funcionários: {str(e)}")
+        except Exception as exc:  # noqa: BLE001
+            self.erros.append(f"Erro ao importar funcionários: {exc}")
 
         self.registros_criados += criados
         return criados, self.erros
 
-    def importar_lancamentos(self, arquivo_csv: str) -> Tuple[int, List[str]]:
-        """
-        Importa lançamentos históricos (base FGTS)
-
-        Formato esperado:
-        EmpresaID,FuncionarioID,Competencia,BaseFGTS,DataPagamento,Pago
-
-        Args:
-            arquivo_csv: Caminho do arquivo CSV
-
-        Returns:
-            (total_importados, lista_erros)
-        """
+    def importar_lancamentos(self, arquivo_csv: str, empresa_id: int | None = None) -> Tuple[int, List[str]]:
+        """Importa lançamentos simples (pis,competencia,base_fgts,data_pagto) para empresa informada."""
         criados = 0
+        empresa = None
+        if empresa_id:
+            try:
+                empresa = Empresa.objects.get(pk=empresa_id)
+            except Empresa.DoesNotExist:
+                self.erros.append(f"Empresa {empresa_id} não encontrada")
+                return 0, self.erros
 
         try:
-            with open(arquivo_csv, 'r', encoding='latin1') as f:
+            with open(arquivo_csv, "r", encoding="latin1") as f:
                 reader = csv.DictReader(f)
-
                 for linha_num, row in enumerate(reader, 2):
                     try:
-                        empresa_id = row.get('EmpresaID', '').strip()
-                        func_id = row.get('FuncionarioID', '').strip()
-                        competencia = row.get('Competencia', '').strip()
-
-                        if not all([empresa_id, func_id, competencia]):
-                            self.avisos.append(f"Linha {linha_num}: Dados incompletos")
+                        pis = (row.get("pis") or "").strip()
+                        competencia = (row.get("competencia") or "").strip()
+                        if not pis or not competencia:
+                            self.avisos.append(f"Linha {linha_num}: dados obrigatórios ausentes")
                             continue
 
-                        # Buscar empresa e funcionário
-                        try:
-                            empresa = Empresa.objects.get(codigo=empresa_id)
-                            funcionario = Funcionario.objects.get(empresa=empresa, id=int(func_id))
-                        except (Empresa.DoesNotExist, Funcionario.DoesNotExist, ValueError):
-                            self.avisos.append(f"Linha {linha_num}: Empresa ou funcionário não encontrado")
+                        funcionario = Funcionario.objects.filter(pis=pis).first()
+                        if not funcionario:
+                            self.avisos.append(f"Linha {linha_num}: funcionário com PIS {pis} não encontrado")
                             continue
 
-                        # Verificar duplicata
-                        if Lancamento.objects.filter(
-                            empresa=empresa,
-                            funcionario=funcionario,
-                            competencia=competencia
-                        ).exists():
-                            self.registros_duplicados += 1
-                            continue
+                        base_fgts = Decimal((row.get("base_fgts") or "0").replace(",", "."))
+                        data_pagto = self._parse_data(row.get("data_pagto") or row.get("data_pagamento"))
 
-                        # Parsear valores
-                        try:
-                            base_fgts = Decimal(row.get('BaseFGTS', 0) or 0)
-                        except:
-                            base_fgts = Decimal('0')
-
-                        data_pag = self._parse_data(row.get('DataPagamento'))
-                        pago = row.get('Pago', 'N').upper() == 'S'
-
-                        lancamento = Lancamento(
-                            empresa=empresa,
+                        lancamento, created = Lancamento.objects.get_or_create(
+                            empresa=empresa or funcionario.empresa,
                             funcionario=funcionario,
                             competencia=competencia,
-                            base_fgts=base_fgts,
-                            valor_fgts=base_fgts * Decimal('0.08'),  # 8% padrão
-                            data_pagamento=data_pag,
-                            pago=pago,
+                            defaults={
+                                "base_fgts": base_fgts,
+                                "valor_fgts": base_fgts * Decimal("0.08"),
+                                "pago": False,
+                                "data_pagto": data_pagto,
+                            },
                         )
-                        lancamento.save()
-                        criados += 1
-                        self.linhas_processadas += 1
-
-                    except Exception as e:
-                        self.erros.append(f"Linha {linha_num}: {str(e)}")
-
+                        if created:
+                            criados += 1
+                            self.linhas_processadas += 1
+                        else:
+                            self.registros_duplicados += 1
+                    except Exception as exc:  # noqa: BLE001
+                        self.erros.append(f"Linha {linha_num}: {exc}")
         except FileNotFoundError:
             self.erros.append(f"Arquivo não encontrado: {arquivo_csv}")
-        except Exception as e:
-            self.erros.append(f"Erro ao importar lançamentos: {str(e)}")
+        except Exception as exc:  # noqa: BLE001
+            self.erros.append(f"Erro ao importar lançamentos: {exc}")
 
         self.registros_criados += criados
         return criados, self.erros
 
     @staticmethod
-    def _parse_data(data_str: str) -> datetime.date:
-        """Tenta parsear data em vários formatos comuns"""
-        if not data_str or not data_str.strip():
+    def _parse_data(data_str: str | None):
+        """Tenta parsear data em formatos comuns"""
+        if not data_str or not str(data_str).strip():
             return None
 
-        data_str = data_str.strip()
-        formatos = [
-            '%d/%m/%Y', '%Y/%m/%d', '%d-%m-%Y', '%Y-%m-%d',
-            '%d%m%Y', '%Y%m%d',
-        ]
-
+        data_str = str(data_str).strip()
+        formatos = ["%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y", "%Y-%m-%d", "%d%m%Y", "%Y%m%d"]
         for fmt in formatos:
             try:
                 return datetime.strptime(data_str, fmt).date()
             except ValueError:
                 continue
-
         return None
 
     def relatorio(self) -> Dict:
         """Retorna relatório da importação"""
         return {
-            'linhas_processadas': self.linhas_processadas,
-            'registros_criados': self.registros_criados,
-            'registros_duplicados': self.registros_duplicados,
-            'erros': self.erros,
-            'avisos': self.avisos,
-            'total_problemas': len(self.erros) + len(self.avisos),
+            "linhas_processadas": self.linhas_processadas,
+            "registros_criados": self.registros_criados,
+            "registros_duplicados": self.registros_duplicados,
+            "erros": self.erros,
+            "avisos": self.avisos,
+            "total_problemas": len(self.erros) + len(self.avisos),
         }

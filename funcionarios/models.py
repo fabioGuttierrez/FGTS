@@ -1,5 +1,7 @@
 from django.db import models
+from datetime import date
 from empresas.models import Empresa
+from empresas.models_grupo import FuncionarioVinculo
 from django.core.exceptions import ValidationError
 
 
@@ -25,10 +27,20 @@ class Funcionario(models.Model):
         v = self.vinculo_atual()
         return v.empresa if v else None
 
+    @empresa.setter
+    def empresa(self, value):
+        # Compatibilidade com código legado que define empresa diretamente
+        self._empresa_override = value
+
     @property
     def data_admissao(self):
         v = self.vinculo_atual()
         return v.data_admissao if v else None
+
+    @data_admissao.setter
+    def data_admissao(self, value):
+        # Compatibilidade com código legado que define data_admissao diretamente
+        self._data_admissao_override = value
 
     @property
     def data_demissao(self):
@@ -83,6 +95,18 @@ class Funcionario(models.Model):
             except AttributeError:
                 # Se não existe billing_customer, deixa falhar naturalmente
                 pass
+
+    def save(self, *args, **kwargs):
+        # Salva o funcionário e cria vínculo se overrides foram definidos
+        super().save(*args, **kwargs)
+        empresa_override = getattr(self, '_empresa_override', None)
+        data_adm_override = getattr(self, '_data_admissao_override', None)
+        if empresa_override and not self.vinculos.exists():
+            FuncionarioVinculo.objects.create(
+                funcionario=self,
+                empresa=empresa_override,
+                data_admissao=data_adm_override or date.today(),
+            )
     
     class Meta:
         verbose_name = 'Funcionário'

@@ -3,7 +3,7 @@
 {% block title %}Funcionários - FGTS Web{% endblock %}
 
 {% block content %}
-<div class="container py-5">
+<div class="container-fluid py-5 px-4 px-xl-5">
     <!-- Header Section -->
     <div class="mb-4">
         <div class="d-flex justify-content-between align-items-center">
@@ -90,17 +90,17 @@
         <div class="card-body p-4">
             {% if funcionarios %}
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
+                <table class="table table-hover align-middle mb-0">
                     <thead class="bg-light border-bottom border-2">
                         <tr>
-                            <th class="py-3 px-4 fw-bold text-dark">#ID</th>
-                            <th class="py-3 px-4 fw-bold text-dark">Nome</th>
-                            <th class="py-3 px-4 fw-bold text-dark">CPF</th>
-                            <th class="py-3 px-4 fw-bold text-dark">Empresa</th>
-                            <th class="py-3 px-4 fw-bold text-dark">Admissão</th>
-                            <th class="py-3 px-4 fw-bold text-dark">Demissão</th>
-                            <th class="py-3 px-4 fw-bold text-dark">Status</th>
-                            <th class="py-3 px-4 fw-bold text-dark">Ações</th>
+                            <th class="py-3 px-4 fw-bold text-dark text-nowrap" style="width: 60px;">#ID</th>
+                            <th class="py-3 px-4 fw-bold text-dark" style="width: 280px;">Nome</th>
+                            <th class="py-3 px-4 fw-bold text-dark text-nowrap" style="width: 160px;">CPF</th>
+                            <th class="py-3 px-4 fw-bold text-dark" style="width: 300px;">Empresa</th>
+                            <th class="py-3 px-4 fw-bold text-dark text-nowrap" style="width: 120px;">Admissão</th>
+                            <th class="py-3 px-4 fw-bold text-dark text-nowrap" style="width: 120px;">Demissão</th>
+                            <th class="py-3 px-4 fw-bold text-dark text-nowrap" style="width: 140px;">Status</th>
+                            <th class="py-3 px-4 fw-bold text-dark text-nowrap" style="width: 140px;">Ações</th>
                         </tr>
                     </thead>
                     <tbody class="border-top-0">
@@ -109,19 +109,19 @@
                             <td class="py-3 px-4">
                                 <a href="{% url 'funcionario-detail' funcionario.id %}" class="badge bg-light text-dark fw-bold text-decoration-none">#{{ funcionario.id }}</a>
                             </td>
-                            <td class="py-3 px-4">
-                                <div class="fw-bold text-dark">
+                            <td class="py-3 px-4 text-break">
+                                <div class="fw-bold text-dark mb-1">
                                     <a href="{% url 'funcionario-detail' funcionario.id %}" class="text-dark text-decoration-none">{{ funcionario.nome }}</a>
                                 </div>
                                 <small class="text-muted">{{ funcionario.pis|default:"Sem PIS" }}</small>
                             </td>
-                            <td class="py-3 px-4">
-                                <code class="bg-light px-2 py-1 rounded">{{ funcionario.cpf }}</code>
+                            <td class="py-3 px-4 text-nowrap">
+                                <span class="badge bg-light text-dark fw-semibold px-3 py-2">{{ funcionario.cpf }}</span>
                             </td>
                             <!-- Matrícula removida: campo não existe -->
-                            <td class="py-3 px-4">
+                            <td class="py-3 px-4 text-break">
                                 {% if funcionario.empresa %}
-                                    <div class="fw-bold text-dark">{{ funcionario.empresa.nome }}</div>
+                                    <div class="fw-bold text-dark mb-1">{{ funcionario.empresa.nome }}</div>
                                     <small class="text-muted">CNPJ: {{ funcionario.empresa.cnpj }}</small>
                                 {% else %}
                                     <span class="text-muted">—</span>
@@ -134,13 +134,13 @@
                                     <span class="text-muted">—</span>
                                 {% endif %}
                             </td>
-                                                        <td class="py-3 px-4 text-nowrap">
-                                                            {% if funcionario.data_demissao %}
-                                                                {{ funcionario.data_demissao|date:"d/m/Y" }}
-                                                            {% else %}
-                                                                <span class="text-muted">—</span>
-                                                            {% endif %}
-                                                        </td>
+                            <td class="py-3 px-4 text-nowrap">
+                                {% if funcionario.data_demissao %}
+                                    {{ funcionario.data_demissao|date:"d/m/Y" }}
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
                             <td class="py-3 px-4">
                                 {% if funcionario.status == 'demitido' %}
                                     <span class="badge bg-danger rounded-pill">
@@ -208,6 +208,29 @@
 
     .btn-group-sm .btn {
         padding: 0.4rem 0.7rem;
+    }
+
+    /* Larguras mínimas para evitar informações comprimidas em Nome/Empresa */
+    .table th:nth-child(2),
+    .table td:nth-child(2) {
+        min-width: 240px;
+    }
+
+    .table th:nth-child(4),
+    .table td:nth-child(4) {
+        min-width: 260px;
+    }
+
+    @media (max-width: 1200px) {
+        .table th:nth-child(2),
+        .table td:nth-child(2) {
+            min-width: 200px;
+        }
+
+        .table th:nth-child(4),
+        .table td:nth-child(4) {
+            min-width: 220px;
+        }
     }
 </style>
 

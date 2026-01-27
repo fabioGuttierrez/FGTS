@@ -34,6 +34,11 @@ class Empresa(models.Model):
 		help_text='Se marcado, a 1ª parcela do 13º será paga no mês de aniversário do colaborador (ao invés de novembro). A 2ª parcela continua sendo paga em dezembro.'
 	)
 
+	@property
+	def id(self):
+		"""Compatibilidade: expõe PK como id para testes e código legado."""
+		return self.codigo
+
 	def __str__(self):
 		return self.nome
 	

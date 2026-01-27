@@ -225,6 +225,17 @@ class IndiceFGTSService:
                 )
             }
 
+    @staticmethod
+    def obter_ultima_data_base() -> Optional[date]:
+        """Retorna a última data_base disponível na tabela indices_fgts."""
+        try:
+            from indices.models import SupabaseIndice
+
+            return SupabaseIndice.objects.order_by('-data_base').values_list('data_base', flat=True).first()
+        except Exception as e:
+            logger.error(f"[ÍNDICE FGTS] Erro ao buscar última data_base: {e}")
+            return None
+
 
 # PROIBIR IMPORTAÇÃO DIRETA DE OUTRAS FUNÇÕES
 # Use APENAS IndiceFGTSService.buscar_indice()

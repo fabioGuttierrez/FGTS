@@ -25,6 +25,11 @@ class Lancamento(models.Model):
 	)
 	base_fgts = models.DecimalField(max_digits=12, decimal_places=2)
 	valor_fgts = models.DecimalField(max_digits=12, decimal_places=2)
+	horas_extras = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, default=Decimal('0.00'), help_text="Valores variáveis como horas extras")
+	adicionais = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, default=Decimal('0.00'), help_text="Adicionais salariais")
+	desconto_inss = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, default=Decimal('0.00'), help_text="Desconto de INSS")
+	desconto_ir = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, default=Decimal('0.00'), help_text="Desconto de IR")
+	desconto_sindical = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, default=Decimal('0.00'), help_text="Contribuição sindical")
 	pago = models.BooleanField(default=False, help_text="FGTS foi pago?")
 	data_pagto = models.DateField(null=True, blank=True, verbose_name="Data de Pagamento", help_text="Data em que o FGTS foi efetivamente pago")
 	valor_pago = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Valor Pago")
@@ -50,6 +55,12 @@ class Lancamento(models.Model):
 					base_fgts_mudou = True
 			except Lancamento.DoesNotExist:
 				pass
+
+		# Recalcular valor_fgts sempre que a base mudar
+		if self.base_fgts is not None:
+			valor_calculado = self.base_fgts * Decimal('0.08')
+			if base_fgts_mudou or self.valor_fgts is None or self.valor_fgts != valor_calculado:
+				self.valor_fgts = valor_calculado
 		
 		# Controle de pagamento: registrar timestamp
 		if self.pago and not self.pago_em:

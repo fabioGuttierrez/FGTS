@@ -365,7 +365,11 @@
                     </form>
                 </div>
             </div>
+            {% if request.resolver_match.view_name == 'lancamento-list' or request.resolver_match.view_name == 'funcionario-list' %}
+            <div class="content-wrapper" style="flex: 1; min-height: 100vh; padding: 24px; max-width: calc(100% - 230px); margin: 0 0 0 230px;">
+            {% else %}
             <div class="content-wrapper" style="flex: 1; min-height: 100vh; padding: 32px 40px 32px 40px; max-width: 1200px; margin: 0 auto;">
+            {% endif %}
     {% else %}
         <div class="content-wrapper" style="min-height: 100vh; width: 100vw; padding: 0; margin: 0; max-width: 100vw;">
     {% endif %}

@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid px-4 py-4">
+  <h2 class="mb-4">Painel Administrativo da Empresa</h2>
+
+  {% if is_admin_empresa %}
+    <div class="mb-5">
+      <h3 class="mb-3">Usuários da Empresa</h3>
+      <table class="table align-middle bg-white rounded shadow-sm">
+        <thead>
+          <tr>
+            <th>Usuário</th>
+            <th>Email</th>
+            <th>Papel</th>
+            <th class="text-center">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for role in empresa.usuarios_roles.all %}
+          <tr>
+            <td>{{ role.usuario.username }}</td>
+            <td>{{ role.usuario.email }}</td>
+            <td>{{ role.get_role_display }}</td>
+            <td class="text-center">
+              <div class="d-flex justify-content-center gap-2">
+                {% if role.role != 'admin' %}
+                  <form method="post" style="display:inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="promote">
+                    <input type="hidden" name="target_id" value="{{ role.id }}">
+                    <button type="submit" class="btn btn-sm btn-success">Promover a Admin</button>
+                  </form>
+                {% endif %}
+                <form method="post" style="display:inline;">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="remove">
+                  <input type="hidden" name="target_id" value="{{ role.id }}">
+                  <button type="submit" class="btn btn-sm btn-danger">Remover</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mb-5">
+      <h3 class="mb-3">Adicionar Usuário</h3>
+      <form method="post" action="" class="row g-2 align-items-end">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add">
+        <div class="col-md-6">
+          <input type="text" name="username" placeholder="Usuário ou email" class="form-control" required>
+        </div>
+        <div class="col-md-4">
+          <select name="role" class="form-select">
+            <option value="operador">Operador</option>
+            <option value="gestor">Gestor</option>
+            <option value="admin">Administrador</option>
+          </select>
+        </div>
+        <div class="col-md-2 d-grid">
+          <button type="submit" class="btn btn-primary">Adicionar</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="mb-5">
+      <h3 class="mb-3">Empresas do Grupo Econômico</h3>
+      <ul class="mb-3">
+        {% for emp in empresa.grupo.empresas.all %}
+          <li>{{ emp.nome }} ({{ emp.cnpj }})</li>
+        {% endfor %}
+      </ul>
+      <a href="{% url 'empresa-cadastrar' %}" class="btn btn-secondary">Cadastrar nova empresa ao grupo</a>
+    </div>
+
+  {% else %}
+    <div class="alert alert-danger mt-4">Acesso restrito ao administrador da empresa.</div>
+  {% endif %}
+</div>
+{% endblock %}

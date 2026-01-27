@@ -227,20 +227,23 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         return qs
     
     def get_context_data(self, **kwargs):
+        # Local import to guarantee binding even if globals change or circular imports occur
+        from funcionarios.models import Funcionario as FuncionarioModel
+
         context = super().get_context_data(**kwargs)
 
         # Adicionar empresas e funcionários permitidos para o filtro
         allowed_ids = get_allowed_empresa_ids(self.request.user)
         if allowed_ids is not None:
             context['empresas'] = Empresa.objects.filter(codigo__in=allowed_ids)
-            funcionario_ids = Funcionario.objects.filter(
+            funcionario_ids = FuncionarioModel.objects.filter(
                 vinculos__empresa__codigo__in=allowed_ids
             ).distinct().values_list('id', flat=True)
-            context['funcionarios'] = Funcionario.objects.filter(id__in=funcionario_ids).order_by('nome')
+            context['funcionarios'] = FuncionarioModel.objects.filter(id__in=funcionario_ids).order_by('nome')
             base_qs = Lancamento.objects.filter(empresa__codigo__in=allowed_ids)
         else:
             context['empresas'] = Empresa.objects.all()
-            context['funcionarios'] = Funcionario.objects.all().order_by('nome')
+            context['funcionarios'] = FuncionarioModel.objects.all().order_by('nome')
             base_qs = Lancamento.objects.all()
 
         # Aplicar os mesmos filtros do get_queryset
@@ -830,7 +833,11 @@ class RelatorioCompetenciaView(FormView):
                 ])
             funcionario = form.cleaned_data.get('funcionario')
             agrupamento = form.cleaned_data.get('agrupamento', 'competencia')
-            data_pagamento = form.cleaned_data['data_pagamento'] or date.today()
+            if form.cleaned_data['data_pagamento']:
+                data_pagamento = form.cleaned_data['data_pagamento']
+            else:
+                from indices.services.indice_service import IndiceFGTSService
+                data_pagamento = IndiceFGTSService.obter_ultima_data_base() or date.today()
 
             # Escopo multi-tenant: empresa deve estar autorizada
             if not is_empresa_allowed(self.request.user, empresa.codigo):
@@ -1030,7 +1037,9 @@ def relatorio_por_ids(request):
     lancamentos_filtrados = []
     avisos_total = []
     empresa = None
-    data_pagamento = date.today()
+    # Forçar a data_pagamento para a última data_base disponível (ignora qualquer data enviada)
+    from indices.services.indice_service import IndiceFGTSService
+    data_pagamento = IndiceFGTSService.obter_ultima_data_base() or date.today()
 
     from empresas.models_grupo import FuncionarioVinculo  # noqa: F401 (usado para is_ativo_em_competencia)
     import re
@@ -1085,41 +1094,46 @@ def relatorio_por_ids(request):
 
     print('DEBUG lancamentos_filtrados:', [(l.id, l.competencia, getattr(l, 'parcela_13', None)) for l in lancamentos_filtrados])
 
-    grupos = defaultdict(list)
+    # Usar o mesmo cálculo do relatório padrão (índice, correção, JAM)
+    view = RelatorioCompetenciaView()
+    view.request = request
+
     resultados = []
     totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
+    jam_state = {}
+    avisos_total = []
+    ids_set = {l.id for l in lancamentos_filtrados}
 
+    grupos = defaultdict(list)
     for lanc in lancamentos_filtrados:
         if empresa is None:
             empresa = lanc.empresa
-        comp = lanc.competencia
-        if '-' in comp:
-            try:
-                ano, mes = comp.split('-')
-                comp = f"{mes}/{ano}"
-            except Exception:
-                pass
-        key = (comp, lanc.parcela_13 or 0)
+        comp_norm = view.normalizar_competencia(lanc.competencia)
+        key = (lanc.empresa_id, comp_norm, lanc.parcela_13 or 0)
         grupos[key].append(lanc)
 
-    # Para cada grupo, calcular totais e montar resultados
-    for (comp, parcela_13), lancs in grupos.items():
-        for lanc in lancs:
-            resultado = {
-                'lancamento': lanc,
-                'competencia': comp,
-                'parcela_13': parcela_13,
-                'calc': {
-                    'valor_fgts': lanc.valor_fgts,
-                    'valor_corrigido': lanc.valor_fgts,  # Corrigido igual ao valor para simplificação
-                    'valor_jam': Decimal('0'),
-                    'total': lanc.valor_fgts,
-                },
-                'competencia_display': comp,
-            }
-            resultados.append(resultado)
-            for k in totais.keys():
-                totais[k] += resultado['calc'][k]
+    for (empresa_id, comp_norm, parcela_13), _lancs in grupos.items():
+        empresa_grupo = _lancs[0].empresa
+        res, _tot, err, jam_state, avisos = view._compute_for(
+            empresa_grupo,
+            comp_norm,
+            parcela_13,
+            data_pagamento,
+            funcionario=None,
+            jam_state=jam_state,
+        )
+        if avisos:
+            avisos_total.extend(avisos)
+        if err:
+            continue
+
+        # Manter apenas os lançamentos selecionados
+        res_filtrados = [r for r in res if r.get('lancamento') and r['lancamento'].id in ids_set]
+        resultados.extend(res_filtrados)
+
+    for r in resultados:
+        for k in totais.keys():
+            totais[k] += r['calc'][k]
 
     if not resultados:
         return HttpResponse('Nenhum resultado calculado para os lançamentos selecionados.', status=404)
@@ -1131,14 +1145,17 @@ def relatorio_por_ids(request):
         except Exception:
             return datetime(1900, 1, 1).date()
 
-    resultados_agrupados = sorted(
-        ((f"{k[0]}|{k[1]}", {'label': k[0], 'items': [r for r in resultados if r['competencia'] == k[0] and r['parcela_13'] == k[1]], 'totais': {k2: sum(r['calc'][k2] for r in resultados if r['competencia'] == k[0] and r['parcela_13'] == k[1]) for k2 in totais.keys()}})
-        for k in grupos.keys()),
-        key=lambda x: parse_comp_key(x[0].split('|'))
-    )
+    resultados_agrupados = view._agrupar_resultados(resultados, 'competencia')
 
-    competencias_display = [k[0] for k in grupos.keys()]
-    competencias_param = [f"{k[0]}|{k[1]}" for k in grupos.keys()]
+    def _format_comp_display(comp, parcela):
+        if parcela == 1:
+            return f"{comp} (13º 1ª)"
+        if parcela == 2:
+            return f"{comp} (13º 2ª)"
+        return comp
+
+    competencias_display = [_format_comp_display(k[1], k[2]) for k in grupos.keys()]
+    competencias_param = [f"{k[1]}|{k[2] or ''}" for k in grupos.keys()]
 
     contexto = {
         'empresa': empresa,
@@ -1151,12 +1168,14 @@ def relatorio_por_ids(request):
         'totais': totais,
         'avisos': avisos_total,
         'from_selection': True,
+        'ids_param': ','.join([str(i) for i in ids]),
         'debug_lancamentos': debug_lancamentos if debug_detalhado else None,
     }
     return render(request, 'lancamentos/relatorio_competencia.html', contexto)
 
 def export_relatorio_competencia_csv(request):
     from django.http import HttpResponse
+    from collections import defaultdict
     import urllib.parse
     
     empresa_id = request.GET.get('empresa')
@@ -1166,16 +1185,166 @@ def export_relatorio_competencia_csv(request):
     funcionario_id = request.GET.get('funcionario')
     data_pagamento_str = request.GET.get('data_pagamento')
     agrupamento = request.GET.get('agrupamento', 'competencia')
+    ids_str = request.GET.get('ids', '').strip()
+    ids_str = request.GET.get('ids', '').strip()
 
     # Decodificar competências que podem vir URL-encoded
     competencias_multi = urllib.parse.unquote(competencias_multi)
 
     empresa = Empresa.objects.get(pk=empresa_id)
-    data_pagamento = datetime.strptime(data_pagamento_str, '%Y-%m-%d').date() if data_pagamento_str else date.today()
+    if data_pagamento_str:
+        data_pagamento = datetime.strptime(data_pagamento_str, '%Y-%m-%d').date()
+    else:
+        from indices.services.indice_service import IndiceFGTSService
+        data_pagamento = IndiceFGTSService.obter_ultima_data_base() or date.today()
     funcionario = Funcionario.objects.get(pk=funcionario_id) if funcionario_id else None
 
     view = RelatorioCompetenciaView()
     view.request = request
+
+    if ids_str:
+        try:
+            ids = [int(id_str.strip()) for id_str in ids_str.split(',') if id_str.strip()]
+        except ValueError:
+            return HttpResponse('IDs inválidos.', status=400)
+        if not ids:
+            return HttpResponse('Nenhum lançamento selecionado.', status=400)
+
+        from indices.services.indice_service import IndiceFGTSService
+        data_pagamento = IndiceFGTSService.obter_ultima_data_base() or date.today()
+
+        lancamentos = Lancamento.objects.filter(id__in=ids, pago=False).select_related('empresa', 'funcionario')
+        if not lancamentos.exists():
+            return HttpResponse('Nenhum lançamento encontrado.', status=404)
+
+        allowed_ids = get_allowed_empresa_ids(request.user)
+        if allowed_ids is not None:
+            lancamentos = lancamentos.filter(empresa__codigo__in=allowed_ids)
+            if not lancamentos.exists():
+                return HttpResponse('Você não tem permissão para acessar esses lançamentos.', status=403)
+
+        lancamentos_filtrados = []
+        empresa = None
+        from empresas.models_grupo import FuncionarioVinculo  # noqa: F401 (usado para is_ativo_em_competencia)
+        import re
+
+        for lanc in lancamentos:
+            competencia = lanc.competencia
+            empresa = lanc.empresa
+            funcionario = lanc.funcionario
+            vinculos = getattr(funcionario, 'vinculos', None)
+            competencia_norm = competencia
+            match = re.match(r'^(\d{2})/(\d{4})$', competencia)
+            if match:
+                mes, ano = match.groups()
+                competencia_norm = f"{ano}-{mes}"
+            elif re.match(r'^13/\d{4}$', competencia):
+                ano = competencia[-4:]
+                competencia_norm = f"{ano}-12"
+
+            vinculo_ativo = False
+            if vinculos:
+                for v in vinculos.all():
+                    empresa_id_comp = getattr(empresa, 'id', None) or getattr(empresa, 'codigo', None)
+                    if (str(v.empresa_id) == str(empresa_id_comp)) and v.is_ativo_em_competencia(competencia_norm):
+                        vinculo_ativo = True
+                        break
+
+            if (vinculo_ativo or not vinculos) and not lanc.pago:
+                lancamentos_filtrados.append(lanc)
+
+        if not lancamentos_filtrados:
+            return HttpResponse('Nenhum lançamento encontrado para os filtros aplicados.', status=404)
+
+        resultados = []
+        totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
+        jam_state = {}
+        ids_set = {l.id for l in lancamentos_filtrados}
+
+        grupos = defaultdict(list)
+        for lanc in lancamentos_filtrados:
+            if empresa is None:
+                empresa = lanc.empresa
+            comp_norm = view.normalizar_competencia(lanc.competencia)
+            key = (lanc.empresa_id, comp_norm, lanc.parcela_13 or 0)
+            grupos[key].append(lanc)
+
+        for (_empresa_id, comp_norm, parcela_13), _lancs in grupos.items():
+            empresa_grupo = _lancs[0].empresa
+            res, _tot, err, jam_state, _avisos = view._compute_for(
+                empresa_grupo,
+                comp_norm,
+                parcela_13,
+                data_pagamento,
+                funcionario=None,
+                jam_state=jam_state,
+            )
+            if err:
+                continue
+
+            res_filtrados = [r for r in res if r.get('lancamento') and r['lancamento'].id in ids_set]
+            resultados.extend(res_filtrados)
+
+        for r in resultados:
+            for k in totais.keys():
+                totais[k] += r['calc'][k]
+
+        if not resultados:
+            return HttpResponse('Nenhum resultado calculado para os lançamentos selecionados.', status=404)
+
+        agrupamento = 'funcionario'
+        resultados_agrupados = view._agrupar_resultados(resultados, agrupamento)
+
+        import csv
+        resp = HttpResponse(content_type='text/csv')
+        resp['Content-Disposition'] = 'attachment; filename="relatorio_fgts.csv"'
+        writer = csv.writer(resp, delimiter=';')
+
+        def _grupo_label(label):
+            if agrupamento == 'funcionario':
+                return f"Funcionário: {label}"
+            if agrupamento == 'ano':
+                return f"{label}"
+            return f"Competência: {label}"
+
+        writer.writerow(['Empresa', 'Competência', 'Funcionário', 'Empresa do Vínculo', 'Admissão', 'Demissão', 'Base FGTS', 'FGTS Valor', 'Índice', 'Correção', 'JAM', 'Total'])
+
+        for _chave, grupo in resultados_agrupados:
+            writer.writerow([])
+            writer.writerow([_grupo_label(grupo.get('label'))])
+
+            for item in grupo['items']:
+                l = item['lancamento']
+                c = item['calc']
+                comp_out = item.get('competencia_display', item.get('competencia'))
+                funcionario = l.funcionario
+                vinculo = funcionario.vinculos.filter(
+                    empresa=l.empresa,
+                    data_admissao__lte=l.competencia,
+                ).order_by('-data_admissao').first()
+                if vinculo and vinculo.data_demissao and vinculo.data_demissao < l.competencia:
+                    vinculo = None
+                empresa_vinculo = vinculo.empresa.nome if vinculo else l.empresa.nome
+                data_admissao = vinculo.data_admissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_admissao else ''
+                data_demissao = vinculo.data_demissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_demissao else ''
+                writer.writerow([
+                    empresa.nome,
+                    comp_out,
+                    funcionario.nome,
+                    empresa_vinculo,
+                    data_admissao,
+                    data_demissao,
+                    f"{l.base_fgts}",
+                    f"{c.get('valor_fgts', l.valor_fgts)}",
+                    f"{c.get('indice', '')}",
+                    f"{c['valor_corrigido']}",
+                    f"{c['valor_jam']}",
+                    f"{c['total']}",
+                ])
+
+        writer.writerow([])
+        writer.writerow(['Totais', '', '', '', '', '', totais['valor_fgts'], '', totais['valor_corrigido'], totais['valor_jam'], totais['total']])
+        return resp
     
     # Parse competências (separar por \n ou %0A) mantendo parcela_13 quando informada
     competencias_raw = [c.strip() for c in competencias_multi.replace('%0A', '\n').split('\n') if c.strip()]
@@ -1317,6 +1486,7 @@ def export_relatorio_competencia_pdf(request):
         raise ValueError("Formato de competência inválido")
 
     from django.http import HttpResponse
+    from collections import defaultdict
     from io import BytesIO
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
@@ -1331,16 +1501,339 @@ def export_relatorio_competencia_pdf(request):
     funcionario_id = request.GET.get('funcionario')
     data_pagamento_str = request.GET.get('data_pagamento')
     agrupamento = request.GET.get('agrupamento', 'competencia')
+    ids_str = request.GET.get('ids', '').strip()
 
     # Decodificar competências que podem vir URL-encoded com %0A para \n
     competencias_multi = urllib.parse.unquote(competencias_multi)
 
     empresa = Empresa.objects.get(pk=empresa_id)
-    data_pagamento = datetime.strptime(data_pagamento_str, '%Y-%m-%d').date() if data_pagamento_str else date.today()
+    if data_pagamento_str:
+        data_pagamento = datetime.strptime(data_pagamento_str, '%Y-%m-%d').date()
+    else:
+        from indices.services.indice_service import IndiceFGTSService
+        data_pagamento = IndiceFGTSService.obter_ultima_data_base() or date.today()
     funcionario = Funcionario.objects.get(pk=funcionario_id) if funcionario_id else None
 
     view = RelatorioCompetenciaView()
     view.request = request  # Necessário para EmpresaScopeMixin
+
+    if ids_str:
+        try:
+            ids = [int(id_str.strip()) for id_str in ids_str.split(',') if id_str.strip()]
+        except ValueError:
+            return HttpResponse('IDs inválidos.', status=400)
+        if not ids:
+            return HttpResponse('Nenhum lançamento selecionado.', status=400)
+
+        from indices.services.indice_service import IndiceFGTSService
+        data_pagamento = IndiceFGTSService.obter_ultima_data_base() or date.today()
+
+        lancamentos = Lancamento.objects.filter(id__in=ids, pago=False).select_related('empresa', 'funcionario')
+        if not lancamentos.exists():
+            return HttpResponse('Nenhum lançamento encontrado.', status=404)
+
+        allowed_ids = get_allowed_empresa_ids(request.user)
+        if allowed_ids is not None:
+            lancamentos = lancamentos.filter(empresa__codigo__in=allowed_ids)
+            if not lancamentos.exists():
+                return HttpResponse('Você não tem permissão para acessar esses lançamentos.', status=403)
+
+        lancamentos_filtrados = []
+        empresa = None
+        from empresas.models_grupo import FuncionarioVinculo  # noqa: F401 (usado para is_ativo_em_competencia)
+        import re
+
+        for lanc in lancamentos:
+            competencia = lanc.competencia
+            empresa = lanc.empresa
+            funcionario = lanc.funcionario
+            vinculos = getattr(funcionario, 'vinculos', None)
+            competencia_norm = competencia
+            match = re.match(r'^(\d{2})/(\d{4})$', competencia)
+            if match:
+                mes, ano = match.groups()
+                competencia_norm = f"{ano}-{mes}"
+            elif re.match(r'^13/\d{4}$', competencia):
+                ano = competencia[-4:]
+                competencia_norm = f"{ano}-12"
+
+            vinculo_ativo = False
+            if vinculos:
+                for v in vinculos.all():
+                    empresa_id_comp = getattr(empresa, 'id', None) or getattr(empresa, 'codigo', None)
+                    if (str(v.empresa_id) == str(empresa_id_comp)) and v.is_ativo_em_competencia(competencia_norm):
+                        vinculo_ativo = True
+                        break
+
+            if (vinculo_ativo or not vinculos) and not lanc.pago:
+                lancamentos_filtrados.append(lanc)
+
+        if not lancamentos_filtrados:
+            return HttpResponse('Nenhum lançamento encontrado para os filtros aplicados.', status=404)
+
+        resultados = []
+        totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
+        jam_state = {}
+        ids_set = {l.id for l in lancamentos_filtrados}
+
+        grupos = defaultdict(list)
+        for lanc in lancamentos_filtrados:
+            if empresa is None:
+                empresa = lanc.empresa
+            comp_norm = view.normalizar_competencia(lanc.competencia)
+            key = (lanc.empresa_id, comp_norm, lanc.parcela_13 or 0)
+            grupos[key].append(lanc)
+
+        for (_empresa_id, comp_norm, parcela_13), _lancs in grupos.items():
+            empresa_grupo = _lancs[0].empresa
+            res, _tot, err, jam_state, _avisos = view._compute_for(
+                empresa_grupo,
+                comp_norm,
+                parcela_13,
+                data_pagamento,
+                funcionario=None,
+                jam_state=jam_state,
+            )
+            if err or not res:
+                continue
+
+            res_filtrados = [r for r in res if r.get('lancamento') and r['lancamento'].id in ids_set]
+            resultados.extend(res_filtrados)
+
+        for r in resultados:
+            for k in totais.keys():
+                totais[k] += r['calc'][k]
+
+        if not resultados:
+            return HttpResponse('Nenhum resultado calculado para os lançamentos selecionados.', status=404)
+
+        # Agrupar resultados por funcionário (modelo legado)
+        from collections import defaultdict
+        grupos_func = defaultdict(list)
+        for item in resultados:
+            funcionario = item['lancamento'].funcionario
+            grupos_func[funcionario.id].append(item)
+
+        def _format_money(valor):
+            try:
+                return f"{valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            except Exception:
+                return str(valor)
+
+        def _format_indice(valor):
+            try:
+                return f"{valor:.9f}".replace('.', ',')
+            except Exception:
+                return str(valor)
+
+        def _parse_comp(comp_str):
+            try:
+                return datetime.strptime(comp_str, '%m/%Y').date()
+            except Exception:
+                return date(1900, 1, 1)
+
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            leftMargin=15 * mm,
+            rightMargin=15 * mm,
+            topMargin=15 * mm,
+            bottomMargin=15 * mm,
+        )
+
+        styles = getSampleStyleSheet()
+        title_style = styles['Heading2']
+        normal_style = styles['BodyText']
+        small_style = styles['BodyText']
+        small_style.fontSize = 8
+        small_style.leading = 10
+
+        now = datetime.now()
+        usuario_label = getattr(request.user, 'username', 'Usuário')
+        empresa_label = f"{empresa.codigo} {empresa.nome}" if getattr(empresa, 'codigo', None) else empresa.nome
+        cnpj_label = empresa.cnpj or ''
+
+        story = []
+
+        header_table = Table(
+            [
+                [
+                    Paragraph("LISTAGEM DO RECOLHIMENTO FGTS", title_style),
+                    Paragraph("Sistema FGTS em Atraso", normal_style),
+                    Paragraph("FGTS WEB", normal_style),
+                ],
+                [
+                    Paragraph(f"USUÁRIO: {usuario_label}", small_style),
+                    Paragraph(f"{now.strftime('%d/%m/%Y')} - {now.strftime('%H:%M')}", small_style),
+                    Paragraph("Página 1", small_style),
+                ],
+                [
+                    Paragraph(empresa_label, normal_style),
+                    Paragraph(f"CNPJ: {cnpj_label}", normal_style),
+                    "",
+                ],
+            ],
+            colWidths=[80*mm, 60*mm, 35*mm],
+            hAlign='LEFT',
+        )
+        header_table.setStyle(
+            TableStyle([
+                ('LINEBELOW', (0, 2), (-1, 2), 0.75, colors.black),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('ALIGN', (2, 0), (2, 1), 'RIGHT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ])
+        )
+        story.append(header_table)
+        story.append(Spacer(1, 6))
+
+        for idx, (func_id, itens) in enumerate(grupos_func.items()):
+            itens.sort(key=lambda x: _parse_comp(x.get('competencia') or x['lancamento'].competencia))
+            funcionario = itens[0]['lancamento'].funcionario
+
+            comp_date = _parse_comp(itens[0]['lancamento'].competencia)
+            vinculo = funcionario.vinculos.filter(
+                empresa=empresa,
+                data_admissao__lte=comp_date,
+            ).order_by('-data_admissao').first()
+
+            data_adm = vinculo.data_admissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_admissao else ''
+            data_nasc = funcionario.data_nascimento.strftime('%d/%m/%Y') if funcionario.data_nascimento else ''
+            ctps = funcionario.carteira_profissional or ''
+            serie = funcionario.serie_carteira or ''
+            cbo = funcionario.cbo or ''
+            pis = funcionario.pis or ''
+
+            funcionario_header = Table(
+                [
+                    [
+                        Paragraph(f"{funcionario.id}  {funcionario.nome}", normal_style),
+                        Paragraph(f"Data Adm {data_adm}", normal_style),
+                        Paragraph(f"C.B.O. {cbo}", normal_style),
+                        Paragraph(f"Data Nasc {data_nasc}", normal_style),
+                    ],
+                    [
+                        Paragraph(f"PIS {pis}", normal_style),
+                        Paragraph(f"C.T.P.S. {ctps} / {serie}", normal_style),
+                        "",
+                        "",
+                    ],
+                ],
+                colWidths=[70*mm, 35*mm, 40*mm, 35*mm],
+                hAlign='LEFT',
+            )
+            funcionario_header.setStyle(
+                TableStyle([
+                    ('LINEBELOW', (0, 1), (-1, 1), 0.75, colors.black),
+                ])
+            )
+            story.append(funcionario_header)
+            story.append(Spacer(1, 4))
+
+            table_data = [["Comp.", "13º", "Base FGTS", "Valor FGTS", "Valor Depósito", "Índice CEF"]]
+
+            total_fgts = Decimal('0')
+            total_calculado = Decimal('0')
+
+            for item in itens:
+                l = item['lancamento']
+                c = item['calc']
+                comp_label = l.competencia
+                parcela_13 = l.parcela_13 or 0
+                col_13 = "13º 1ª" if parcela_13 == 1 else "13º 2ª" if parcela_13 == 2 else ""
+                valor_fgts = c.get('valor_fgts', l.valor_fgts)
+                valor_deposito = c['total']
+                indice = c.get('indice', '')
+
+                total_fgts += Decimal(str(valor_fgts))
+                total_calculado += Decimal(str(valor_deposito))
+
+                table_data.append([
+                    comp_label,
+                    col_13,
+                    _format_money(l.base_fgts),
+                    _format_money(valor_fgts),
+                    _format_money(valor_deposito),
+                    _format_indice(indice) if indice != '' else '',
+                ])
+
+            table = Table(
+                table_data,
+                colWidths=[20*mm, 10*mm, 30*mm, 30*mm, 35*mm, 35*mm],
+                hAlign='LEFT',
+                repeatRows=1,
+            )
+            table.setStyle(
+                TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f5f5f5')),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#999999')),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),
+                ])
+            )
+            story.append(table)
+
+            box_table = Table(
+                [
+                    [
+                        Paragraph("DATA DO CÁLCULO", normal_style),
+                        Paragraph(f"{data_pagamento.strftime('%d/%m/%Y')}", normal_style),
+                        "",
+                        Paragraph("Total do F.G.T.S. Mensal", normal_style),
+                        Paragraph(_format_money(total_fgts), normal_style),
+                    ],
+                    [
+                        "",
+                        "",
+                        "",
+                        Paragraph("Total do F.G.T.S. Calculado", normal_style),
+                        Paragraph(_format_money(total_calculado), normal_style),
+                    ],
+                    [
+                        "",
+                        "",
+                        "",
+                        Paragraph("Valor da Multa Rescisória", normal_style),
+                        Paragraph(_format_money(Decimal('0.00')), normal_style),
+                    ],
+                    [
+                        "",
+                        "",
+                        "",
+                        Paragraph("TOTAL A RECOLHER", styles['Heading4']),
+                        Paragraph(_format_money(total_calculado), styles['Heading4']),
+                    ],
+                ],
+                colWidths=[35*mm, 30*mm, 10*mm, 55*mm, 30*mm],
+                hAlign='LEFT',
+            )
+            box_table.setStyle(
+                TableStyle([
+                    ('GRID', (0, 0), (-1, -1), 0.75, colors.black),
+                    ('SPAN', (0, 0), (1, 0)),
+                    ('SPAN', (0, 1), (1, 1)),
+                    ('SPAN', (0, 2), (1, 2)),
+                    ('SPAN', (0, 3), (1, 3)),
+                    ('ALIGN', (4, 0), (4, -1), 'RIGHT'),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ])
+            )
+            story.append(Spacer(1, 6))
+            story.append(box_table)
+
+            if idx < len(grupos_func) - 1:
+                story.append(PageBreak())
+
+        doc.build(story)
+        pdf = buffer.getvalue()
+        buffer.close()
+
+        resp = HttpResponse(content_type='application/pdf')
+        resp['Content-Disposition'] = 'attachment; filename="relatorio_fgts.pdf"'
+        resp.write(pdf)
+        return resp
     
     # Parse competências como dicionários com parcela_13
     # Separar por \n ou %0A (pode vir URL-encoded)

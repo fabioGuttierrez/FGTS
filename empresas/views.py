@@ -122,6 +122,16 @@ class EmpresaCreateView(LoginRequiredMixin, CreateView):
             usuario.empresas_permitidas.add(empresa)
         except Exception:
             pass
+
+        # Garantir que o criador da empresa vire administrador dela
+        try:
+            EmpresaUsuarioRole.objects.update_or_create(
+                usuario=usuario,
+                empresa=empresa,
+                defaults={'role': EmpresaUsuarioRole.ADMIN},
+            )
+        except Exception:
+            pass
         
         # Criar BillingCustomer com trial automático se não existir
         try:

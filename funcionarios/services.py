@@ -4,8 +4,10 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from django.utils.timezone import make_aware
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from .models import Funcionario
 from empresas.models import Empresa
+from empresas.models_grupo import FuncionarioVinculo
 from billing.models import BillingCustomer
 from fgtsweb.mixins import is_empresa_allowed
 
@@ -18,7 +20,7 @@ class FuncionarioImportService:
     ]
     
     OPTIONAL_COLUMNS = [
-        'MATRICULA', 'PIS', 'CBO', 'CARTEIRA_PROFISSIONAL', 
+        'PIS', 'CBO', 'CARTEIRA_PROFISSIONAL', 
         'SERIE_CARTEIRA', 'DATA_NASCIMENTO', 'DATA_DEMISSAO', 'OBSERVACAO', 'SALARIO'
     ]
     
@@ -57,7 +59,6 @@ class FuncionarioImportService:
             "123.456.789-00",  # CPF
             "2023-01-15",  # DATA_ADMISSAO
             "1",  # EMPRESA (código da empresa)
-            "EMP001",  # MATRICULA
             "120.123.456-70",  # PIS
             "2110",  # CBO
             "AB123456",  # CARTEIRA_PROFISSIONAL
@@ -73,7 +74,8 @@ class FuncionarioImportService:
             cell.value = value
             cell.fill = example_fill
             cell.border = border
-            if col_idx in [3, 4, 9]:  # Colunas de data
+            header_name = all_columns[col_idx - 1]
+            if header_name in ['DATA_ADMISSAO', 'DATA_NASCIMENTO', 'DATA_DEMISSAO']:
                 cell.number_format = 'YYYY-MM-DD'
         
         # Adicionar informações
@@ -258,16 +260,11 @@ class FuncionarioImportService:
                     
                     # Preparar dados do funcionário
                     funcionario_data = {
-                        'empresa': empresa,
                         'nome': row_data['NOME'].strip(),
                         'cpf': row_data['CPF'].strip(),
-                        'data_admissao': FuncionarioImportService.parse_date(row_data['DATA_ADMISSAO']),
                     }
                     
                     # Campos opcionais
-                    if row_data.get('MATRICULA'):
-                        funcionario_data['matricula'] = str(row_data['MATRICULA']).strip()
-                    
                     if row_data.get('PIS'):
                         funcionario_data['pis'] = str(row_data['PIS']).strip()
                     
@@ -283,16 +280,30 @@ class FuncionarioImportService:
                     if row_data.get('DATA_NASCIMENTO'):
                         funcionario_data['data_nascimento'] = FuncionarioImportService.parse_date(row_data['DATA_NASCIMENTO'])
                     
-                    if row_data.get('DATA_DEMISSAO'):
-                        funcionario_data['data_demissao'] = FuncionarioImportService.parse_date(row_data['DATA_DEMISSAO'])
-                    
                     if row_data.get('OBSERVACAO'):
                         funcionario_data['observacao'] = str(row_data['OBSERVACAO']).strip()
                     
-                    # Criar funcionário
-                    funcionario = Funcionario(**funcionario_data)
-                    funcionario.full_clean()
-                    funcionario.save()
+                    # Criar funcionário e vínculo de forma consistente
+                    with transaction.atomic():
+                        funcionario = Funcionario(**funcionario_data)
+                        funcionario.save()
+
+                        # Criar vínculo (empresa e datas vivem no vínculo, não no funcionário)
+                        data_admissao = FuncionarioImportService.parse_date(row_data['DATA_ADMISSAO'])
+                        data_demissao = None
+                        if row_data.get('DATA_DEMISSAO'):
+                            data_demissao = FuncionarioImportService.parse_date(row_data['DATA_DEMISSAO'])
+
+                        FuncionarioVinculo.objects.create(
+                            funcionario=funcionario,
+                            empresa=empresa,
+                            data_admissao=data_admissao,
+                            data_demissao=data_demissao,
+                            salario=str(row_data.get('SALARIO')).strip() if row_data.get('SALARIO') else None,
+                        )
+
+                        # Validar após vínculo existir
+                        funcionario.full_clean()
                     
                     # Criar primeiro lançamento automaticamente se salário foi informado
                     salario_str = row_data.get('SALARIO')
@@ -303,7 +314,6 @@ class FuncionarioImportService:
                             
                             salario = Decimal(str(salario_str).strip())
                             if salario > 0:
-                                data_admissao = funcionario.data_admissao
                                 competencia = data_admissao.strftime('%m/%Y')
                                 
                                 # Verificar se já existe lançamento
