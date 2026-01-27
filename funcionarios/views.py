@@ -123,19 +123,38 @@ class FuncionarioListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         from empresas.models_feature import empresa_tem_recurso
         empresa = None
         user = self.request.user
-        if not (user.is_superuser or user.is_staff):
-            if user.empresa_id:
-                try:
-                    empresa = Empresa.objects.get(pk=user.empresa_id)
-                except (Empresa.DoesNotExist, Exception):
-                    empresa = None
-            if not empresa:
-                try:
-                    empresa = user.empresas_permitidas.first()
-                except Exception:
-                    empresa = None
-        context['can_add_funcionario'] = empresa_tem_recurso(empresa, 'criar_funcionario')
-        context['can_gerar_relatorio'] = empresa_tem_recurso(empresa, 'gerar_relatorio')
+
+        # Resolver empresa base para o usuário
+        if user.is_superuser or user.is_staff:
+            context['can_add_funcionario'] = True
+            context['can_gerar_relatorio'] = True
+            return context
+
+        if user.empresa_id:
+            try:
+                empresa = Empresa.objects.get(pk=user.empresa_id)
+            except (Empresa.DoesNotExist, Exception):
+                empresa = None
+        if not empresa:
+            try:
+                empresa = user.empresas_permitidas.first()
+            except Exception:
+                empresa = None
+
+        # Regras de habilitação: feature flag OU billing ativo/trial
+        can_add = empresa_tem_recurso(empresa, 'criar_funcionario') if empresa else False
+        can_report = empresa_tem_recurso(empresa, 'gerar_relatorio') if empresa else False
+
+        if empresa and not can_add:
+            try:
+                billing_customer = empresa.billing_customer
+                if billing_customer.status in ['trial', 'active']:
+                    can_add = True
+            except Exception:
+                pass
+
+        context['can_add_funcionario'] = can_add
+        context['can_gerar_relatorio'] = can_report
         return context
         context['form'] = FuncionarioForm()
         allowed_ids = get_allowed_empresa_ids(self.request.user)

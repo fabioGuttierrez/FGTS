@@ -56,6 +56,14 @@ class FuncionarioForm(forms.ModelForm):
         # Django 5+ usa dict normal, não OrderedDict; não há garantia de ordem, mas não quebra o form
         # Se quiser garantir ordem, reordene manualmente ou ajuste o template
 
+    def clean(self):
+        cleaned_data = super().clean()
+        # Deixa o model.clean enxergar a empresa/datas antes de salvar
+        self.instance._empresa_override = cleaned_data.get('empresa')
+        self.instance._data_admissao_override = cleaned_data.get('data_admissao')
+        self.instance._data_demissao_override = cleaned_data.get('data_demissao')
+        return cleaned_data
+
     def save(self, commit=True):
         funcionario = super().save(commit=commit)
         empresa = self.cleaned_data['empresa']
