@@ -326,7 +326,7 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         # Buscar a data da última atualização da tabela indices_fgts (SupabaseIndice)
         try:
             from indices.models import SupabaseIndice
-            ultima_atualizacao = SupabaseIndice.objects.order_by('-created_at').values_list('created_at', flat=True).first()
+            ultima_atualizacao = SupabaseIndice.objects.order_by('-data_base').values_list('data_base', flat=True).first()
         except Exception:
             ultima_atualizacao = None
         context['ultima_atualizacao_indices_fgts'] = ultima_atualizacao

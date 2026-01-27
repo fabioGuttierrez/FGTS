@@ -10,15 +10,15 @@ class Indice(models.Model):
 
 
 class SupabaseIndice(models.Model):
-	"""Modelo de leitura para a tabela existente no Supabase: indices_fgts.
-	managed=False para não criar/migrar essa tabela via Django.
-	Colunas reais: id (uuid), competencia (date), tabela (int), data_base (date), indice (decimal), created_at.
+	"""Leitura da tabela Supabase indices_fgts (managed=False, não migrar).
+
+	Colunas reais: id (uuid), competencia (date), tabela (int), data_base (date), indice (decimal).
+	Observação: a coluna created_at não existe na tabela; não declare aqui para evitar erro de consulta.
 	"""
 	competencia = models.DateField()
 	tabela = models.IntegerField()
 	data_base = models.DateField()
 	indice = models.DecimalField(max_digits=12, decimal_places=9)
-	created_at = models.DateTimeField()
 
 	class Meta:
 		managed = False
