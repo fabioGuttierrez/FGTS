@@ -32,7 +32,8 @@ from lancamentos.views import (
     export_relatorio_competencia_csv, 
     export_relatorio_competencia_pdf,
     download_memoria_calculo,
-    relatorio_por_ids
+    relatorio_por_ids,
+    lancamento_ids,
 )
 from indices.views import IndiceListView
 from django.urls import include
@@ -59,6 +60,7 @@ urlpatterns = [
     path('lancamentos/importar/', LancamentoImportView.as_view(), name='lancamento-import'),
     path('lancamentos/download-template/', LancamentoDownloadTemplateView.as_view(), name='lancamento-download-template'),
     path('lancamentos/gerar/<int:funcionario_id>/', GerarLancamentosAutomaticosView.as_view(), name='lancamento-gerar-automatico'),
+    path('lancamentos/ids/', lancamento_ids, name='lancamento-ids'),
     path('lancamentos/relatorio/', RelatorioCompetenciaView.as_view(), name='relatorio-competencia'),
     path('lancamentos/relatorio/por-ids/', relatorio_por_ids, name='relatorio-por-ids'),
     path('lancamentos/relatorio/export/csv', export_relatorio_competencia_csv, name='relatorio-competencia-export-csv'),

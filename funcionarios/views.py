@@ -188,8 +188,16 @@ class FuncionarioUpdateView(LoginRequiredMixin, EmpresaScopeMixin, UpdateView):
         return context
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        return self.filter_queryset_by_empresa(qs)
+        # Não podemos usar super() aqui porque EmpresaScopeMixin filtra por campos
+        # de empresa inexistentes neste modelo e derruba o queryset para vazio.
+        qs = Funcionario.objects.all()
+        allowed = get_allowed_empresa_ids(self.request.user)
+        if allowed is None:
+            return qs
+        if not allowed:
+            return qs.none()
+        # Filtra por empresas permitidas via vínculos (multi-empresa)
+        return qs.filter(vinculos__empresa_id__in=allowed).distinct()
 
     def form_valid(self, form):
         empresa = form.cleaned_data.get('empresa')
@@ -206,8 +214,14 @@ class FuncionarioDeleteView(LoginRequiredMixin, EmpresaScopeMixin, DeleteView):
     success_url = reverse_lazy('funcionario-list')
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        return self.filter_queryset_by_empresa(qs)
+        # Evita filtro vazio do EmpresaScopeMixin em modelos sem campo empresa
+        qs = Funcionario.objects.all()
+        allowed = get_allowed_empresa_ids(self.request.user)
+        if allowed is None:
+            return qs
+        if not allowed:
+            return qs.none()
+        return qs.filter(vinculos__empresa_id__in=allowed).distinct()
 
     def delete(self, request, *args, **kwargs):
         self.object = self.get_object()
@@ -293,6 +307,16 @@ class FuncionarioDetailView(LoginRequiredMixin, EmpresaScopeMixin, DetailView):
     model = Funcionario
     template_name = 'funcionarios/funcionario_detail.html'
     context_object_name = 'funcionario'
+
+    def get_queryset(self):
+        # Evita filtro vazio do EmpresaScopeMixin em modelos sem campo empresa
+        qs = Funcionario.objects.all()
+        allowed = get_allowed_empresa_ids(self.request.user)
+        if allowed is None:
+            return qs
+        if not allowed:
+            return qs.none()
+        return qs.filter(vinculos__empresa_id__in=allowed).distinct()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

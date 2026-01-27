@@ -395,52 +395,108 @@
 
         // Funcionalidade de seleção múltipla e geração de relatório
         const selectAllCheckbox = document.getElementById('selectAll');
-        const lancamentoCheckboxes = document.querySelectorAll('.lancamento-checkbox');
+        const lancamentoCheckboxes = Array.from(document.querySelectorAll('.lancamento-checkbox'));
         const gerarRelatorioBtn = document.getElementById('gerarRelatorioBtn');
         const selectedCountBadge = document.getElementById('selectedCount');
+        const selectedIdsKey = 'lancamentosSelecionados';
+        const currentQuery = window.location.search || '';
+        const storedSelection = JSON.parse(sessionStorage.getItem(selectedIdsKey) || '{}');
+        let selectedIds = new Set(storedSelection.query === currentQuery ? storedSelection.ids || [] : []);
+
+        function persistSelection() {
+            sessionStorage.setItem(selectedIdsKey, JSON.stringify({ query: currentQuery, ids: Array.from(selectedIds) }));
+        }
+
+        function syncPageCheckboxes() {
+            lancamentoCheckboxes.forEach(cb => {
+                cb.checked = selectedIds.has(cb.value);
+            });
+            const allOnPageSelected = lancamentoCheckboxes.length > 0 && lancamentoCheckboxes.every(cb => cb.checked);
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = allOnPageSelected && selectedIds.size > 0;
+            }
+        }
 
         function updateSelectedCount() {
-            const checkedBoxes = document.querySelectorAll('.lancamento-checkbox:checked');
-            const count = checkedBoxes.length;
+            const count = selectedIds.size;
             selectedCountBadge.textContent = count + ' selecionado' + (count !== 1 ? 's' : '');
             if (gerarRelatorioBtn) {
                 gerarRelatorioBtn.disabled = count === 0;
             }
         }
 
+        // Marca checkboxes conforme seleção persistida
+        syncPageCheckboxes();
+        updateSelectedCount();
+
+        async function fetchAllIds() {
+            const paramsObj = new URLSearchParams(window.location.search);
+            paramsObj.delete('page'); // não limitar ao page atual
+            const qs = paramsObj.toString();
+            const suffix = qs ? `?${qs}` : '';
+            const resp = await fetch(`{% url 'lancamento-ids' %}${suffix}`);
+            if (!resp.ok) {
+                throw new Error('Falha ao buscar IDs.');
+            }
+            const data = await resp.json();
+            return data.ids || [];
+        }
+
         if (selectAllCheckbox) {
-            selectAllCheckbox.addEventListener('change', function() {
-                lancamentoCheckboxes.forEach(checkbox => {
-                    checkbox.checked = this.checked;
-                });
-                updateSelectedCount();
+            selectAllCheckbox.addEventListener('change', async function() {
+                if (this.checked) {
+                    try {
+                        const ids = await fetchAllIds();
+                        selectedIds = new Set(ids.map(String));
+                        persistSelection();
+                        syncPageCheckboxes();
+                        updateSelectedCount();
+                    } catch (e) {
+                        alert('Não foi possível selecionar todos. Tente novamente.');
+                        this.checked = false;
+                    }
+                } else {
+                    selectedIds.clear();
+                    persistSelection();
+                    syncPageCheckboxes();
+                    updateSelectedCount();
+                }
             });
         }
 
         lancamentoCheckboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', updateSelectedCount);
+            checkbox.addEventListener('change', function() {
+                if (this.checked) {
+                    selectedIds.add(this.value);
+                } else {
+                    selectedIds.delete(this.value);
+                }
+                persistSelection();
+                updateSelectedCount();
+            });
         });
 
         if (gerarRelatorioBtn) {
             gerarRelatorioBtn.addEventListener('click', function() {
-                const checkedBoxes = document.querySelectorAll('.lancamento-checkbox:checked');
-                if (checkedBoxes.length === 0) {
+                if (selectedIds.size === 0) {
                     alert('Selecione pelo menos um lançamento.');
                     return;
                 }
 
-                // Coletar IDs dos lançamentos selecionados
-                const ids = Array.from(checkedBoxes).map(cb => cb.value);
-                
-                // Verificar se todos são da mesma empresa
-                const empresas = new Set(Array.from(checkedBoxes).map(cb => cb.dataset.empresa));
+                const ids = Array.from(selectedIds);
+
+                // Verificar se todos são da mesma empresa usando checkboxes visíveis (melhor esforço)
+                const empresas = new Set(
+                    lancamentoCheckboxes
+                        .filter(cb => ids.includes(cb.value))
+                        .map(cb => cb.dataset.empresa)
+                );
                 if (empresas.size > 1) {
                     if (!confirm('Os lançamentos selecionados são de empresas diferentes. Deseja continuar?')) {
                         return;
                     }
                 }
 
-                // Redirecionar para a rota de relatório por IDs
                 const url = "{% url 'relatorio-por-ids' %}?ids=" + ids.join(',');
                 window.location.href = url;
             });

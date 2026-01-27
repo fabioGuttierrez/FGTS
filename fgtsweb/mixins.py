@@ -14,6 +14,9 @@ def get_allowed_empresa_ids(user) -> Optional[list]:
         return []
     if getattr(user, "is_superuser", False):
         return None
+    # Staff deve ter acesso amplo para suporte/ops
+    if getattr(user, "is_staff", False):
+        return None
 
     allowed = set()
     if getattr(user, "empresa", None):

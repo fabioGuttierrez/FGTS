@@ -171,16 +171,18 @@ def calcular_fgts_atualizado(valor_fgts: Decimal,
                               valor_fgts_base: Decimal | None = None,
                               **kwargs) -> dict:
     """Cálculo FGTS simplificado:
-    O índice representa a correção aplicada ao valor FGTS.
+    O índice representa o fator aplicado sobre a base FGTS para obter o depósito correto.
 
-    - Valor Corrigido (Correção) = Valor FGTS × Índice
+    - Valor Depósito FGTS = Base FGTS × Índice
+    - Correção (valor_corrigido) = Valor Depósito FGTS − Valor FGTS do mês
     - JAM = Calculado separadamente
-    - Total = Valor FGTS + Correção + JAM
+    - Total = Correção + JAM
     """
     fator_mult = Decimal('1')
     fator_div = Decimal('1')
     fator_liquido = Decimal('1')
     valor_fgts_original = valor_fgts
+    base_para_correcao = valor_fgts_base if valor_fgts_base is not None else valor_fgts
     if aplicar_plano_economico:
         valor_fgts, fator_mult, fator_div, fator_liquido = aplicar_plano_economico_legacy(valor_fgts, competencia)
     elif fator_plano_info:
@@ -193,8 +195,11 @@ def calcular_fgts_atualizado(valor_fgts: Decimal,
     # Se não houver índice, usa 1.0 (sem correção)
     indice_final = indice if indice is not None else Decimal('1.0')
 
-    # Correção total (FGTS × índice)
-    valor_corrigido = (valor_fgts * indice_final).quantize(Decimal('0.01'))
+    # Depósito correto para a competência (Base × Índice)
+    valor_deposito_fgts = (base_para_correcao * indice_final).quantize(Decimal('0.01'))
+
+    # Correção = valor que faltou para atingir o depósito correto
+    valor_corrigido = (valor_deposito_fgts - valor_fgts).quantize(Decimal('0.01'))
 
     # Se vier um JAM pré-calculado (modo composto), usa-o; caso contrário, calcula simples
     if valor_jam_override is not None:
@@ -202,19 +207,20 @@ def calcular_fgts_atualizado(valor_fgts: Decimal,
     else:
         valor_jam = aplicar_jam(valor_fgts, jam_coef)
     
-    # Total = FGTS + Correção + JAM
-    total = (valor_fgts + valor_corrigido + valor_jam).quantize(Decimal('0.01'))
+    # Total = Depósito corrigido + JAM
+    total = (valor_deposito_fgts + valor_jam).quantize(Decimal('0.01'))
     
     return {
         'indice': indice_final,
         'valor_fgts': valor_fgts,
         'valor_fgts_base': valor_fgts_base if valor_fgts_base is not None else valor_fgts_original,
+        'valor_deposito_fgts': valor_deposito_fgts,
         'fator_plano_economico_multiplicador': fator_mult,
         'fator_plano_economico_divisor': fator_div,
         'fator_plano_economico': fator_liquido,
-        'valor_corrigido': valor_corrigido,  # Correção total (FGTS × índice)
+        'valor_corrigido': valor_corrigido,  # Correção (Depósito - FGTS do mês)
         'valor_jam': valor_jam,
-        'total': total,  # FGTS + Correção + JAM
+        'total': total,  # Depósito corrigido + JAM
     }
 
 
@@ -223,6 +229,7 @@ def gerar_memoria_calculo(funcionario_nome: str, funcionario_cpf: str, data_admi
                          indice: Decimal, valor_jam: Decimal, valor_corrigido: Decimal, 
                          total: Decimal, data_admissao_mes: str,
                          salario_colaborador: Decimal | None = None,
+                         valor_deposito_fgts: Decimal | None = None,
                          fator_plano_economico: Decimal = Decimal('1'),
                          fator_plano_mult: Decimal = Decimal('1'),
                          fator_plano_div: Decimal = Decimal('1')) -> str:
@@ -281,9 +288,12 @@ def gerar_memoria_calculo(funcionario_nome: str, funcionario_cpf: str, data_admi
     # Seção 3: Cálculo do FGTS Corrigido
     memoria.append("3. CÁLCULO DO FGTS CORRIGIDO")
     memoria.append("-" * 80)
-    memoria.append(f"   Fórmula: Valor FGTS × Índice FGTS")
+    base_correcao = salario_colaborador if salario_colaborador is not None else valor_fgts
+    deposito_fgts_display = valor_deposito_fgts if valor_deposito_fgts is not None else (base_correcao * indice).quantize(Decimal('0.01'))
+    memoria.append(f"   Fórmula: Base FGTS × Índice FGTS = Valor depósito FGTS")
     memoria.append(f"   Índice FGTS (Tabela): {indice}")
-    memoria.append(f"   Cálculo: R$ {valor_fgts:,.2f} × {indice} = R$ {valor_corrigido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+    memoria.append(f"   Cálculo do depósito: R$ {base_correcao:,.2f} × {indice} = R$ {deposito_fgts_display:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+    memoria.append(f"   Correção = Depósito − FGTS do mês = R$ {deposito_fgts_display:,.2f} − R$ {valor_fgts:,.2f} = R$ {valor_corrigido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
     memoria.append("")
     
     # Seção 4: Cálculo do JAM (Juros da Mora)
@@ -305,7 +315,8 @@ def gerar_memoria_calculo(funcionario_nome: str, funcionario_cpf: str, data_admi
     # Seção 5: Resultado Final
     memoria.append("5. RESULTADO FINAL")
     memoria.append("-" * 80)
-    memoria.append(f"   Valor FGTS Corrigido: R$ {valor_corrigido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+    valor_corrigido_fgts = valor_deposito_fgts if valor_deposito_fgts is not None else (base_correcao * indice).quantize(Decimal('0.01'))
+    memoria.append(f"   Valor FGTS Corrigido: R$ {valor_corrigido_fgts:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
     memoria.append(f"   JAM (Juros da Mora):  R$ {valor_jam:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
     memoria.append(f"   " + "-" * 76)
     memoria.append(f"   TOTAL:                 R$ {total:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))

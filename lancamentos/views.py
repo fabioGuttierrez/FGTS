@@ -9,7 +9,6 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy
 from billing.models import BillingCustomer
 from empresas.models import Empresa
-from coefjam.models import CoefJam
 from .models import Lancamento
 from .models_conferencia import ConferenciaLancamento
 from .forms import (
@@ -22,8 +21,6 @@ from .forms import (
 )
 from .services.calculo import (
     calcular_fgts_atualizado,
-    calcular_jam_composto,
-    calcular_jam_periodo,
     gerar_memoria_calculo,
     get_config_numeric,
     get_config_str,
@@ -37,6 +34,8 @@ from funcionarios.models import Funcionario
 from fgtsweb.mixins import get_allowed_empresa_ids, is_empresa_allowed, EmpresaScopeMixin
 from django.http import HttpResponseForbidden, HttpResponse
 from django.db.models.functions import Substr
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
 
 
 class LancamentoDeleteView(LoginRequiredMixin, EmpresaScopeMixin, View):
@@ -335,6 +334,16 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         return context
 
 
+@login_required
+def lancamento_ids(request):
+    """Retorna todos os IDs de lançamentos aplicando os mesmos filtros da listagem."""
+    view = LancamentoListView()
+    view.request = request
+    qs = view.get_queryset()
+    ids = list(qs.values_list('id', flat=True))
+    return JsonResponse({'ids': ids})
+
+
 class GerarLancamentosAutomaticosView(LoginRequiredMixin, EmpresaScopeMixin, View):
     """
     Gera lançamentos automáticos para um funcionário específico.
@@ -529,7 +538,7 @@ class RelatorioCompetenciaView(FormView):
         
         grupos = defaultdict(lambda: {
             'items': [],
-            'totais': {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
+            'totais': {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'valor_deposito_fgts', 'total']}
         })
         
         for resultado in resultados:
@@ -556,9 +565,11 @@ class RelatorioCompetenciaView(FormView):
             grupos[chave]['items'].append(resultado)
             
             # Acumular totais do grupo
-            for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']:
+            for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'valor_deposito_fgts', 'total']:
                 if k in calc:
                     grupos[chave]['totais'][k] += calc[k]
+            if 'valor_deposito_fgts' in grupos[chave]['totais']:
+                grupos[chave]['totais']['total'] = grupos[chave]['totais']['valor_deposito_fgts']
         
         # Ordenar grupos
         if agrupamento == 'ano':
@@ -716,21 +727,10 @@ class RelatorioCompetenciaView(FormView):
         multa_percent = get_config_numeric('MULTA_PERCENT', Decimal('10.0'))
 
         resultados = []
-        totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
+        totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'valor_deposito_fgts', 'total']}
 
-        # Buscar coeficiente JAM para esta competência (campo é string MM/YYYY)
-        from coefjam.models import CoefJam
-        # Converter MM/YYYY para YYYY-MM para buscar no banco
-        try:
-            comp_parts = competencia_norm.split('/')
-            competencia_str_db = f"{comp_parts[1]}-{comp_parts[0]}" if len(comp_parts) == 2 else competencia_norm
-        except Exception:
-            competencia_str_db = competencia_norm
-        jam_coef_obj = CoefJam.objects.filter(competencia=competencia_str_db).first()
-        jam_coef = jam_coef_obj.valor if jam_coef_obj else Decimal('0')
-        # Se não há coeficiente JAM, registrar aviso
-        if not jam_coef_obj:
-            avisos.append(f"⚠️ Coeficiente JAM não encontrado para competência {competencia_norm}. Usando JAM=0.")
+        # JAM desabilitado para relatórios/exportações
+        jam_coef = Decimal('0')
 
         comp_display = competencia_norm
         if parcela_13 == 1:
@@ -740,41 +740,19 @@ class RelatorioCompetenciaView(FormView):
 
         for l in lancs_qs:
             funcionario_key = f"func_{l.funcionario.pk}"
-            
-            # Inicializar estado do funcionário se não existir
+
             if funcionario_key not in jam_state:
-                # Verificar se esta é a competência de admissão
-                competencia_admissao = date(l.funcionario.data_admissao.year, l.funcionario.data_admissao.month, 1)
-                is_primeira_competencia = (competencia_date == competencia_admissao)
-                
-                jam_state[funcionario_key] = {
-                    'acumulado': Decimal('0.00'),
-                    'primeira_comp': is_primeira_competencia
-                }
-            
+                jam_state[funcionario_key] = {'acumulado': Decimal('0.00')}
+
             # Ajuste de plano econômico legado (multiplica e divide conforme VB6)
             valor_fgts_ajustado, fator_mult, fator_div, fator_liquido = aplicar_plano_economico_legacy(
                 l.valor_fgts,
                 competencia_date,
             )
 
-            # Calcular JAM
-            if jam_state[funcionario_key]['primeira_comp']:
-                # Primeira competência: JAM = 0
-                valor_jam = Decimal('0.00')
-                jam_state[funcionario_key]['primeira_comp'] = False
-            else:
-                # Competências seguintes: JAM = Acumulado × Coeficiente
-                acumulado_anterior = jam_state[funcionario_key]['acumulado']
-                valor_jam = (acumulado_anterior * jam_coef).quantize(Decimal('0.01'))
-            
-            # Atualizar acumulado para próxima competência
-            # Acumulado_Novo = Acumulado_Anterior + JAM + Valor_FGTS
-            jam_state[funcionario_key]['acumulado'] = (
-                jam_state[funcionario_key]['acumulado'] + 
-                valor_jam + 
-                valor_fgts_ajustado
-            )
+            # JAM desativado
+            valor_jam = Decimal('0.00')
+            jam_state[funcionario_key]['acumulado'] = jam_state[funcionario_key]['acumulado'] + valor_fgts_ajustado
 
             calc = calcular_fgts_atualizado(
                 valor_fgts=valor_fgts_ajustado,
@@ -785,7 +763,7 @@ class RelatorioCompetenciaView(FormView):
                 valor_jam_override=valor_jam,
                 aplicar_plano_economico=False,
                 fator_plano_info=(fator_mult, fator_div, fator_liquido),
-                valor_fgts_base=l.valor_fgts,
+                valor_fgts_base=l.base_fgts,
                 juros_tipo=juros_tipo,
                 juros_mensal=juros_mensal,
                 juros_diario=juros_diario,
@@ -801,6 +779,9 @@ class RelatorioCompetenciaView(FormView):
             for k in totais.keys():
                 if k in calc:
                     totais[k] += calc[k]
+
+            if 'valor_deposito_fgts' in calc:
+                totais['total'] = totais['valor_deposito_fgts']
 
         return resultados, totais, None, jam_state, avisos
 
@@ -847,7 +828,7 @@ class RelatorioCompetenciaView(FormView):
                 })
 
             resultados = []
-            totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
+            totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'valor_deposito_fgts', 'total']}
             avisos_total = []  # Coletar todos os avisos
 
             def format_comp_display(comp, parcela_13):
@@ -963,10 +944,11 @@ class RelatorioCompetenciaView(FormView):
             resultados_agrupados = self._agrupar_resultados(resultados, agrupamento)
             
             # ✅ CORRIGIR: Recalcular totais gerais a partir dos grupos (evitar duplicação)
-            totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
+            totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'valor_deposito_fgts', 'total']}
             for chave, grupo_data in resultados_agrupados:
                 for k in totais.keys():
                     totais[k] += grupo_data['totais'][k]
+            totais['total'] = totais['valor_deposito_fgts']
 
             competencias_display = [format_comp_display(c['competencia'], c.get('parcela_13')) for c in competencias_list]
             competencias_param = [f"{c['competencia']}|{c.get('parcela_13') or ''}" for c in competencias_list]
@@ -1099,7 +1081,7 @@ def relatorio_por_ids(request):
     view.request = request
 
     resultados = []
-    totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
+    totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'valor_deposito_fgts', 'total']}
     jam_state = {}
     avisos_total = []
     ids_set = {l.id for l in lancamentos_filtrados}
@@ -1134,6 +1116,7 @@ def relatorio_por_ids(request):
     for r in resultados:
         for k in totais.keys():
             totais[k] += r['calc'][k]
+    totais['total'] = totais['valor_deposito_fgts']
 
     if not resultados:
         return HttpResponse('Nenhum resultado calculado para os lançamentos selecionados.', status=404)
@@ -1257,7 +1240,7 @@ def export_relatorio_competencia_csv(request):
             return HttpResponse('Nenhum lançamento encontrado para os filtros aplicados.', status=404)
 
         resultados = []
-        totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
+        totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'valor_deposito_fgts', 'total']}
         jam_state = {}
         ids_set = {l.id for l in lancamentos_filtrados}
 
@@ -1288,6 +1271,7 @@ def export_relatorio_competencia_csv(request):
         for r in resultados:
             for k in totais.keys():
                 totais[k] += r['calc'][k]
+        totais['total'] = totais['valor_deposito_fgts']
 
         if not resultados:
             return HttpResponse('Nenhum resultado calculado para os lançamentos selecionados.', status=404)
@@ -1307,7 +1291,7 @@ def export_relatorio_competencia_csv(request):
                 return f"{label}"
             return f"Competência: {label}"
 
-        writer.writerow(['Empresa', 'Competência', 'Funcionário', 'Empresa do Vínculo', 'Admissão', 'Demissão', 'Base FGTS', 'FGTS Valor', 'Índice', 'Correção', 'JAM', 'Total'])
+        writer.writerow(['Empresa', 'Competência', 'Funcionário', 'Empresa do Vínculo', 'Admissão', 'Demissão', 'Base FGTS', 'FGTS Valor', 'Índice', 'Correção', 'Total'])
 
         for _chave, grupo in resultados_agrupados:
             writer.writerow([])
@@ -1338,12 +1322,11 @@ def export_relatorio_competencia_csv(request):
                     f"{c.get('valor_fgts', l.valor_fgts)}",
                     f"{c.get('indice', '')}",
                     f"{c['valor_corrigido']}",
-                    f"{c['valor_jam']}",
                     f"{c['total']}",
                 ])
 
         writer.writerow([])
-        writer.writerow(['Totais', '', '', '', '', '', totais['valor_fgts'], '', totais['valor_corrigido'], totais['valor_jam'], totais['total']])
+        writer.writerow(['Totais', '', '', '', '', '', totais['valor_fgts'], '', '', totais['valor_corrigido'], totais['total']])
         return resp
     
     # Parse competências (separar por \n ou %0A) mantendo parcela_13 quando informada
@@ -1391,7 +1374,7 @@ def export_relatorio_competencia_csv(request):
     competencias_list.sort(key=lambda x: (_parse_comp(x), x.get('parcela_13') or 0))
 
     resultados = []
-    totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
+    totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'valor_deposito_fgts', 'total']}
     jam_state = {}
     first_error = None
     first_error = None
@@ -1410,6 +1393,8 @@ def export_relatorio_competencia_csv(request):
         
         for k in totais.keys():
             totais[k] += tot.get(k, Decimal('0'))
+
+    totais['total'] = totais['valor_deposito_fgts']
 
     if not resultados:
         mensagem = first_error or 'Nenhum lançamento encontrado para os filtros aplicados.'
@@ -1431,7 +1416,7 @@ def export_relatorio_competencia_csv(request):
             return f"{label}"
         return f"Competência: {label}"
     
-    writer.writerow(['Empresa', 'Competência', 'Funcionário', 'Empresa do Vínculo', 'Admissão', 'Demissão', 'Base FGTS', 'FGTS Valor', 'Índice', 'Correção', 'JAM', 'Total'])
+    writer.writerow(['Empresa', 'Competência', 'Funcionário', 'Empresa do Vínculo', 'Admissão', 'Demissão', 'Base FGTS', 'FGTS Valor', 'Índice', 'Correção', 'Total'])
 
     for _chave, grupo in resultados_agrupados:
         writer.writerow([])
@@ -1463,12 +1448,11 @@ def export_relatorio_competencia_csv(request):
                 f"{c.get('valor_fgts', l.valor_fgts)}",
                 f"{c.get('indice', '')}",
                 f"{c['valor_corrigido']}",
-                f"{c['valor_jam']}",
                 f"{c['total']}",
             ])
 
     writer.writerow([])
-    writer.writerow(['Totais', '', '', '', '', '', totais['valor_fgts'], '', totais['valor_corrigido'], totais['valor_jam'], totais['total']])
+    writer.writerow(['Totais', '', '', '', '', '', totais['valor_fgts'], '', '', totais['valor_corrigido'], totais['total']])
     return resp
 
 def export_relatorio_competencia_pdf(request):
@@ -1572,7 +1556,7 @@ def export_relatorio_competencia_pdf(request):
             return HttpResponse('Nenhum lançamento encontrado para os filtros aplicados.', status=404)
 
         resultados = []
-        totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
+        totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'valor_deposito_fgts', 'total']}
         jam_state = {}
         ids_set = {l.id for l in lancamentos_filtrados}
 
@@ -1603,6 +1587,7 @@ def export_relatorio_competencia_pdf(request):
         for r in resultados:
             for k in totais.keys():
                 totais[k] += r['calc'][k]
+        totais['total'] = totais['valor_deposito_fgts']
 
         if not resultados:
             return HttpResponse('Nenhum resultado calculado para os lançamentos selecionados.', status=404)
@@ -1902,7 +1887,7 @@ def export_relatorio_competencia_pdf(request):
     ]
 
     resultados = []
-    totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'total']}
+    totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'valor_deposito_fgts', 'total']}
     jam_state = {}
     first_error = None
 
@@ -1921,6 +1906,8 @@ def export_relatorio_competencia_pdf(request):
 
         for k in totais.keys():
             totais[k] += tot.get(k, Decimal('0'))
+
+    totais['total'] = totais['valor_deposito_fgts']
 
     if not resultados:
         mensagem = first_error or 'Nenhum lançamento encontrado para os filtros aplicados.'
@@ -1950,7 +1937,6 @@ def export_relatorio_competencia_pdf(request):
                 "Base FGTS",
                 "FGTS Valor",
                 "Correção",
-                "JAM",
                 "Total",
             ]
         ]
@@ -1977,7 +1963,6 @@ def export_relatorio_competencia_pdf(request):
                 f"{l.base_fgts}",
                 f"{c.get('valor_fgts', l.valor_fgts)}",
                 f"{c['valor_corrigido']}",
-                f"{c['valor_jam']}",
                 f"{c['total']}",
             ])
 
@@ -1986,7 +1971,7 @@ def export_relatorio_competencia_pdf(request):
         # Ajustar colWidths para 8 colunas (sem admissão)
         table = Table(
             table_data,
-            colWidths=[22*mm, 38*mm, 22*mm, 20*mm, 18*mm, 18*mm, 18*mm, 24*mm],
+            colWidths=[24*mm, 40*mm, 24*mm, 22*mm, 20*mm, 22*mm, 28*mm],
             hAlign='LEFT',
             repeatRows=1,
             splitByRow=1,
@@ -2017,17 +2002,15 @@ def export_relatorio_competencia_pdf(request):
             [
                 "Valor sem juros",
                 "Correção",
-                "JAM",
                 "Valor com juros",
             ],
             [
                 f"{totais['valor_fgts']}",
                 f"{totais['valor_corrigido']}",
-                f"{totais['valor_jam']}",
                 f"{totais['total']}",
             ],
         ],
-        colWidths=[35 * mm, 30 * mm, 25 * mm, 35 * mm],
+        colWidths=[35 * mm, 35 * mm, 40 * mm],
         hAlign='LEFT',
     )
     totais_table.setStyle(
@@ -2146,17 +2129,14 @@ def download_memoria_calculo(request):
         competencia_date,
     )
 
-    # Calcula JAM
-    valor_jam = calcular_jam_periodo(
-        valor_fgts_ajustado,
-        competencia_date,
-        data_pagamento,
-        funcionario.data_admissao
-    )
+    # JAM desativado nos relatórios/exportações
+    valor_jam = Decimal('0.00')
 
-    # Calcula valores
-    valor_corrigido = (valor_fgts_ajustado * indice_valor).quantize(Decimal('0.01'))
-    total = (valor_corrigido + valor_jam).quantize(Decimal('0.01'))
+    # Calcula depósito correto e correção (Depósito - FGTS do mês)
+    base_fgts = lancamento.base_fgts or valor_fgts_ajustado
+    valor_deposito_fgts = (base_fgts * indice_valor).quantize(Decimal('0.01'))
+    valor_corrigido = (valor_deposito_fgts - valor_fgts_ajustado).quantize(Decimal('0.01'))
+    total = valor_deposito_fgts
     
     # Formata data de admissão para competência
     data_admissao_mes = funcionario.data_admissao.strftime('%m/%Y')
@@ -2175,6 +2155,7 @@ def download_memoria_calculo(request):
         total=total,
         data_admissao_mes=data_admissao_mes,
         salario_colaborador=lancamento.base_fgts,
+        valor_deposito_fgts=valor_deposito_fgts,
         fator_plano_economico=fator_liquido,
         fator_plano_mult=fator_mult,
         fator_plano_div=fator_div,
