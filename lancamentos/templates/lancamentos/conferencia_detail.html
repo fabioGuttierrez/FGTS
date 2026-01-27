@@ -102,7 +102,7 @@
                                 <div class="col-md-4 mb-3">
                                     <strong>Data de Conferência:</strong><br>
                                     {% if conferencia.data_conferencia %}
-                                    {{ conferencia.data_conferencia|date:"d/m/Y H:i:s" }}
+                                    {{ conferencia.data_conferencia|date:"d/m/Y" }}
                                     {% else %}
                                     <span class="text-muted">-</span>
                                     {% endif %}
