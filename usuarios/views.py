@@ -1,9 +1,12 @@
 from django import forms
+from django.contrib import messages
 from django.contrib.auth import authenticate, login
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
+from django.views.generic import View
 from django.views.generic.edit import CreateView
 from .models import Usuario
+from . import services
 
 
 class UsuarioRegisterForm(forms.ModelForm):
@@ -70,16 +73,35 @@ class UsuarioRegisterView(CreateView):
     
     def form_valid(self, form):
         response = super().form_valid(form)
-        
+
         # Autenticar e fazer login automaticamente
         username = form.cleaned_data['username']
         password = form.cleaned_data['password1']
         user = authenticate(username=username, password=password)
         if user is not None:
             login(self.request, user)
-            
+
+            # Disparar email de confirmação
+            services.send_email_confirmation(user, request=self.request)
+            messages.info(
+                self.request,
+                'Enviamos um email para confirmar seu cadastro. Confira sua caixa de entrada.'
+            )
+
             # Se há plano selecionado em sessão, redirecionar para criar empresa
             if 'selected_plan_type' in self.request.session:
                 return redirect('empresa-create')
-        
+
         return response
+
+
+class ConfirmEmailView(View):
+    """Confirma o email do usuário via token de cadastro."""
+
+    def get(self, request, uidb64, token):
+        success, user = services.confirm_user_email(uidb64, token)
+        if success:
+            messages.success(request, 'Email confirmado com sucesso!')
+            return redirect('dashboard')
+        messages.error(request, 'Link de confirmação inválido ou expirado.')
+        return redirect('login')

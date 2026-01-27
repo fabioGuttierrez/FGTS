@@ -233,7 +233,6 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         allowed_ids = get_allowed_empresa_ids(self.request.user)
         if allowed_ids is not None:
             context['empresas'] = Empresa.objects.filter(codigo__in=allowed_ids)
-            from funcionarios.models import Funcionario
             funcionario_ids = Funcionario.objects.filter(
                 vinculos__empresa__codigo__in=allowed_ids
             ).distinct().values_list('id', flat=True)

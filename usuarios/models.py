@@ -5,6 +5,9 @@ from empresas.models import Empresa
 
 class Usuario(AbstractUser):
 	manutencao = models.BooleanField(default=False)
+	# Controle de verificação de email
+	email_confirmed = models.BooleanField(default=False)
+	email_confirmed_at = models.DateTimeField(null=True, blank=True)
 	# Empresa principal (escopo padrão do usuário)
 	empresa = models.ForeignKey(
 		Empresa,
