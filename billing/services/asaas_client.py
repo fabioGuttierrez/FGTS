@@ -6,11 +6,19 @@ DEFAULT_TIMEOUT = 10
 
 class AsaasClient:
     def __init__(self):
-        self.api_key = os.getenv('ASAAS_API_KEY') or os.getenv('ASAAS_API_KEY_SANDBOX')
-        self.env = os.getenv('ASAAS_ENV', 'sandbox')
-        self.base_url = 'https://sandbox.asaas.com/api/v3' if self.env == 'sandbox' else 'https://api.asaas.com/v3'
+        # Permite ASAAS_ENV ou flag ASAAS_SANDBOX=True para ativar sandbox
+        sandbox_flag = (os.getenv('ASAAS_SANDBOX', '').lower() == 'true')
+        env = os.getenv('ASAAS_ENV') or ('sandbox' if sandbox_flag else 'production')
+        self.env = env
+        self.base_url = 'https://sandbox.asaas.com/api/v3' if env == 'sandbox' else 'https://api.asaas.com/v3'
+
+        # Prioriza chave explícita; se sandbox, tenta chave sandbox
+        self.api_key = os.getenv('ASAAS_API_KEY')
+        if env == 'sandbox':
+            self.api_key = os.getenv('ASAAS_API_KEY_SANDBOX') or self.api_key
+
         if not self.api_key:
-            raise ValueError('Configure ASAAS_API_KEY or ASAAS_API_KEY_SANDBOX para usar o checkout Asaas.')
+            raise ValueError('Configure ASAAS_API_KEY (e ASAAS_ENV) ou ASAAS_API_KEY_SANDBOX para usar o checkout Asaas.')
 
     def _headers(self):
         return {

@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.views.generic import FormView, CreateView, UpdateView, ListView, View, DetailView
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy
-from billing.models import BillingCustomer
+from billing.services.features import can_use_feature, feature_block_context
 from empresas.models import Empresa
 from .models import Lancamento
 from .models_conferencia import ConferenciaLancamento
@@ -300,6 +300,24 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         context['status_pagto_filtro'] = self.request.GET.get('status_pagto', '')
         context['ordem_filtro'] = self.request.GET.get('ordem', '-competencia')
 
+        # Empresa de referência para validar plano/trial (filtro, usuário ou única empresa permitida)
+        empresa_contexto = None
+        empresa_param = context['empresa_filtro']
+        if empresa_param:
+            try:
+                empresa_contexto = Empresa.objects.filter(pk=empresa_param).first()
+            except Exception:
+                empresa_contexto = None
+        if not empresa_contexto and getattr(self.request.user, 'empresa', None):
+            empresa_contexto = getattr(self.request.user, 'empresa')
+        if not empresa_contexto and allowed_ids and len(allowed_ids) == 1:
+            empresa_contexto = Empresa.objects.filter(codigo=allowed_ids[0]).first()
+
+        bloqueio_ctx = feature_block_context('custom_reports', user=self.request.user, empresa=empresa_contexto)
+        context['relatorio_bloqueado'] = bloqueio_ctx['feature_blocked']
+        context['relatorio_bloqueio_motivo'] = bloqueio_ctx['feature_block_reason']
+        context['empresa_contexto'] = empresa_contexto
+
         # Construir um dicionário com a última competência de cada funcionário
         # e marcar quais lançamentos são a última competência
         ultimas_competencias = {}
@@ -531,6 +549,36 @@ class RelatorioCompetenciaView(FormView):
         kwargs = super().get_form_kwargs()
         kwargs['user'] = self.request.user
         return kwargs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        empresa_ctx = None
+        form = ctx.get('form')
+        if form:
+            empresa_value = None
+            try:
+                empresa_value = form.data.get('empresa') or form.initial.get('empresa')
+            except Exception:
+                empresa_value = None
+
+            if empresa_value:
+                if isinstance(empresa_value, Empresa):
+                    empresa_ctx = empresa_value
+                else:
+                    try:
+                        empresa_ctx = Empresa.objects.filter(pk=empresa_value).first()
+                    except Exception:
+                        empresa_ctx = None
+
+        if not empresa_ctx and getattr(self.request.user, 'empresa', None):
+            empresa_ctx = getattr(self.request.user, 'empresa')
+
+        bloqueio_ctx = feature_block_context('custom_reports', user=self.request.user, empresa=empresa_ctx)
+        ctx['relatorio_bloqueado'] = bloqueio_ctx['feature_blocked']
+        ctx['relatorio_bloqueio_motivo'] = bloqueio_ctx['feature_block_reason']
+        ctx['empresa_contexto'] = empresa_ctx
+        return ctx
 
     def _agrupar_resultados(self, resultados, agrupamento):
         """Agrupa resultados por competência, ano ou funcionário"""
@@ -824,7 +872,21 @@ class RelatorioCompetenciaView(FormView):
             if not is_empresa_allowed(self.request.user, empresa.codigo):
                 return render(self.request, self.template_name, {
                     'form': form,
-                    'erro': 'Empresa não permitida para este usuário.'
+                    'erro': 'Empresa não permitida para este usuário.',
+                    **feature_block_context('custom_reports', user=self.request.user, empresa=empresa),
+                })
+
+            allowed_report, motivo_bloqueio = can_use_feature('custom_reports', user=self.request.user, empresa=empresa)
+            if not allowed_report:
+                messages.error(
+                    self.request,
+                    motivo_bloqueio or 'Trial expirado e nenhum plano ativo. Assine um plano para gerar relatórios.'
+                )
+                contexto_bloqueio = feature_block_context('custom_reports', user=self.request.user, empresa=empresa)
+                return render(self.request, self.template_name, {
+                    'form': form,
+                    'erro': contexto_bloqueio.get('feature_block_reason') or motivo_bloqueio,
+                    **contexto_bloqueio,
                 })
 
             resultados = []
@@ -976,13 +1038,15 @@ class RelatorioCompetenciaView(FormView):
                 'kpi_lancamentos': total_lancamentos,
                 'kpi_competencias': len(competencias_list),
             }
+            contexto.update(feature_block_context('custom_reports', user=self.request.user, empresa=empresa))
             return render(self.request, self.template_name, contexto)
             
         except Exception as e:
             logger.error(f"🛑 Erro em RelatorioCompetenciaView.form_valid: {str(e)}")
             return render(self.request, self.template_name, {
                 'form': form,
-                'erro': f"🛑 Erro ao processar relatório: {str(e)}"
+                'erro': f"🛑 Erro ao processar relatório: {str(e)}",
+                **feature_block_context('custom_reports', user=self.request.user, empresa=form.cleaned_data.get('empresa')),
             })
 
 def relatorio_por_ids(request):
@@ -1008,6 +1072,12 @@ def relatorio_por_ids(request):
     if not lancamentos.exists():
         return HttpResponse('Nenhum lançamento encontrado.', status=404)
 
+    empresa_referencia = lancamentos.first().empresa if lancamentos else None
+    allowed_report, motivo_bloqueio = can_use_feature('custom_reports', user=request.user, empresa=empresa_referencia)
+    if not allowed_report:
+        messages.error(request, motivo_bloqueio or 'Trial expirado e nenhum plano ativo. Assine um plano para gerar relatórios.')
+        return redirect('lancamento-list')
+
     # Verificar permissões multi-tenant
     allowed_ids = get_allowed_empresa_ids(request.user)
     if allowed_ids is not None:
@@ -1018,7 +1088,7 @@ def relatorio_por_ids(request):
     # Filtrar por vínculo ativo na competência e não pago
     lancamentos_filtrados = []
     avisos_total = []
-    empresa = None
+    empresa = empresa_referencia
     # Forçar a data_pagamento para a última data_base disponível (ignora qualquer data enviada)
     from indices.services.indice_service import IndiceFGTSService
     data_pagamento = IndiceFGTSService.obter_ultima_data_base() or date.today()
@@ -1175,6 +1245,9 @@ def export_relatorio_competencia_csv(request):
     competencias_multi = urllib.parse.unquote(competencias_multi)
 
     empresa = Empresa.objects.get(pk=empresa_id)
+    allowed_csv, motivo_bloqueio = can_use_feature('pdf_export', user=request.user, empresa=empresa)
+    if not allowed_csv:
+        return HttpResponseForbidden(motivo_bloqueio or 'Seu plano não permite exportar relatórios (CSV/PDF).')
     if data_pagamento_str:
         data_pagamento = datetime.strptime(data_pagamento_str, '%Y-%m-%d').date()
     else:
@@ -1491,6 +1564,9 @@ def export_relatorio_competencia_pdf(request):
     competencias_multi = urllib.parse.unquote(competencias_multi)
 
     empresa = Empresa.objects.get(pk=empresa_id)
+    allowed_pdf, motivo_bloqueio = can_use_feature('pdf_export', user=request.user, empresa=empresa)
+    if not allowed_pdf:
+        return HttpResponseForbidden(motivo_bloqueio or 'Seu plano não permite exportar relatórios (CSV/PDF).')
     if data_pagamento_str:
         data_pagamento = datetime.strptime(data_pagamento_str, '%Y-%m-%d').date()
     else:

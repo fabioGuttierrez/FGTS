@@ -1,4 +1,11 @@
 from django import forms
+from django.core.exceptions import ValidationError
+from fgtsweb.utils.validators import (
+    digits_only,
+    fetch_cep_data,
+    normalize_upper_ascii,
+    validate_cep,
+)
 from .models import Empresa
 from .models_grupo import GrupoEmpresa
 
@@ -28,3 +35,37 @@ class EmpresaForm(forms.ModelForm):
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
             'paga_13_aniversario': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        # Normalizar campos textuais para maiúsculas ASCII
+        cleaned_data['nome'] = normalize_upper_ascii(cleaned_data.get('nome'), allow_digits=True)
+        cleaned_data['endereco'] = normalize_upper_ascii(cleaned_data.get('endereco'), allow_digits=True)
+        cleaned_data['bairro'] = normalize_upper_ascii(cleaned_data.get('bairro'), allow_digits=True)
+        cleaned_data['cidade'] = normalize_upper_ascii(cleaned_data.get('cidade'), allow_digits=False)
+        cleaned_data['uf'] = normalize_upper_ascii(cleaned_data.get('uf'), allow_digits=False)[:2]
+        cleaned_data['nome_contato'] = normalize_upper_ascii(cleaned_data.get('nome_contato'), allow_digits=True)
+
+        # Remover caracteres especiais de campos numéricos/documentos
+        cleaned_data['cnpj'] = digits_only(cleaned_data.get('cnpj'))
+        cleaned_data['numero'] = digits_only(cleaned_data.get('numero'))
+        cleaned_data['fone_contato'] = digits_only(cleaned_data.get('fone_contato'))
+        cleaned_data['cnae'] = digits_only(cleaned_data.get('cnae'))
+        cleaned_data['fpas'] = digits_only(cleaned_data.get('fpas'))
+        cleaned_data['outras_entidades'] = digits_only(cleaned_data.get('outras_entidades'))
+
+        cep_raw = cleaned_data.get('cep')
+        if cep_raw:
+            try:
+                cep = validate_cep(cep_raw)
+                cleaned_data['cep'] = cep
+                cep_data = fetch_cep_data(cep)
+                cleaned_data['endereco'] = cleaned_data.get('endereco') or cep_data['endereco']
+                cleaned_data['bairro'] = cleaned_data.get('bairro') or cep_data['bairro']
+                cleaned_data['cidade'] = cleaned_data.get('cidade') or cep_data['cidade']
+                cleaned_data['uf'] = cleaned_data.get('uf') or cep_data['uf']
+            except ValidationError as exc:
+                self.add_error('cep', exc)
+
+        return cleaned_data

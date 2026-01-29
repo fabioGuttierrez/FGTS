@@ -141,17 +141,17 @@
           
           <div style="padding: 15px; background: #f8f9fa; border-radius: 8px; margin-bottom: 20px;">
             <p class="mb-2">
-              <span>Plano Profissional</span>
-              <strong style="float: right;">R$ 199,00</strong>
+              <span>{{ plan_name }}</span>
+              <strong style="float: right;">R$ {{ amount|floatformat:2 }}</strong>
             </p>
             <p class="mb-0">
               <span>Período</span>
-              <strong style="float: right;">Mensal</strong>
+              <strong style="float: right;">{{ periodicity|title }}</strong>
             </p>
           </div>
           
           <div class="summary-total">
-            R$ 199,00<br>
+            R$ {{ amount|floatformat:2 }}<br>
             <small style="font-size: 0.6em; color: #666;">por mês</small>
           </div>
           

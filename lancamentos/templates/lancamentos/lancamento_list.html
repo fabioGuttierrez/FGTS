@@ -191,6 +191,12 @@
 
             {% if lancamentos %}
             <!-- Toolbar de ações em massa -->
+            {% if relatorio_bloqueado %}
+            <div class="alert alert-warning d-flex align-items-center mb-2" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <div>Relatório desabilitado: {{ relatorio_bloqueio_motivo|default:"Trial expirado e nenhum plano ativo. Assine um plano para gerar relatórios." }}</div>
+            </div>
+            {% endif %}
             <div class="bg-light border-bottom p-3 d-flex justify-content-between align-items-center">
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="selectAll">
@@ -200,7 +206,14 @@
                     <span class="badge bg-primary ms-2" id="selectedCount">0 selecionados</span>
                 </div>
                 <div>
-                    <button type="button" class="btn btn-success" id="gerarRelatorioBtn" disabled>
+                    <button
+                        type="button"
+                        class="btn btn-success"
+                        id="gerarRelatorioBtn"
+                        data-bloqueado="{% if relatorio_bloqueado %}1{% else %}0{% endif %}"
+                        data-bloqueio-motivo="{{ relatorio_bloqueio_motivo|default:"Trial expirado e nenhum plano ativo. Assine um plano para gerar relatórios."|escape }}"
+                        {% if relatorio_bloqueado %}disabled{% endif %}
+                    >
                         <i class="bi bi-file-earmark-bar-graph me-2"></i>Gerar Relatório
                     </button>
                 </div>
@@ -402,6 +415,8 @@
         const currentQuery = window.location.search || '';
         const storedSelection = JSON.parse(sessionStorage.getItem(selectedIdsKey) || '{}');
         let selectedIds = new Set(storedSelection.query === currentQuery ? storedSelection.ids || [] : []);
+        const relatorioBloqueado = gerarRelatorioBtn ? gerarRelatorioBtn.dataset.bloqueado === '1' : false;
+        const bloqueioMotivo = gerarRelatorioBtn ? gerarRelatorioBtn.dataset.bloqueioMotivo : '';
 
         function persistSelection() {
             sessionStorage.setItem(selectedIdsKey, JSON.stringify({ query: currentQuery, ids: Array.from(selectedIds) }));
@@ -421,7 +436,7 @@
             const count = selectedIds.size;
             selectedCountBadge.textContent = count + ' selecionado' + (count !== 1 ? 's' : '');
             if (gerarRelatorioBtn) {
-                gerarRelatorioBtn.disabled = count === 0;
+                gerarRelatorioBtn.disabled = relatorioBloqueado || count === 0;
             }
         }
 
@@ -478,6 +493,11 @@
 
         if (gerarRelatorioBtn) {
             gerarRelatorioBtn.addEventListener('click', function() {
+                if (relatorioBloqueado) {
+                    alert(bloqueioMotivo || 'Relatórios estão desabilitados até que um plano seja contratado.');
+                    return;
+                }
+
                 if (selectedIds.size === 0) {
                     alert('Selecione pelo menos um lançamento.');
                     return;

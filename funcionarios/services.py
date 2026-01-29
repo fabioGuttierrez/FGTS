@@ -5,6 +5,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from django.utils.timezone import make_aware
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from fgtsweb.utils.validators import normalize_upper_ascii, validate_cpf, validate_pis
 from .models import Funcionario
 from empresas.models import Empresa
 from empresas.models_grupo import FuncionarioVinculo
@@ -260,28 +261,28 @@ class FuncionarioImportService:
                     
                     # Preparar dados do funcionário
                     funcionario_data = {
-                        'nome': row_data['NOME'].strip(),
-                        'cpf': row_data['CPF'].strip(),
+                        'nome': normalize_upper_ascii(row_data['NOME'], allow_digits=False),
+                        'cpf': validate_cpf(row_data['CPF']),
                     }
-                    
-                    # Campos opcionais
+
+                    # Campos opcionais com validação/normalização
                     if row_data.get('PIS'):
-                        funcionario_data['pis'] = str(row_data['PIS']).strip()
-                    
+                        funcionario_data['pis'] = validate_pis(row_data['PIS'])
+
                     if row_data.get('CBO'):
-                        funcionario_data['cbo'] = str(row_data['CBO']).strip()
-                    
+                        funcionario_data['cbo'] = normalize_upper_ascii(row_data['CBO'], allow_digits=True)
+
                     if row_data.get('CARTEIRA_PROFISSIONAL'):
-                        funcionario_data['carteira_profissional'] = str(row_data['CARTEIRA_PROFISSIONAL']).strip()
-                    
+                        funcionario_data['carteira_profissional'] = normalize_upper_ascii(row_data['CARTEIRA_PROFISSIONAL'], allow_digits=True)
+
                     if row_data.get('SERIE_CARTEIRA'):
-                        funcionario_data['serie_carteira'] = str(row_data['SERIE_CARTEIRA']).strip()
-                    
+                        funcionario_data['serie_carteira'] = normalize_upper_ascii(row_data['SERIE_CARTEIRA'], allow_digits=True)
+
                     if row_data.get('DATA_NASCIMENTO'):
                         funcionario_data['data_nascimento'] = FuncionarioImportService.parse_date(row_data['DATA_NASCIMENTO'])
-                    
+
                     if row_data.get('OBSERVACAO'):
-                        funcionario_data['observacao'] = str(row_data['OBSERVACAO']).strip()
+                        funcionario_data['observacao'] = normalize_upper_ascii(row_data['OBSERVACAO'], allow_digits=True)
                     
                     # Criar funcionário e vínculo de forma consistente
                     with transaction.atomic():

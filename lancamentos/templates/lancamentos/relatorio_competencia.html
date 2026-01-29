@@ -78,7 +78,18 @@
           {{ form.agrupamento }}
         </div>
         <div class="col-12">
-          <button id="btnGerar" class="btn btn-primary" type="submit">
+          {% if relatorio_bloqueado %}
+          <div class="alert alert-warning d-flex align-items-center mb-2" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <div>{{ relatorio_bloqueio_motivo|default:"Trial expirado e nenhum plano ativo. Assine um plano para gerar relatórios." }}</div>
+          </div>
+          {% endif %}
+          <button
+            id="btnGerar"
+            class="btn btn-primary"
+            type="submit"
+            {% if relatorio_bloqueado %}disabled title="{{ relatorio_bloqueio_motivo|default:'Trial expirado e nenhum plano ativo.'|escape }}"{% endif %}
+          >
             <i class="bi bi-file-bar-graph"></i> Gerar
           </button>
         </div>

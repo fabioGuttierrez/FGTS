@@ -84,9 +84,25 @@
                 <small class="text-warning">
                   ⏰ {{ billing_customer.days_remaining_trial }} dia{{ billing_customer.days_remaining_trial|pluralize }} restante{{ billing_customer.days_remaining_trial|pluralize }}
                 </small>
+                <div class="mt-2">
+                  <a class="btn btn-sm btn-primary" href="{% url 'billing:checkout-plano' %}">
+                    Ir para o checkout
+                  </a>
+                </div>
               {% else %}
                 <div class="h5 mb-0">{{ current_plan.get_plan_type_display|default:"Sem plano" }}</div>
-                {% if current_plan %}<small class="text-muted">R$ {{ current_plan.price_monthly|floatformat:2 }} / mês</small>{% endif %}
+                {% if current_plan %}
+                  <small class="text-muted">R$ {{ current_plan.price_monthly|floatformat:2 }} / mês</small>
+                {% else %}
+                  {% if billing_customer and billing_customer.trial_expires %}
+                    <small class="text-muted">Trial expirou em {{ billing_customer.trial_expires|date:'d/m/Y' }}</small>
+                  {% endif %}
+                  <div class="mt-2">
+                    <a class="btn btn-sm btn-outline-primary" href="{% url 'billing:checkout-plano' %}">
+                      Assinar agora
+                    </a>
+                  </div>
+                {% endif %}
               {% endif %}
             </div>
             <i class="bi bi-credit-card fs-1 {% if billing_customer.trial_active %}text-warning{% else %}text-info{% endif %} opacity-50"></i>

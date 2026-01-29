@@ -1,5 +1,6 @@
 from django import forms
 from decimal import Decimal
+from fgtsweb.utils.validators import normalize_upper_ascii, validate_cpf, validate_pis
 from .models import Funcionario
 from empresas.models import Empresa
 from empresas.models_grupo import FuncionarioVinculo
@@ -56,8 +57,26 @@ class FuncionarioForm(forms.ModelForm):
         # Django 5+ usa dict normal, não OrderedDict; não há garantia de ordem, mas não quebra o form
         # Se quiser garantir ordem, reordene manualmente ou ajuste o template
 
+    def clean_nome(self):
+        nome = self.cleaned_data.get('nome')
+        return normalize_upper_ascii(nome, allow_digits=False)
+
+    def clean_cpf(self):
+        cpf = self.cleaned_data.get('cpf')
+        return validate_cpf(cpf) if cpf else ''
+
+    def clean_pis(self):
+        pis = self.cleaned_data.get('pis')
+        return validate_pis(pis)
+
     def clean(self):
         cleaned_data = super().clean()
+        # Normalização dos demais campos textuais
+        cleaned_data['cbo'] = normalize_upper_ascii(cleaned_data.get('cbo'), allow_digits=True)
+        cleaned_data['carteira_profissional'] = normalize_upper_ascii(cleaned_data.get('carteira_profissional'), allow_digits=True)
+        cleaned_data['serie_carteira'] = normalize_upper_ascii(cleaned_data.get('serie_carteira'), allow_digits=True)
+        if cleaned_data.get('observacao'):
+            cleaned_data['observacao'] = normalize_upper_ascii(cleaned_data.get('observacao'), allow_digits=True)
         # Deixa o model.clean enxergar a empresa/datas antes de salvar
         self.instance._empresa_override = cleaned_data.get('empresa')
         self.instance._data_admissao_override = cleaned_data.get('data_admissao')

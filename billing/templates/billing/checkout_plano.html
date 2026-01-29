@@ -255,12 +255,12 @@
       </div>
     {% endif %}
     
-    <form method="post" id="planForm" action="{% url 'checkout-plano' %}">
+    <form method="post" id="planForm" action="{% url 'billing:checkout-plano' %}">
       {% csrf_token %}
       
       <!-- Cards de Planos -->
       <div class="row g-4 mb-5">
-        <!-- BÁSICO -->
+        <!-- ESSENCIAL -->
         <div class="col-lg-4">
           <div class="plan-card p-4 {% if selected_plan.plan_type == 'BASIC' %}selected{% endif %}" 
                onclick="selectPlan('BASIC')">
@@ -268,24 +268,25 @@
                    {% if selected_plan.plan_type == 'BASIC' %}checked{% endif %} 
                    style="display:none">
             
-            <h4 class="mb-2">Básico</h4>
-            <p class="text-muted mb-3">Para pequenas empresas</p>
+            <h4 class="mb-2">Essencial</h4>
+            <p class="text-muted mb-3">1 CNPJ incluído</p>
             
             <div class="mb-4">
-              <span class="price-large">R$ 99</span>
+              <span class="price-large">R$ 199</span>
               <span class="text-muted"> /mês</span>
             </div>
             
             <ul class="feature-list">
-              <li>Até 50 Colaboradores</li>
-              <li>Dashboard Básico</li>
-              <li>Relatórios Mensais</li>
-              <li>Suporte por e-mail</li>
+              <li>Até 200 colaboradores</li>
+              <li>Até 60 meses de histórico</li>
+              <li>Importação de dados (XLSX)</li>
+              <li>Cálculo de FGTS + JAM</li>
+              <li>Relatórios simples</li>
             </ul>
             
             <button type="button" class="btn-select-plan secondary mt-3" 
                     onclick="event.stopPropagation(); selectAndSubmit('BASIC')">
-              Escolher Plano
+              Escolher Essencial
             </button>
           </div>
         </div>
@@ -300,29 +301,29 @@
                    style="display:none">
             
             <h4 class="mb-2">Profissional</h4>
-            <p class="text-muted mb-3">Para empresas em crescimento</p>
+            <p class="text-muted mb-3">Até 5 CNPJs</p>
             
             <div class="mb-4">
-              <span class="price-large">R$ 199</span>
+              <span class="price-large">R$ 699</span>
               <span class="text-muted"> /mês</span>
             </div>
             
             <ul class="feature-list">
-              <li>Até 200 Colaboradores</li>
-              <li>Dashboard Avançado</li>
-              <li>Relatórios Personalizados</li>
-              <li>Exportação PDF/Excel</li>
-              <li>Suporte Prioritário</li>
+              <li>Até 500 colaboradores</li>
+              <li>Até 120 meses de histórico</li>
+              <li>Importação de dados (XLSX)</li>
+              <li>Cálculo de FGTS + JAM</li>
+              <li>Relatórios detalhados</li>
             </ul>
             
             <button type="button" class="btn-select-plan secondary mt-3" 
                     onclick="event.stopPropagation(); selectAndSubmit('PROFESSIONAL')">
-              Escolher Plano
+              Escolher Profissional
             </button>
           </div>
         </div>
         
-        <!-- EMPRESARIAL -->
+        <!-- ENTERPRISE -->
         <div class="col-lg-4">
           <div class="plan-card p-4 {% if selected_plan.plan_type == 'ENTERPRISE' %}selected{% endif %}" 
                onclick="selectPlan('ENTERPRISE')">
@@ -330,24 +331,24 @@
                    {% if selected_plan.plan_type == 'ENTERPRISE' %}checked{% endif %} 
                    style="display:none">
             
-            <h4 class="mb-2">Empresarial</h4>
-            <p class="text-muted mb-3">Para grandes empresas</p>
+            <h4 class="mb-2">Enterprise</h4>
+            <p class="text-muted mb-3">Sob consulta</p>
             
             <div class="mb-4">
-              <span class="price-large">R$ 399</span>
-              <span class="text-muted"> /mês</span>
+              <span class="price-large">Sob consulta</span>
             </div>
             
             <ul class="feature-list">
-              <li>Colaboradores Ilimitados</li>
-              <li>Dashboard Personalizado</li>
-              <li>API para Integração</li>
-              <li>Suporte 24/7</li>
+              <li>CNPJs ilimitados</li>
+              <li>Funcionários ilimitados</li>
+              <li>Histórico completo</li>
+              <li>Cálculo de FGTS + JAM</li>
+              <li>Relatórios completos e API</li>
             </ul>
             
             <button type="button" class="btn-select-plan secondary mt-3"
                     onclick="event.stopPropagation(); selectAndSubmit('ENTERPRISE')">
-              Escolher Plano
+              Falar com consultor
             </button>
           </div>
         </div>
