@@ -1,6 +1,6 @@
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from dateutil.relativedelta import relativedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Iterable, Tuple
 
 from configuracoes.models import Configuracao
@@ -48,6 +48,80 @@ def acumulado_indices(indices: Iterable[Tuple[date, Decimal]], competencia: date
 
 def aplicar_jam(valor_fgts: Decimal, jam_coef: Decimal) -> Decimal:
     return (valor_fgts * jam_coef).quantize(Decimal('0.01'))
+
+
+def _format_competencia_variants(comp_date: date) -> list[str]:
+    """Retorna representações compatíveis de competência.
+
+    Suporta MM/YYYY (legado) e YYYY-MM (dados Supabase).
+    """
+    return [comp_date.strftime('%m/%Y'), comp_date.strftime('%Y-%m')]
+
+
+def buscar_coef_jam(competencia: date) -> Decimal | None:
+    """Busca o coeficiente JAM para a competência.
+
+    - Tenta formatos MM/YYYY e YYYY-MM.
+    - Se houver múltiplos registros, usa o mais recente por data_pagamento.
+    - Retorna None se não encontrar.
+    """
+    from coefjam.models import CoefJam
+
+    comp_formats = _format_competencia_variants(competencia)
+    coef = (
+        CoefJam.objects
+        .filter(competencia__in=comp_formats)
+        .order_by('-data_pagamento')
+        .first()
+    )
+    if not coef:
+        return None
+    return Decimal(str(coef.valor))
+
+
+def calcular_jam_ate_pagamento(
+    valor_fgts: Decimal,
+    competencia: date,
+    data_pagamento: date,
+    coef_lookup=None,
+) -> tuple[Decimal, list[tuple[date, Decimal, Decimal]], list[date]]:
+    """Calcula JAM composto do mês seguinte à competência até o mês do pagamento.
+
+    - Não aplica JAM no mês da competência.
+    - Aplica coeficientes CoefJam mês a mês; se faltar coeficiente, assume 0 para o mês.
+    - Arredondamento monetário: 2 casas, ROUND_HALF_UP.
+
+    Returns:
+        jam_total: soma dos juros do período.
+        detalhes: lista de (competência, jam_mes, saldo_final_mes).
+        meses_sem_coef: competências sem coeficiente cadastrado.
+    """
+    if valor_fgts is None:
+        return Decimal('0.00'), [], []
+
+    saldo = valor_fgts.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    jam_total = Decimal('0.00')
+    detalhes: list[tuple[date, Decimal, Decimal]] = []
+    meses_sem_coef: list[date] = []
+
+    comp_cursor = competencia.replace(day=1) + relativedelta(months=1)
+    pagamento_comp = data_pagamento.replace(day=1)
+
+    while comp_cursor <= pagamento_comp:
+        coef = coef_lookup(comp_cursor) if coef_lookup else buscar_coef_jam(comp_cursor)
+        if coef is None:
+            detalhes.append((comp_cursor, Decimal('0.00'), saldo))
+            meses_sem_coef.append(comp_cursor)
+            comp_cursor += relativedelta(months=1)
+            continue
+
+        jam_mes = (saldo * coef).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        jam_total += jam_mes
+        saldo = (saldo + jam_mes).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        detalhes.append((comp_cursor, jam_mes, saldo))
+        comp_cursor += relativedelta(months=1)
+
+    return jam_total, detalhes, meses_sem_coef
 
 
 def aplicar_plano_economico_legacy(valor_fgts: Decimal, competencia: date) -> tuple[Decimal, Decimal, Decimal, Decimal]:
@@ -299,17 +373,29 @@ def gerar_memoria_calculo(funcionario_nome: str, funcionario_cpf: str, data_admi
     # Seção 4: Cálculo do JAM (Juros da Mora)
     memoria.append("4. CÁLCULO DO JAM (JUROS DA MORA)")
     memoria.append("-" * 80)
-    
-    # Verifica se é competência de admissão
-    if competencia_str == data_admissao_mes:
-        memoria.append(f"   ⚠️  Competência de Admissão: {competencia_str}")
-        memoria.append(f"   Regra: JAM ZERADO (sem acúmulo anterior de FGTS)")
-        memoria.append(f"   JAM = R$ 0,00")
+
+    # Período correto: do mês seguinte à competência até o mês da data de pagamento
+    comp_dt = None
+    try:
+        comp_dt = datetime.strptime(competencia_str, '%m/%Y').date()
+    except Exception:
+        comp_dt = None
+
+    if comp_dt is None:
+        # Fallback caso formato inesperado; não interrompe geração
+        comp_dt = date(data_pagamento.year, data_pagamento.month, 1)
+
+    inicio_jam = (comp_dt.replace(day=1) + relativedelta(months=1))
+    fim_jam = data_pagamento.replace(day=1)
+
+    if inicio_jam > fim_jam:
+        memoria.append(f"   Pagamento no mesmo mês da competência ({competencia_str}). JAM = R$ 0,00")
     else:
-        memoria.append(f"   Regra: JAM acumulado do período ({data_admissao_mes} até {competencia_str})")
+        periodo_txt = f"{inicio_jam.strftime('%m/%Y')} até {fim_jam.strftime('%m/%Y')}"
+        memoria.append(f"   Regra: JAM acumulado do período ({periodo_txt})")
         memoria.append(f"   O JAM é calculado mês a mês com acúmulo de juros sobre o saldo anterior")
         memoria.append(f"   JAM Total do Período = R$ {valor_jam:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
-    
+
     memoria.append("")
     
     # Seção 5: Resultado Final

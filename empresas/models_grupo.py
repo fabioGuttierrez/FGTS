@@ -6,6 +6,15 @@ class GrupoEmpresa(models.Model):
     cnpj_base = models.CharField(max_length=20, blank=True, null=True)
     data_criacao = models.DateField(auto_now_add=True)
     observacoes = models.TextField(blank=True, null=True)
+    empresa_principal = models.OneToOneField(
+        'empresas.Empresa',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='grupo_principal',
+        verbose_name='Empresa principal do grupo',
+        help_text='Define a empresa proprietária/raiz do grupo para escopo e isolamento.',
+    )
 
     def __str__(self):
         return self.nome
@@ -90,7 +99,7 @@ class TransferenciaFuncionario(models.Model):
     funcionario = models.ForeignKey('funcionarios.Funcionario', on_delete=models.CASCADE)
     empresa_origem = models.ForeignKey('empresas.Empresa', on_delete=models.CASCADE, related_name='transferencias_saida')
     empresa_destino = models.ForeignKey('empresas.Empresa', on_delete=models.CASCADE, related_name='transferencias_entrada')
-    data_transferencia = models.DateField(auto_now_add=True)
+    data_transferencia = models.DateField(blank=True, null=True)
     usuario_responsavel = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
     observacoes = models.TextField(blank=True, null=True)
 

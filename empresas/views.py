@@ -61,6 +61,11 @@ class EmpresaCreateView(LoginRequiredMixin, CreateView):
     template_name = 'empresas/empresa_form.html'
     success_url = reverse_lazy('empresa-list')
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+
     def dispatch(self, request, *args, **kwargs):
         # Usuários autenticados podem criar empresas
         # O trial é gerenciado no form_valid após criação
@@ -80,30 +85,23 @@ class EmpresaCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         usuario = self.request.user
         
-        # Validar limite de empresas em trial (versão simplificada)
+        # Validação de limite de empresas por grupo (plano da matriz)
         from datetime import date, timedelta
-        
-        # Contar empresas do usuário (apenas pela empresa_id direta)
-        empresas_usuario = 0
-        if usuario.empresa_id:  # Usa empresa_id ao invés de .empresa para evitar query desnecessária
-            empresas_usuario = 1
-        
-        # Verificar se tem trial ativo
-        has_trial = False
-        if usuario.empresa_id:
-            has_trial = BillingCustomer.objects.filter(
-                empresa_id=usuario.empresa_id,
-                status='trial',
-                trial_active=True
-            ).exists()
-        
-        # Se está em trial e já tem 1 empresa, bloquear
-        if has_trial and empresas_usuario >= 1:
-            messages.error(
-                self.request, 
-                '❌ Em período de trial você pode cadastrar apenas 1 empresa. Faça upgrade do seu plano para adicionar mais!'
-            )
-            return redirect('empresa-create')
+        grupo = form.cleaned_data.get('grupo')
+        if grupo and grupo.empresa_principal:
+            try:
+                bc = grupo.empresa_principal.billing_customer
+                plan = bc.plan
+                if plan and plan.max_companies is not None:
+                    total_empresas_grupo = grupo.empresas.count()
+                    if total_empresas_grupo >= plan.max_companies:
+                        messages.error(
+                            self.request,
+                            f'❌ Seu plano limita a {plan.max_companies} empresas no grupo. Faça upgrade para adicionar mais CNPJs.'
+                        )
+                        return redirect('empresa-create')
+            except Exception:
+                pass
         
         # Salvar a empresa
         empresa = form.save()
@@ -173,7 +171,7 @@ class EmpresaListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['form'] = EmpresaForm()
+        context['form'] = EmpresaForm(user=self.request.user)
         return context
 
 
@@ -182,6 +180,11 @@ class EmpresaUpdateView(LoginRequiredMixin, UpdateView):
     form_class = EmpresaForm
     template_name = 'empresas/empresa_edit.html'
     success_url = reverse_lazy('dashboard')
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
 
     def get_queryset(self):
         """Permitir editar apenas a empresa vinculada ao usuário"""

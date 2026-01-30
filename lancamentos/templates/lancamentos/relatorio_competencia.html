@@ -163,6 +163,7 @@
                   <th>FGTS Valor</th>
                   <th>Índice</th>
                   <th>Correção</th>
+                  <th>JAM</th>
                   <th>Total</th>
                   <th>Ações</th>
                 </tr>
@@ -178,6 +179,7 @@
                   <td>R$ {{ item.lancamento.valor_fgts }}</td>
                   <td>{{ item.calc.indice }}</td>
                   <td>R$ {{ item.calc.valor_corrigido }}</td>
+                  <td>R$ {{ item.calc.valor_jam }}</td>
                   <td><strong>R$ {{ item.calc.valor_deposito_fgts }}</strong></td>
                   <td>
                     <a href="{% url 'relatorio-memoria-calculo' %}?empresa={{ empresa.pk }}&funcionario={{ item.lancamento.funcionario.pk }}&competencia={{ item.competencia }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}" 
@@ -193,6 +195,7 @@
                 <tr>
                   <th colspan="6" class="text-end">Subtotal {{ grupo_data.label }}:</th>
                   <th>R$ {{ grupo_data.totais.valor_corrigido }}</th>
+                  <th>R$ {{ grupo_data.totais.valor_jam }}</th>
                   <th><strong>R$ {{ grupo_data.totais.valor_deposito_fgts }}</strong></th>
                   <th></th>
                 </tr>
@@ -207,17 +210,21 @@
           <div class="card-body">
             <h5 class="card-title">💰 Totais Gerais</h5>
             <div class="row">
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <strong>Valor sem juros:</strong><br>
                 <h4>R$ {{ totais.valor_fgts }}</h4>
               </div>
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <strong>Correção Total:</strong><br>
                 <h4>R$ {{ totais.valor_corrigido }}</h4>
               </div>
-              <div class="col-md-4">
-                <strong>Valor com juros:</strong><br>
-                <h3>R$ {{ totais.total }}</h3>
+              <div class="col-md-3">
+                <strong>JAM (juros da mora):</strong><br>
+                <h4>R$ {{ totais.valor_jam }}</h4>
+              </div>
+              <div class="col-md-3">
+                <strong>Total (sem JAM):</strong><br>
+                <h3>R$ {{ totais.valor_deposito_fgts }}</h3>
               </div>
             </div>
           </div>
@@ -235,6 +242,7 @@
                   <th>FGTS Valor</th>
                   <th>Índice</th>
                   <th>Correção</th>
+                  <th>JAM</th>
                   <th>Total</th>
                   <th>Ações</th>
                 </tr>
@@ -249,6 +257,7 @@
                 <td>R$ {{ item.lancamento.valor_fgts }}</td>
                 <td>{{ item.calc.indice }}</td>
                 <td>R$ {{ item.calc.valor_corrigido }}</td>
+                <td>R$ {{ item.calc.valor_jam }}</td>
                 <td><strong>R$ {{ item.calc.valor_deposito_fgts }}</strong></td>
                 <td>
                   <a href="{% url 'relatorio-memoria-calculo' %}?empresa={{ empresa.pk }}&funcionario={{ item.lancamento.funcionario.pk }}&competencia={{ item.competencia }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}" 
@@ -263,8 +272,9 @@
             <tfoot>
               <tr class="table-secondary">
                 <th class="text-end" colspan="6">Totais:</th>
-                <th>R$ {{ totais.valor_corrigido }}</th>
-                <th><strong>R$ {{ totais.valor_deposito_fgts }}</strong></th>
+                  <th>R$ {{ totais.valor_corrigido }}</th>
+                  <th>R$ {{ totais.valor_jam }}</th>
+                  <th><strong>R$ {{ totais.valor_deposito_fgts }}</strong></th>
                 <th></th>
               </tr>
             </tfoot>

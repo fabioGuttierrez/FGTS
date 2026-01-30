@@ -25,6 +25,8 @@ from .services.calculo import (
     get_config_numeric,
     get_config_str,
     aplicar_plano_economico_legacy,
+    calcular_jam_ate_pagamento,
+    buscar_coef_jam,
 )
 from .services.importacao import LancamentoImportService
 from .services.competencia_13 import Competencia13Service
@@ -616,8 +618,8 @@ class RelatorioCompetenciaView(FormView):
             for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'valor_deposito_fgts', 'total']:
                 if k in calc:
                     grupos[chave]['totais'][k] += calc[k]
-            if 'valor_deposito_fgts' in grupos[chave]['totais']:
-                grupos[chave]['totais']['total'] = grupos[chave]['totais']['valor_deposito_fgts']
+            # Total exibido = depósito corrigido (sem somar JAM)
+            grupos[chave]['totais']['total'] = grupos[chave]['totais']['valor_deposito_fgts']
         
         # Ordenar grupos
         if agrupamento == 'ano':
@@ -776,9 +778,14 @@ class RelatorioCompetenciaView(FormView):
 
         resultados = []
         totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'valor_deposito_fgts', 'total']}
+        meses_sem_coef_aviso: set[date] = set()
+        coef_cache: dict[date, Decimal | None] = {}
 
-        # JAM desabilitado para relatórios/exportações
-        jam_coef = Decimal('0')
+        def _get_coef(comp_date: date) -> Decimal | None:
+            comp_key = comp_date.replace(day=1)
+            if comp_key not in coef_cache:
+                coef_cache[comp_key] = buscar_coef_jam(comp_key)
+            return coef_cache[comp_key]
 
         comp_display = competencia_norm
         if parcela_13 == 1:
@@ -798,9 +805,17 @@ class RelatorioCompetenciaView(FormView):
                 competencia_date,
             )
 
-            # JAM desativado
-            valor_jam = Decimal('0.00')
-            jam_state[funcionario_key]['acumulado'] = jam_state[funcionario_key]['acumulado'] + valor_fgts_ajustado
+            valor_jam, _detalhes_jam, meses_sem_coef = calcular_jam_ate_pagamento(
+                valor_fgts=valor_fgts_ajustado,
+                competencia=competencia_date,
+                data_pagamento=data_pagamento,
+                coef_lookup=_get_coef,
+            )
+
+            if meses_sem_coef:
+                meses_sem_coef_aviso.update(meses_sem_coef)
+
+            jam_state[funcionario_key]['acumulado'] = jam_state[funcionario_key]['acumulado'] + valor_fgts_ajustado + valor_jam
 
             calc = calcular_fgts_atualizado(
                 valor_fgts=valor_fgts_ajustado,
@@ -828,8 +843,11 @@ class RelatorioCompetenciaView(FormView):
                 if k in calc:
                     totais[k] += calc[k]
 
-            if 'valor_deposito_fgts' in calc:
-                totais['total'] = totais['valor_deposito_fgts']
+        if meses_sem_coef_aviso:
+            meses_txt = ', '.join(sorted({m.strftime('%m/%Y') for m in meses_sem_coef_aviso}))
+            avisos.append(
+                f"⚠️ Coeficiente JAM ausente para: {meses_txt}. Cálculo desses meses considerado como 0."
+            )
 
         return resultados, totais, None, jam_state, avisos
 
@@ -1010,7 +1028,6 @@ class RelatorioCompetenciaView(FormView):
             for chave, grupo_data in resultados_agrupados:
                 for k in totais.keys():
                     totais[k] += grupo_data['totais'][k]
-            totais['total'] = totais['valor_deposito_fgts']
 
             competencias_display = [format_comp_display(c['competencia'], c.get('parcela_13')) for c in competencias_list]
             competencias_param = [f"{c['competencia']}|{c.get('parcela_13') or ''}" for c in competencias_list]
@@ -1467,7 +1484,6 @@ def export_relatorio_competencia_csv(request):
         for k in totais.keys():
             totais[k] += tot.get(k, Decimal('0'))
 
-    totais['total'] = totais['valor_deposito_fgts']
 
     if not resultados:
         mensagem = first_error or 'Nenhum lançamento encontrado para os filtros aplicados.'
@@ -2205,14 +2221,18 @@ def download_memoria_calculo(request):
         competencia_date,
     )
 
-    # JAM desativado nos relatórios/exportações
-    valor_jam = Decimal('0.00')
+    # JAM composto até a data de pagamento
+    valor_jam, _detalhes_jam, meses_sem_coef = calcular_jam_ate_pagamento(
+        valor_fgts=valor_fgts_ajustado,
+        competencia=competencia_date,
+        data_pagamento=data_pagamento,
+    )
 
     # Calcula depósito correto e correção (Depósito - FGTS do mês)
     base_fgts = lancamento.base_fgts or valor_fgts_ajustado
     valor_deposito_fgts = (base_fgts * indice_valor).quantize(Decimal('0.01'))
     valor_corrigido = (valor_deposito_fgts - valor_fgts_ajustado).quantize(Decimal('0.01'))
-    total = valor_deposito_fgts
+    total = (valor_deposito_fgts + valor_jam).quantize(Decimal('0.01'))
     
     # Formata data de admissão para competência
     data_admissao_mes = funcionario.data_admissao.strftime('%m/%Y')

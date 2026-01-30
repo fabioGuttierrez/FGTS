@@ -12,6 +12,10 @@ class Empresa(models.Model):
 	# por compatibilidade no código, mapeando para a coluna correta.
 	codigo = models.AutoField(primary_key=True, db_column='id')
 	grupo = models.ForeignKey('GrupoEmpresa', null=True, blank=True, on_delete=models.SET_NULL, related_name='empresas', verbose_name='Grupo Econômico')
+	# Deriva a noção de matriz: a empresa é matriz se for a empresa_principal do grupo
+	@property
+	def is_matriz(self):
+		return bool(self.grupo and self.grupo.empresa_principal_id == self.codigo)
 	nome = models.CharField(max_length=255, verbose_name='Nome')
 	cnpj = models.CharField(max_length=20, unique=True, verbose_name='CNPJ')
 	endereco = models.CharField(max_length=255, blank=True, verbose_name='Endereço')

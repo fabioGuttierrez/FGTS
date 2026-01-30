@@ -71,6 +71,14 @@ class Plan(models.Model):
         validators=[MinValueValidator(0)],
         verbose_name='Preço Anual'
     )
+
+    # Limite de empresas por grupo (matriz + filiais); None = ilimitado
+    max_companies = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Máximo de Empresas no Grupo',
+        help_text='Deixe em branco para ilimitado'
+    )
     
     # Meta
     active = models.BooleanField(default=True, verbose_name='Ativo')

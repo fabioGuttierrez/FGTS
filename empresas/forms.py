@@ -1,11 +1,13 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from fgtsweb.utils.validators import (
     digits_only,
     fetch_cep_data,
     normalize_upper_ascii,
     validate_cep,
 )
+from fgtsweb.mixins import get_allowed_empresa_ids
 from .models import Empresa
 from .models_grupo import GrupoEmpresa
 
@@ -35,6 +37,31 @@ class EmpresaForm(forms.ModelForm):
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
             'paga_13_aniversario': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if 'grupo' in self.fields:
+            allowed = get_allowed_empresa_ids(user)
+            qs = GrupoEmpresa.objects.all()
+            if allowed is None:
+                pass
+            elif not allowed:
+                qs = GrupoEmpresa.objects.none()
+            else:
+                qs = qs.filter(
+                    Q(empresa_principal__codigo__in=allowed) |
+                    Q(empresas__codigo__in=allowed)
+                ).distinct()
+            self.fields['grupo'].queryset = qs
+
+        # Se o usuário é matriz de algum grupo, pré-selecionar o grupo dele
+        if user and getattr(user, 'empresa', None):
+            try:
+                grupo_user = getattr(user.empresa, 'grupo', None)
+                if grupo_user:
+                    self.fields['grupo'].initial = grupo_user
+            except Exception:
+                pass
 
     def clean(self):
         cleaned_data = super().clean()

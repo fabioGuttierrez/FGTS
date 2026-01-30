@@ -67,7 +67,7 @@
     </div>
 
     <div class="mb-5">
-      <h3 class="mb-3">Empresas do Grupo Econômico</h3>
+      <h3 class="mb-3">Empresas do mesmo Grupo Econômico</h3>
       <ul class="mb-3">
         {% for emp in empresa.grupo.empresas.all %}
           <li>{{ emp.nome }} ({{ emp.cnpj }})</li>

@@ -88,6 +88,35 @@
 
         <!-- Body -->
         <div class="card-body p-4">
+            <form method="get" class="row g-3 mb-4">
+                <div class="col-lg-4 col-md-6">
+                    <label class="form-label text-muted small">Buscar por nome/CPF/PIS</label>
+                    <input type="text" name="q" value="{{ filtro_busca }}" class="form-control" placeholder="Digite para buscar">
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label text-muted small">Empresa</label>
+                    <select name="empresa" class="form-select">
+                        <option value="">Todas</option>
+                        {% for emp in empresas_permitidas %}
+                            <option value="{{ emp.codigo }}" {% if emp.codigo|stringformat:'s' == filtro_empresa %}selected{% endif %}>{{ emp.nome }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label text-muted small">Status</label>
+                    <select name="status" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="ativo" {% if filtro_status == 'ativo' %}selected{% endif %}>Ativos</option>
+                        <option value="demitido" {% if filtro_status == 'demitido' %}selected{% endif %}>Demitidos</option>
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-6 d-flex align-items-end">
+                    <div class="d-flex gap-2 w-100">
+                        <button type="submit" class="btn btn-primary w-100">Filtrar</button>
+                        <a href="?" class="btn btn-outline-secondary" title="Limpar filtros">Limpar</a>
+                    </div>
+                </div>
+            </form>
             {% if funcionarios %}
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
@@ -100,7 +129,7 @@
                             <th class="py-3 px-4 fw-bold text-dark text-nowrap" style="width: 120px;">Admissão</th>
                             <th class="py-3 px-4 fw-bold text-dark text-nowrap" style="width: 120px;">Demissão</th>
                             <th class="py-3 px-4 fw-bold text-dark text-nowrap" style="width: 140px;">Status</th>
-                            <th class="py-3 px-4 fw-bold text-dark text-nowrap" style="width: 140px;">Ações</th>
+                            <th class="py-3 px-4 fw-bold text-dark text-nowrap" style="width: 200px;">Ações</th>
                         </tr>
                     </thead>
                     <tbody class="border-top-0">
@@ -160,6 +189,11 @@
                                     <a href="{% url 'funcionario-delete' funcionario.id %}" class="btn btn-outline-danger" title="Excluir" data-bs-toggle="tooltip">
                                         <i class="bi bi-trash"></i>
                                     </a>
+                                    {% if can_transfer_funcionario %}
+                                    <a href="{% url 'funcionario-transferir' funcionario.id %}" class="btn btn-outline-secondary" title="Transferir" data-bs-toggle="tooltip">
+                                        <i class="bi bi-arrow-left-right"></i>
+                                    </a>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>

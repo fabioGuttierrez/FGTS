@@ -93,12 +93,14 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 from datetime import date
                 if date.today() > billing_customer.trial_expires:
                     billing_customer.trial_active = False
-                    billing_customer.status = 'pending'
+                    if billing_customer.status == 'trial':
+                        billing_customer.status = 'pending'
                     billing_customer.save()
             if billing_customer.trial_active:
                 current_plan = billing_customer.plan
+            elif billing_customer.status == 'active' and billing_customer.plan:
+                current_plan = billing_customer.plan
             else:
-                # Se não tem assinatura ativa, não mostrar plano premium
                 current_plan = None
         else:
             current_plan = PricingPlan.objects.filter(active=True).order_by('sort_order', '-updated_at').first()

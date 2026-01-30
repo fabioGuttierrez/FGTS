@@ -1,5 +1,7 @@
 print('DEBUG: Arquivo views.py carregado', flush=True)
 from django.shortcuts import render, redirect
+from django.db import models
+from django.db.models import OuterRef, Subquery
 from django.urls import reverse_lazy
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.views.generic.list import ListView
@@ -12,6 +14,7 @@ from django.utils.decorators import method_decorator
 from fgtsweb.mixins import EmpresaScopeMixin, get_allowed_empresa_ids, is_empresa_allowed, get_active_empresa_ids
 from .models import Funcionario
 from .forms import FuncionarioForm
+from .forms_transferencia import TransferenciaFuncionarioForm
 from .services import FuncionarioImportService
 from empresas.models import Empresa
 from billing.models import BillingCustomer
@@ -19,6 +22,7 @@ from io import BytesIO
 from django.core.cache import cache
 from django.views.generic.detail import DetailView
 from empresas.models_grupo import TransferenciaFuncionario, FuncionarioVinculo
+from usuarios.models import EmpresaUsuarioRole
 
 class FuncionarioCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
     model = Funcionario
@@ -89,36 +93,63 @@ class FuncionarioListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
     paginate_by = 20
 
     def get_queryset(self):
-        # Sempre retorna todos os funcionários antes do filtro
         qs = Funcionario.objects.all()
         user = self.request.user
-        if user.is_superuser or user.is_staff:
-            return qs
-        empresa_id = None
-        if hasattr(user, 'empresa_id') and user.empresa_id:
-            empresa_id = user.empresa_id
-        elif hasattr(user, 'empresas_permitidas') and user.empresas_permitidas.exists():
-            empresa_id = user.empresas_permitidas.first().codigo
-        print(f"DEBUG: empresa_id usado no filtro: {empresa_id}", flush=True)
+        allowed = get_allowed_empresa_ids(user)
+
+        # Escopo por empresas permitidas (inclui grupo para matriz)
+        if allowed is not None:
+            if not allowed:
+                return qs.none()
+            qs = qs.filter(vinculos__empresa_id__in=allowed)
+
+        # Filtros de UI
+        empresa_id = self.request.GET.get('empresa')
         if empresa_id:
-            # Testa o nome do related_name: vinculos
-            return qs.filter(vinculos__empresa_id=empresa_id).distinct()
-        return qs.none()
+            qs = qs.filter(vinculos__empresa_id=empresa_id)
+
+        status = self.request.GET.get('status')
+        if status == 'ativo':
+            qs = qs.filter(vinculos__data_demissao__isnull=True)
+        elif status == 'demitido':
+            qs = qs.filter(vinculos__data_demissao__isnull=False)
+
+        busca = self.request.GET.get('q')
+        if busca:
+            qs = qs.filter(
+                models.Q(nome__icontains=busca) |
+                models.Q(cpf__icontains=busca) |
+                models.Q(pis__icontains=busca)
+            )
+
+        return qs.distinct()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # ...existing code...
         queryset = self.get_queryset()
-        context['ativos_count'] = queryset.filter(vinculos__data_demissao__isnull=True).distinct().count()
-        context['demitidos_count'] = queryset.filter(vinculos__data_demissao__isnull=False).distinct().count()
-        context['total_count'] = queryset.count()
+
+        # Contagem baseada no vínculo mais recente (evita duplicar quem tem histórico antigo ativo)
+        latest_vinculo = FuncionarioVinculo.objects.filter(
+            funcionario=OuterRef('pk')
+        ).order_by('-data_admissao', '-id')
+
+        annotated = queryset.annotate(
+            ultima_demissao=Subquery(latest_vinculo.values('data_demissao')[:1])
+        )
+
+        context['ativos_count'] = annotated.filter(ultima_demissao__isnull=True).count()
+        context['demitidos_count'] = annotated.filter(ultima_demissao__isnull=False).count()
+        context['total_count'] = annotated.count()
         context['form'] = FuncionarioForm()
         allowed_ids = get_allowed_empresa_ids(self.request.user)
         if allowed_ids is None:
             empresas = Empresa.objects.all()
         else:
             empresas = Empresa.objects.filter(codigo__in=allowed_ids)
-        context['empresas_permitidas'] = empresas.values('codigo', 'nome')
+        context['empresas_permitidas'] = empresas
+        context['filtro_empresa'] = self.request.GET.get('empresa', '')
+        context['filtro_status'] = self.request.GET.get('status', '')
+        context['filtro_busca'] = self.request.GET.get('q', '')
         # Permissões de recursos para botões de ação
         from empresas.models_feature import empresa_tem_recurso
         empresa = None
@@ -155,31 +186,16 @@ class FuncionarioListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
 
         context['can_add_funcionario'] = can_add
         context['can_gerar_relatorio'] = can_report
-        return context
-        context['form'] = FuncionarioForm()
-        allowed_ids = get_allowed_empresa_ids(self.request.user)
-        if allowed_ids is None:
-            empresas = Empresa.objects.all()
+        # Permissão para transferir: superuser/staff ou admin (role) em ao menos uma empresa permitida
+        if user.is_superuser or user.is_staff:
+            context['can_transfer_funcionario'] = True
         else:
-            empresas = Empresa.objects.filter(codigo__in=allowed_ids)
-        context['empresas_permitidas'] = empresas.values('codigo', 'nome')
-        # Permissões de recursos para botões de ação
-        from empresas.models_feature import empresa_tem_recurso
-        empresa = None
-        user = self.request.user
-        if not (user.is_superuser or user.is_staff):
-            if user.empresa_id:
-                try:
-                    empresa = Empresa.objects.get(pk=user.empresa_id)
-                except (Empresa.DoesNotExist, Exception):
-                    empresa = None
-            if not empresa:
-                try:
-                    empresa = user.empresas_permitidas.first()
-                except Exception:
-                    empresa = None
-        context['can_add_funcionario'] = empresa_tem_recurso(empresa, 'criar_funcionario')
-        context['can_gerar_relatorio'] = empresa_tem_recurso(empresa, 'gerar_relatorio')
+            permitted_ids = list(allowed_ids) if allowed_ids is not None else []
+            context['can_transfer_funcionario'] = EmpresaUsuarioRole.objects.filter(
+                usuario=user,
+                role=EmpresaUsuarioRole.ADMIN,
+                empresa_id__in=permitted_ids
+            ).exists() if permitted_ids else False
         return context
 
 
@@ -345,13 +361,34 @@ class FuncionarioDetailView(LoginRequiredMixin, EmpresaScopeMixin, DetailView):
 class FuncionarioTransferenciaView(LoginRequiredMixin, EmpresaScopeMixin, View):
     template_name = 'funcionarios/funcionario_transferencia.html'
 
+    def _verificar_permissao(self, request, funcionario):
+        # Superuser/staff têm acesso
+        if request.user.is_superuser or request.user.is_staff:
+            return True
+        empresa_origem = funcionario.empresa
+        if not empresa_origem:
+            return False
+        # Precisa estar no escopo (inclui grupo para matriz)
+        if not is_empresa_allowed(request.user, empresa_origem.codigo):
+            return False
+        # Precisa ser admin da empresa origem
+        return EmpresaUsuarioRole.objects.filter(
+            usuario=request.user,
+            empresa=empresa_origem,
+            role=EmpresaUsuarioRole.ADMIN
+        ).exists()
+
     def get(self, request, pk):
         funcionario = Funcionario.objects.get(pk=pk)
+        if not self._verificar_permissao(request, funcionario):
+            return HttpResponseForbidden('Acesso restrito ao administrador da empresa de origem.')
         form = TransferenciaFuncionarioForm(funcionario)
         return render(request, self.template_name, {'form': form, 'funcionario': funcionario})
 
     def post(self, request, pk):
         funcionario = Funcionario.objects.get(pk=pk)
+        if not self._verificar_permissao(request, funcionario):
+            return HttpResponseForbidden('Acesso restrito ao administrador da empresa de origem.')
         form = TransferenciaFuncionarioForm(funcionario, request.POST)
         if form.is_valid():
             empresa_origem = funcionario.empresa
@@ -371,6 +408,7 @@ class FuncionarioTransferenciaView(LoginRequiredMixin, EmpresaScopeMixin, View):
                 funcionario=funcionario,
                 empresa=empresa_destino,
                 data_admissao=data_transferencia,
+                data_transferencia=data_transferencia,
                 cargo=cargo,
                 salario=salario,
                 observacoes=observacoes
@@ -380,6 +418,7 @@ class FuncionarioTransferenciaView(LoginRequiredMixin, EmpresaScopeMixin, View):
                 funcionario=funcionario,
                 empresa_origem=empresa_origem,
                 empresa_destino=empresa_destino,
+                data_transferencia=data_transferencia,
                 usuario_responsavel=request.user,
                 observacoes=observacoes
             )

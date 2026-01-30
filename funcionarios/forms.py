@@ -54,6 +54,16 @@ class FuncionarioForm(forms.ModelForm):
             label='Data de Demissão',
             widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
         )
+        # Pré-popula dados do vínculo atual ao editar
+        instance = getattr(self, 'instance', None)
+        if instance and getattr(instance, 'pk', None):
+            vinculo = instance.vinculo_atual()
+            if vinculo:
+                self.fields['empresa'].initial = vinculo.empresa
+                self.fields['data_admissao'].initial = vinculo.data_admissao
+                self.fields['data_demissao'].initial = vinculo.data_demissao
+                if vinculo.salario:
+                    self.fields['salario_inicial'].initial = vinculo.salario
         # Django 5+ usa dict normal, não OrderedDict; não há garantia de ordem, mas não quebra o form
         # Se quiser garantir ordem, reordene manualmente ou ajuste o template
 
@@ -89,8 +99,14 @@ class FuncionarioForm(forms.ModelForm):
         data_admissao = self.cleaned_data['data_admissao']
         data_demissao = self.cleaned_data.get('data_demissao')
         salario = self.cleaned_data.get('salario_inicial')
-        # Cria vínculo se não existir para este período
-        if not funcionario.vinculos.filter(empresa=empresa, data_admissao=data_admissao).exists():
+        # Atualiza vínculo atual (mesma empresa) ou cria novo se necessário
+        vinculo = funcionario.vinculo_atual()
+        if vinculo and vinculo.empresa == empresa:
+            vinculo.data_admissao = data_admissao
+            vinculo.data_demissao = data_demissao
+            vinculo.salario = salario or None
+            vinculo.save()
+        elif not funcionario.vinculos.filter(empresa=empresa, data_admissao=data_admissao).exists():
             FuncionarioVinculo.objects.create(
                 funcionario=funcionario,
                 empresa=empresa,

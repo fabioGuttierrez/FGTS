@@ -3,8 +3,9 @@ from .models_grupo import GrupoEmpresa, FuncionarioVinculo, TransferenciaFuncion
 
 @admin.register(GrupoEmpresa)
 class GrupoEmpresaAdmin(admin.ModelAdmin):
-    list_display = ("nome", "cnpj_base", "data_criacao")
+    list_display = ("nome", "cnpj_base", "empresa_principal", "data_criacao")
     search_fields = ("nome", "cnpj_base")
+    autocomplete_fields = ("empresa_principal",)
 
 @admin.register(FuncionarioVinculo)
 class FuncionarioVinculoAdmin(admin.ModelAdmin):
