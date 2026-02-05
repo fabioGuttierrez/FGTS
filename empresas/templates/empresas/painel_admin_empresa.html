@@ -70,7 +70,7 @@
       <h3 class="mb-3">Empresas do mesmo Grupo Econômico</h3>
       <ul class="mb-3">
         {% for emp in empresa.grupo.empresas.all %}
-          <li>{{ emp.nome }} ({{ emp.cnpj }})</li>
+          <li><strong>Código {{ emp.codigo|default:emp.id }}</strong> - {{ emp.nome }} ({{ emp.cnpj }})</li>
         {% endfor %}
       </ul>
       <a href="{% url 'empresa-cadastrar' %}" class="btn btn-secondary">Cadastrar nova empresa ao grupo</a>
