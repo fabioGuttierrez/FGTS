@@ -1,4 +1,5 @@
 import logging
+import traceback
 from django.utils.deprecation import MiddlewareMixin
 from django.contrib.auth.signals import user_logged_in, user_logged_out
 from django.dispatch import receiver
@@ -101,10 +102,67 @@ class AuditLogsMiddleware(MiddlewareMixin):
         request.view_func = view_func
         request.view_kwargs = view_kwargs
         return None
+
+    def process_exception(self, request, exception):
+        """Registra exceções não tratadas (HTTP 500) com stacktrace.
+
+        Isso resolve o principal gap do audit log atual: ele registrava o 500,
+        mas sem a causa. Aqui tentamos capturar tipo/mensagem + traceback.
+        """
+
+        if not self.should_log_request(request.path):
+            return None
+
+        # Evitar duplicidade: process_response pode rodar depois
+        setattr(request, '_audit_exception_logged', True)
+
+        path = request.path
+        method = getattr(request, 'method', '')
+        module = get_module_from_path(path)
+        user = getattr(request, 'user', None)
+        ip = getattr(request, 'client_ip', '')
+        user_agent = getattr(request, 'user_agent', '')
+
+        try:
+            match = resolve(path)
+            view_name = f"{match.app_name}:{match.url_name}" if match.app_name else match.url_name
+        except Exception:
+            view_name = ''
+
+        error_message = f"{exception.__class__.__name__}: {exception}"
+        tb = ''.join(traceback.format_exception(type(exception), exception, exception.__traceback__))
+        tb_truncated = tb[-12000:]  # limita tamanho para não inflar o banco
+
+        # Sempre logar no logger para também cair em arquivo/console
+        logger.exception("Erro 500 não tratado em %s %s (%s)", method, path, view_name)
+
+        try:
+            AuditLog.objects.create(
+                user=user if getattr(user, 'is_authenticated', False) else None,
+                action='OTHER',
+                module=module,
+                view_name=view_name,
+                url_path=path,
+                ip_address=ip,
+                user_agent=user_agent,
+                method=method,
+                status_code=500,
+                object_repr=f"EXCEPTION {method} {path}",
+                description=tb_truncated,
+                error_message=error_message,
+            )
+        except Exception as e:
+            logger.error("Erro ao registrar exceção no AuditLog: %s", str(e))
+
+        return None
     
     def process_response(self, request, response):
         """Registra a resposta após processar a view"""
         if not self.should_log_request(request.path):
+            return response
+
+        # Se já registramos a exceção, não duplicar no process_response
+        if getattr(request, '_audit_exception_logged', False):
             return response
         
         # Registrar requisições de alteração (POST, PUT, DELETE)

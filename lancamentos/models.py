@@ -16,6 +16,14 @@ class Lancamento(models.Model):
 	
 	empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='lancamentos')
 	funcionario = models.ForeignKey(Funcionario, on_delete=models.CASCADE, related_name='lancamentos')
+	vinculo = models.ForeignKey(
+		'empresas.FuncionarioVinculo',
+		on_delete=models.PROTECT,
+		null=True,
+		blank=True,
+		related_name='lancamentos',
+		help_text='Opcional. Identifica a "cadeira" (vínculo) do funcionário para esta competência.'
+	)
 	competencia = models.CharField(max_length=7)  # Ex: MM/YYYY ou 13/YYYY para 13º
 	parcela_13 = models.PositiveSmallIntegerField(
 		null=True, 
@@ -46,6 +54,18 @@ class Lancamento(models.Model):
 		1. Registrar automaticamente quando marcar como pago
 		2. Atualizar lançamentos posteriores quando houver mudança na base_fgts (cascata de reajuste)
 		"""
+		# Garantir consistência do vínculo (quando informado)
+		if self.vinculo_id:
+			if not self.empresa_id:
+				self.empresa_id = self.vinculo.empresa_id
+			if not self.funcionario_id:
+				self.funcionario_id = self.vinculo.funcionario_id
+			# Se usuário tentou salvar inconsistente, força coerência
+			if self.empresa_id != self.vinculo.empresa_id:
+				self.empresa_id = self.vinculo.empresa_id
+			if self.funcionario_id != self.vinculo.funcionario_id:
+				self.funcionario_id = self.vinculo.funcionario_id
+
 		# Detectar se é uma edição e se a base_fgts mudou
 		base_fgts_mudou = False
 		if self.pk:  # Se já existe no banco (edição)
@@ -77,6 +97,15 @@ class Lancamento(models.Model):
 
 	def clean(self):
 		super().clean()
+
+		# Se vínculo foi informado, derive empresa/funcionário dele
+		if self.vinculo_id:
+			if self.empresa_id and self.empresa_id != self.vinculo.empresa_id:
+				raise ValidationError({'vinculo': 'Vínculo não pertence à empresa selecionada.'})
+			if self.funcionario_id and self.funcionario_id != self.vinculo.funcionario_id:
+				raise ValidationError({'vinculo': 'Vínculo não pertence ao funcionário selecionado.'})
+			self.empresa_id = self.vinculo.empresa_id
+			self.funcionario_id = self.vinculo.funcionario_id
 
 		if not self.competencia:
 			return
@@ -122,10 +151,12 @@ class Lancamento(models.Model):
 			mes, ano = map(int, self.competencia.split('/'))
 			data_atual = datetime(ano, mes, 1)
 			
-			# Buscar todos os lançamentos posteriores do mesmo funcionário
-			lancamentos_posteriores = Lancamento.objects.filter(
-				funcionario=self.funcionario
-			).order_by('competencia')
+			# Buscar todos os lançamentos posteriores do mesmo funcionário (ou do mesmo vínculo, quando aplicável)
+			filtro = {'funcionario': self.funcionario}
+			if self.vinculo_id:
+				filtro = {'vinculo_id': self.vinculo_id}
+
+			lancamentos_posteriores = Lancamento.objects.filter(**filtro).order_by('competencia')
 			
 			# Filtrar apenas os meses posteriores ao atual
 			for lancamento in lancamentos_posteriores:
@@ -150,7 +181,7 @@ class Lancamento(models.Model):
 			pass
 	
 	@staticmethod
-	def obter_base_fgts_anterior(funcionario, competencia_str):
+	def obter_base_fgts_anterior(funcionario, competencia_str, vinculo=None):
 		"""
 		Obtém a base FGTS do mês anterior.
 		Se não encontrar, retorna None e o sistema usa o mês anterior recursivamente.
@@ -162,17 +193,18 @@ class Lancamento(models.Model):
 			data_anterior = data_atual - relativedelta(months=1)
 			competencia_anterior = data_anterior.strftime('%m/%Y')
 			
-			lancamento_anterior = Lancamento.objects.filter(
-				funcionario=funcionario,
-				competencia=competencia_anterior
-			).first()
+			filtro = {'funcionario': funcionario, 'competencia': competencia_anterior}
+			if vinculo is not None:
+				filtro = {'vinculo': vinculo, 'competencia': competencia_anterior}
+
+			lancamento_anterior = Lancamento.objects.filter(**filtro).first()
 			
 			if lancamento_anterior:
 				return lancamento_anterior.base_fgts
 			else:
 				# Se não encontrou, tenta o mês anterior ao anterior
 				if data_anterior.month > 1 or data_anterior.year > 2020:
-					return Lancamento.obter_base_fgts_anterior(funcionario, competencia_anterior)
+					return Lancamento.obter_base_fgts_anterior(funcionario, competencia_anterior, vinculo=vinculo)
 		except:
 			pass
 		
@@ -181,5 +213,6 @@ class Lancamento(models.Model):
 	class Meta:
 		verbose_name = 'Lançamento'
 		verbose_name_plural = 'Lançamentos'
-		# Permite apenas um lançamento por funcionário por competência/parcela
-		unique_together = ('funcionario', 'competencia', 'parcela_13')
+		# Permite mais de um lançamento no mesmo mês para o mesmo CPF, desde que seja em vínculos diferentes.
+		# Mantém compatibilidade com registros legados (vinculo nulo).
+		unique_together = ('empresa', 'funcionario', 'competencia', 'parcela_13', 'vinculo')

@@ -13,7 +13,7 @@ from django.views.decorators.http import require_http_methods
 from django.utils.decorators import method_decorator
 from fgtsweb.mixins import EmpresaScopeMixin, get_allowed_empresa_ids, is_empresa_allowed, get_active_empresa_ids
 from .models import Funcionario
-from .forms import FuncionarioForm
+from .forms import FuncionarioForm, FuncionarioVinculoForm
 from .forms_transferencia import TransferenciaFuncionarioForm
 from .services import FuncionarioImportService
 from empresas.models import Empresa
@@ -357,6 +357,49 @@ class FuncionarioDetailView(LoginRequiredMixin, EmpresaScopeMixin, DetailView):
         context = super().get_context_data(**kwargs)
         context['historico_vinculos'] = self.object.historico_vinculos()
         return context
+
+
+class FuncionarioVinculoCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
+    """Cria um novo vínculo (cadeira) para um funcionário existente."""
+
+    model = FuncionarioVinculo
+    form_class = FuncionarioVinculoForm
+    template_name = 'funcionarios/funcionario_vinculo_form.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.funcionario = Funcionario.objects.get(pk=kwargs['pk'])
+
+        # Garantir que o usuário tem acesso ao funcionário pelo escopo de empresas permitidas.
+        allowed = get_allowed_empresa_ids(request.user)
+        if allowed is not None and not (request.user.is_staff or request.user.is_superuser):
+            if not self.funcionario.vinculos.filter(empresa_id__in=allowed).exists():
+                return HttpResponseForbidden('Você não tem permissão para criar vínculo para este funcionário.')
+
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['funcionario'] = self.funcionario
+        return context
+
+    def form_valid(self, form):
+        vinculo = form.save(commit=False)
+        vinculo.funcionario = self.funcionario
+
+        if not is_empresa_allowed(self.request.user, vinculo.empresa.codigo):
+            return HttpResponseForbidden('Você não tem permissão para criar vínculo nesta empresa.')
+
+        vinculo.save()
+        messages.success(
+            self.request,
+            f'✅ Vínculo criado: {self.funcionario.nome} — {vinculo.empresa.nome} (Matrícula {vinculo.matricula}).'
+        )
+        return redirect('funcionario-detail', pk=self.funcionario.pk)
 
 class FuncionarioTransferenciaView(LoginRequiredMixin, EmpresaScopeMixin, View):
     template_name = 'funcionarios/funcionario_transferencia.html'

@@ -78,7 +78,8 @@ class LancamentoCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
             return HttpResponseForbidden('Empresa não permitida para este usuário.')
         
         lancamento = form.save()  # Já calcula valor_fgts no save() do formulário
-        messages.success(self.request, f'✅ Lançamento para {lancamento.funcionario.nome} ({lancamento.competencia}) registrado com sucesso!')
+        vinculo_label = f" (matrícula {lancamento.vinculo.matricula})" if getattr(lancamento, 'vinculo', None) and lancamento.vinculo.matricula else ""
+        messages.success(self.request, f'✅ Lançamento para {lancamento.funcionario.nome}{vinculo_label} ({lancamento.competencia}) registrado com sucesso!')
         return super().form_valid(form)
 
 
@@ -101,7 +102,8 @@ class LancamentoUpdateView(LoginRequiredMixin, EmpresaScopeMixin, UpdateView):
             return HttpResponseForbidden('Empresa não permitida para este usuário.')
         
         lancamento = form.save()
-        messages.success(self.request, f'✅ Lançamento para {lancamento.funcionario.nome} ({lancamento.competencia}) atualizado com sucesso!')
+        vinculo_label = f" (matrícula {lancamento.vinculo.matricula})" if getattr(lancamento, 'vinculo', None) and lancamento.vinculo.matricula else ""
+        messages.success(self.request, f'✅ Lançamento para {lancamento.funcionario.nome}{vinculo_label} ({lancamento.competencia}) atualizado com sucesso!')
         return super().form_valid(form)
 
 
@@ -120,7 +122,7 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         from django.db.models.functions import Substr, Cast
         import datetime
 
-        qs = super().get_queryset().select_related('empresa', 'funcionario')
+        qs = super().get_queryset().select_related('empresa', 'funcionario', 'vinculo')
         qs = qs.annotate(
             ano_comp=Case(
                 When(
@@ -143,6 +145,8 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         competencia = self.request.GET.get('competencia', '').strip()
         funcionario_id = self.request.GET.get('funcionario', '').strip()
         empresa_id = self.request.GET.get('empresa', '').strip()
+        matricula = self.request.GET.get('matricula', '').strip()
+        vinculo_id = self.request.GET.get('vinculo', '').strip()
         ano = self.request.GET.get('ano', '').strip()
         status_pagto = self.request.GET.get('status_pagto', '').strip()
 
@@ -155,6 +159,12 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
 
         if empresa_id:
             qs = qs.filter(empresa_id=empresa_id)
+
+        if vinculo_id:
+            qs = qs.filter(vinculo_id=vinculo_id)
+
+        if matricula:
+            qs = qs.filter(vinculo__matricula__icontains=matricula)
 
         if status_pagto in ['pago', 'nao_pago']:
             qs = qs.filter(pago=(status_pagto == 'pago'))
@@ -204,9 +214,26 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
                 Q(data_demissao__isnull=True) | Q(data_demissao__gte=OuterRef('competencia_date'))
             )
         )
-        qs = qs.annotate(vinculo_ativo=vinculo_exists).filter(vinculo_ativo=True)
 
-        return qs
+        qs = qs.annotate(vinculo_legado_ativo=vinculo_exists)
+
+        vinculo_ativo_explicito = Case(
+            When(
+                condition=(
+                    Q(vinculo__isnull=False)
+                    & Q(vinculo__data_admissao__lte=F('competencia_date'))
+                    & (Q(vinculo__data_demissao__isnull=True) | Q(vinculo__data_demissao__gte=F('competencia_date')))
+                ),
+                then=Value(True),
+            ),
+            When(
+                condition=Q(vinculo__isnull=True) & Q(vinculo_legado_ativo=True),
+                then=Value(True),
+            ),
+            default=Value(False),
+            output_field=models.BooleanField(),
+        )
+        qs = qs.annotate(vinculo_ativo=vinculo_ativo_explicito).filter(vinculo_ativo=True)
 
         # Ordenação
         ordem = self.request.GET.get('ordem', '-competencia').strip()
@@ -298,6 +325,8 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         context['competencia_filtro'] = self.request.GET.get('competencia', '')
         context['funcionario_filtro'] = self.request.GET.get('funcionario', '')
         context['empresa_filtro'] = self.request.GET.get('empresa', '')
+        context['matricula_filtro'] = self.request.GET.get('matricula', '')
+        context['vinculo_filtro'] = self.request.GET.get('vinculo', '')
         context['ano_filtro'] = self.request.GET.get('ano', '')
         context['status_pagto_filtro'] = self.request.GET.get('status_pagto', '')
         context['ordem_filtro'] = self.request.GET.get('ordem', '-competencia')
@@ -320,27 +349,27 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         context['relatorio_bloqueio_motivo'] = bloqueio_ctx['feature_block_reason']
         context['empresa_contexto'] = empresa_contexto
 
-        # Construir um dicionário com a última competência de cada funcionário
-        # e marcar quais lançamentos são a última competência
+        # Construir um dicionário com a última competência de cada vínculo (ou funcionário, para legados)
         ultimas_competencias = {}
         lancamentos_list = context.get('lancamentos', [])
 
         for lancamento in lancamentos_list:
-            func_id = lancamento.funcionario.id
-            if func_id not in ultimas_competencias:
-                # Buscar a última competência deste funcionário
-                ultimo = Lancamento.objects.filter(
-                    funcionario_id=func_id
-                ).order_by('-competencia').first()
+            key = ('v', lancamento.vinculo_id) if getattr(lancamento, 'vinculo_id', None) else ('f', lancamento.funcionario_id)
+            if key not in ultimas_competencias:
+                filtro = {'funcionario_id': lancamento.funcionario_id}
+                if getattr(lancamento, 'vinculo_id', None):
+                    filtro = {'vinculo_id': lancamento.vinculo_id}
+
+                ultimo = Lancamento.objects.filter(**filtro).order_by('-competencia').first()
                 if ultimo:
-                    ultimas_competencias[func_id] = ultimo.competencia
+                    ultimas_competencias[key] = ultimo.competencia
 
         # Adicionar flag is_ultima_competencia a cada lançamento
         for lancamento in lancamentos_list:
-            func_id = lancamento.funcionario.id
+            key = ('v', lancamento.vinculo_id) if getattr(lancamento, 'vinculo_id', None) else ('f', lancamento.funcionario_id)
             lancamento.is_ultima_competencia = (
-                func_id in ultimas_competencias and 
-                lancamento.competencia == ultimas_competencias[func_id]
+                key in ultimas_competencias and 
+                lancamento.competencia == ultimas_competencias[key]
             )
 
         # Buscar a data da última atualização da tabela indices_fgts (SupabaseIndice)
@@ -478,6 +507,94 @@ class GerarLancamentosAutomaticosView(LoginRequiredMixin, EmpresaScopeMixin, Vie
         return redirect('lancamento-list')
 
 
+class GerarLancamentosAutomaticosVinculoView(LoginRequiredMixin, EmpresaScopeMixin, View):
+    """Gera lançamentos automáticos para um vínculo específico (cadeira)."""
+
+    def post(self, request, vinculo_id):
+        from empresas.models_grupo import FuncionarioVinculo
+
+        try:
+            vinculo = FuncionarioVinculo.objects.select_related('empresa', 'funcionario').get(id=vinculo_id)
+            empresa = vinculo.empresa
+            funcionario = vinculo.funcionario
+
+            if not is_empresa_allowed(request.user, empresa.codigo):
+                messages.error(request, '❌ Você não tem permissão para gerar lançamentos para este vínculo.')
+                return redirect('lancamento-list')
+
+            # Se vínculo tem demissão, respeitar limite
+            data_limite = datetime.now()
+            if vinculo.data_demissao:
+                data_limite = datetime.combine(vinculo.data_demissao, datetime.min.time())
+
+            ultimo_lancamento = Lancamento.objects.filter(vinculo=vinculo).order_by('-competencia').first()
+            if not ultimo_lancamento:
+                messages.error(request, '❌ Este vínculo não possui nenhum lançamento. Crie o primeiro lançamento manualmente.')
+                return redirect('lancamento-list')
+
+            mes, ano = map(int, ultimo_lancamento.competencia.split('/'))
+            data_ultimo = datetime(ano, mes, 1)
+
+            lancamentos_criados = 0
+            lancamentos_13_criados = 0
+            data_atual = data_ultimo + relativedelta(months=1)
+            base_fgts_anterior = ultimo_lancamento.base_fgts
+
+            while data_atual <= data_limite:
+                competencia = data_atual.strftime('%m/%Y')
+
+                if not Lancamento.objects.filter(vinculo=vinculo, competencia=competencia, parcela_13__isnull=True).exists():
+                    Lancamento.objects.create(
+                        empresa=empresa,
+                        funcionario=funcionario,
+                        vinculo=vinculo,
+                        competencia=competencia,
+                        base_fgts=base_fgts_anterior,
+                        valor_fgts=base_fgts_anterior * Decimal('0.08'),
+                        pago=False,
+                    )
+                    lancamentos_criados += 1
+
+                data_atual += relativedelta(months=1)
+
+            ano_inicio = data_ultimo.year
+            ano_fim = min(datetime.now().year, data_limite.year)
+
+            for ano_ref in range(ano_inicio, ano_fim + 1):
+                competencias_13 = Competencia13Service.gerar_competencias_13(empresa, ano_ref, funcionario)
+                for comp_str, parcela in competencias_13:
+                    if not Lancamento.objects.filter(vinculo=vinculo, competencia=comp_str, parcela_13=parcela).exists():
+                        base_13_total = base_fgts_anterior
+                        primeira_parcela_valor = base_13_total * Decimal('0.5')
+                        base_13 = primeira_parcela_valor if parcela == 1 else (base_13_total - primeira_parcela_valor)
+                        Lancamento.objects.create(
+                            empresa=empresa,
+                            funcionario=funcionario,
+                            vinculo=vinculo,
+                            competencia=comp_str,
+                            parcela_13=parcela,
+                            base_fgts=base_13,
+                            valor_fgts=base_13 * Decimal('0.08'),
+                            pago=False,
+                        )
+                        lancamentos_13_criados += 1
+
+            if lancamentos_criados:
+                messages.success(request, f'✅ {lancamentos_criados} lançamento(s) mensal(is) gerado(s) para {funcionario.nome} (matrícula {vinculo.matricula or vinculo.pk})!')
+            else:
+                messages.info(request, f'ℹ️ Todos os lançamentos deste vínculo já estão cadastrados até hoje.')
+
+            if lancamentos_13_criados:
+                messages.success(request, f'✅ {lancamentos_13_criados} lançamento(s) de 13º gerado(s) para este vínculo!')
+
+        except FuncionarioVinculo.DoesNotExist:
+            messages.error(request, '❌ Vínculo não encontrado.')
+        except Exception as e:
+            messages.error(request, f'❌ Erro ao gerar lançamentos: {str(e)}')
+
+        return redirect('lancamento-list')
+
+
 class RelatorioCompetenciaView(FormView):
     def normalizar_competencia(self, comp):
         """Aceita 'MM/YYYY', 'YYYY-MM' ou 'YYYY/MM' e retorna sempre 'MM/YYYY'."""
@@ -583,7 +700,7 @@ class RelatorioCompetenciaView(FormView):
         return ctx
 
     def _agrupar_resultados(self, resultados, agrupamento):
-        """Agrupa resultados por competência, ano ou funcionário"""
+        """Agrupa resultados por competência, ano, funcionário ou vínculo"""
         from collections import defaultdict
         
         grupos = defaultdict(lambda: {
@@ -607,6 +724,15 @@ class RelatorioCompetenciaView(FormView):
             elif agrupamento == 'funcionario':
                 chave = lancamento.funcionario.pk
                 label = f"{lancamento.funcionario.nome} - {lancamento.funcionario.cpf}"
+            elif agrupamento == 'vinculo':
+                if getattr(lancamento, 'vinculo_id', None):
+                    chave = f"vinc_{lancamento.vinculo_id}"
+                    matricula = (getattr(lancamento.vinculo, 'matricula', None) or '').strip()
+                    matricula_label = matricula if matricula else str(lancamento.vinculo_id)
+                    label = f"{lancamento.funcionario.nome} — matrícula {matricula_label}"
+                else:
+                    chave = f"func_{lancamento.funcionario.pk}"
+                    label = f"{lancamento.funcionario.nome} - {lancamento.funcionario.cpf} (sem vínculo)"
             else:  # competencia
                 chave = f"{competencia_raw}|{parcela_13}"
                 label = competencia_label
@@ -632,12 +758,12 @@ class RelatorioCompetenciaView(FormView):
                 except Exception:
                     return datetime(1900, 1, 1).date()
             grupos_ordenados = sorted(grupos.items(), key=lambda x: parse_comp_key(x[0]))
-        else:  # funcionario
+        else:  # funcionario/vinculo
             grupos_ordenados = sorted(grupos.items(), key=lambda x: grupos[x[0]]['label'])
         
         return grupos_ordenados
 
-    def _compute_for(self, empresa, competencia_str, parcela_13, data_pagamento, funcionario=None, jam_state=None):
+    def _compute_for(self, empresa, competencia_str, parcela_13, data_pagamento, funcionario=None, matricula=None, jam_state=None):
         import time
         from django.db.models import Q
         inicio_timestamp = time.time()
@@ -712,15 +838,21 @@ class RelatorioCompetenciaView(FormView):
             .filter(empresa=empresa)
             .filter(filtro_comp)
             .filter(parcela_13=parcela_13, pago=False)
-            .select_related('funcionario')
-            .order_by('funcionario_id'))
+            .select_related('funcionario', 'vinculo')
+            .order_by('funcionario_id', 'vinculo_id'))
         if funcionario:
             lancs_qs = lancs_qs.filter(funcionario=funcionario)
+        if matricula:
+            lancs_qs = lancs_qs.filter(vinculo__matricula__iexact=str(matricula).strip())
 
-        # Filtrar por vínculo ativo na competência usando método centralizado
-        from empresas.models_grupo import FuncionarioVinculo
+        # Filtrar por vínculo ativo na competência
         lancamentos_filtrados = []
         for l in lancs_qs:
+            if getattr(l, 'vinculo_id', None):
+                if l.vinculo and l.vinculo.empresa_id == empresa.pk and l.vinculo.is_ativo_em_competencia(competencia_norm):
+                    lancamentos_filtrados.append(l)
+                continue
+
             vinculos = getattr(l.funcionario, 'vinculos', None)
             if not vinculos:
                 continue
@@ -793,11 +925,15 @@ class RelatorioCompetenciaView(FormView):
         elif parcela_13 == 2:
             comp_display = f"{competencia_norm} (13º 2ª)"
 
-        for l in lancs_qs:
-            funcionario_key = f"func_{l.funcionario.pk}"
+        for l in lancamentos_filtrados:
+            jam_key = None
+            if getattr(l, 'vinculo_id', None):
+                jam_key = f"vinc_{l.vinculo_id}"
+            else:
+                jam_key = f"func_{l.funcionario.pk}"
 
-            if funcionario_key not in jam_state:
-                jam_state[funcionario_key] = {'acumulado': Decimal('0.00')}
+            if jam_key not in jam_state:
+                jam_state[jam_key] = {'acumulado': Decimal('0.00')}
 
             # Ajuste de plano econômico legado (multiplica e divide conforme VB6)
             valor_fgts_ajustado, fator_mult, fator_div, fator_liquido = aplicar_plano_economico_legacy(
@@ -815,7 +951,7 @@ class RelatorioCompetenciaView(FormView):
             if meses_sem_coef:
                 meses_sem_coef_aviso.update(meses_sem_coef)
 
-            jam_state[funcionario_key]['acumulado'] = jam_state[funcionario_key]['acumulado'] + valor_fgts_ajustado + valor_jam
+            jam_state[jam_key]['acumulado'] = jam_state[jam_key]['acumulado'] + valor_fgts_ajustado + valor_jam
 
             calc = calcular_fgts_atualizado(
                 valor_fgts=valor_fgts_ajustado,
@@ -879,6 +1015,7 @@ class RelatorioCompetenciaView(FormView):
                     for c in competencias_multi.splitlines() if c.strip()
                 ])
             funcionario = form.cleaned_data.get('funcionario')
+            matricula = (form.cleaned_data.get('matricula') or '').strip()
             agrupamento = form.cleaned_data.get('agrupamento', 'competencia')
             if form.cleaned_data['data_pagamento']:
                 data_pagamento = form.cleaned_data['data_pagamento']
@@ -931,6 +1068,8 @@ class RelatorioCompetenciaView(FormView):
                 )
                 if funcionario:
                     lancamentos_qs = lancamentos_qs.filter(funcionario=funcionario)
+                if matricula:
+                    lancamentos_qs = lancamentos_qs.filter(vinculo__matricula__iexact=matricula)
 
                 competencias_list = list(
                     lancamentos_qs.values('competencia', 'parcela_13')
@@ -981,7 +1120,7 @@ class RelatorioCompetenciaView(FormView):
             for comp_data in competencias_list:
                 comp = comp_data['competencia']
                 parc = comp_data.get('parcela_13')
-                res, tot, err, jam_state, avisos = self._compute_for(empresa, comp, parc, data_pagamento, funcionario, jam_state)
+                res, tot, err, jam_state, avisos = self._compute_for(empresa, comp, parc, data_pagamento, funcionario, matricula or None, jam_state)
                 # Se houver erro (ex: índice ausente), registrar aviso e seguir para próxima competência
                 if err:
                     comp_display = f"{comp} (13º {parc})" if parc else comp
@@ -1004,6 +1143,7 @@ class RelatorioCompetenciaView(FormView):
                 filtros_info = f"<br><strong>Filtros utilizados:</strong>"\
                     f"<br>Empresa: {empresa.nome} (ID: {empresa.pk})"\
                     f"<br>Funcionário: {funcionario.nome if funcionario else 'Todos'}"\
+                    f"<br>Matrícula: {matricula or '—'}"\
                     f"<br>Competências: {', '.join([c['competencia'] for c in competencias_list])}"\
                     f"<br>Data de Pagamento: {data_pagamento.strftime('%d/%m/%Y')}"\
                     f"<br>Status: Não Pago (pago=False)"
@@ -1040,6 +1180,7 @@ class RelatorioCompetenciaView(FormView):
                 'form': form,
                 'empresa': empresa,
                 'funcionario': funcionario,
+                'matricula': matricula or None,
                 'competencias': competencias_display,
                 'competencias_param': competencias_param,
                 'competencia_primeira': competencia_primeira,
@@ -1085,7 +1226,7 @@ def relatorio_por_ids(request):
         return HttpResponse('Nenhum lançamento selecionado.', status=400)
 
     # Buscar lançamentos pelos IDs e apenas não pagos
-    lancamentos = Lancamento.objects.filter(id__in=ids, pago=False).select_related('empresa', 'funcionario')
+    lancamentos = Lancamento.objects.filter(id__in=ids, pago=False).select_related('empresa', 'funcionario', 'vinculo')
     if not lancamentos.exists():
         return HttpResponse('Nenhum lançamento encontrado.', status=404)
 
@@ -1253,6 +1394,7 @@ def export_relatorio_competencia_csv(request):
     competencia_unica = request.GET.get('competencia', '')
     competencia_unica = request.GET.get('competencia', '')
     funcionario_id = request.GET.get('funcionario')
+    matricula = (request.GET.get('matricula') or '').strip()
     data_pagamento_str = request.GET.get('data_pagamento')
     agrupamento = request.GET.get('agrupamento', 'competencia')
     ids_str = request.GET.get('ids', '').strip()
@@ -1286,7 +1428,7 @@ def export_relatorio_competencia_csv(request):
         from indices.services.indice_service import IndiceFGTSService
         data_pagamento = IndiceFGTSService.obter_ultima_data_base() or date.today()
 
-        lancamentos = Lancamento.objects.filter(id__in=ids, pago=False).select_related('empresa', 'funcionario')
+        lancamentos = Lancamento.objects.filter(id__in=ids, pago=False).select_related('empresa', 'funcionario', 'vinculo')
         if not lancamentos.exists():
             return HttpResponse('Nenhum lançamento encontrado.', status=404)
 
@@ -1381,7 +1523,7 @@ def export_relatorio_competencia_csv(request):
                 return f"{label}"
             return f"Competência: {label}"
 
-        writer.writerow(['Empresa', 'Competência', 'Funcionário', 'Empresa do Vínculo', 'Admissão', 'Demissão', 'Base FGTS', 'FGTS Valor', 'Índice', 'Correção', 'Total'])
+        writer.writerow(['Empresa', 'Competência', 'Funcionário', 'Matrícula', 'ID Vínculo', 'Empresa do Vínculo', 'Admissão', 'Demissão', 'Base FGTS', 'FGTS Valor', 'Índice', 'Correção', 'Total'])
 
         for _chave, grupo in resultados_agrupados:
             writer.writerow([])
@@ -1392,12 +1534,9 @@ def export_relatorio_competencia_csv(request):
                 c = item['calc']
                 comp_out = item.get('competencia_display', item.get('competencia'))
                 funcionario = l.funcionario
-                vinculo = funcionario.vinculos.filter(
-                    empresa=l.empresa,
-                    data_admissao__lte=l.competencia,
-                ).order_by('-data_admissao').first()
-                if vinculo and vinculo.data_demissao and vinculo.data_demissao < l.competencia:
-                    vinculo = None
+                vinculo = l.vinculo
+                if not vinculo:
+                    vinculo = funcionario.vinculos.filter(empresa=l.empresa).order_by('-data_admissao').first()
                 empresa_vinculo = vinculo.empresa.nome if vinculo else l.empresa.nome
                 data_admissao = vinculo.data_admissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_admissao else ''
                 data_demissao = vinculo.data_demissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_demissao else ''
@@ -1405,6 +1544,8 @@ def export_relatorio_competencia_csv(request):
                     empresa.nome,
                     comp_out,
                     funcionario.nome,
+                    (vinculo.matricula if vinculo and vinculo.matricula else ''),
+                    (vinculo.pk if vinculo else ''),
                     empresa_vinculo,
                     data_admissao,
                     data_demissao,
@@ -1442,6 +1583,8 @@ def export_relatorio_competencia_csv(request):
         lancamentos_qs = Lancamento.objects.filter(empresa=empresa, pago=False)
         if funcionario:
             lancamentos_qs = lancamentos_qs.filter(funcionario=funcionario)
+        if matricula:
+            lancamentos_qs = lancamentos_qs.filter(vinculo__matricula__iexact=matricula)
         
         competencias_unicas = (
             lancamentos_qs.values('competencia', 'parcela_13')
@@ -1473,7 +1616,7 @@ def export_relatorio_competencia_csv(request):
         comp = comp_dict['competencia']
         parcela_13 = comp_dict.get('parcela_13')
         
-        res, tot, err, jam_state, _avisos = view._compute_for(empresa, comp, parcela_13, data_pagamento, funcionario, jam_state)
+        res, tot, err, jam_state, _avisos = view._compute_for(empresa, comp, parcela_13, data_pagamento, funcionario, matricula or None, jam_state)
         if err:
             if first_error is None:
                 first_error = err
@@ -1505,7 +1648,7 @@ def export_relatorio_competencia_csv(request):
             return f"{label}"
         return f"Competência: {label}"
     
-    writer.writerow(['Empresa', 'Competência', 'Funcionário', 'Empresa do Vínculo', 'Admissão', 'Demissão', 'Base FGTS', 'FGTS Valor', 'Índice', 'Correção', 'Total'])
+    writer.writerow(['Empresa', 'Competência', 'Funcionário', 'Matrícula', 'ID Vínculo', 'Empresa do Vínculo', 'Admissão', 'Demissão', 'Base FGTS', 'FGTS Valor', 'Índice', 'Correção', 'Total'])
 
     for _chave, grupo in resultados_agrupados:
         writer.writerow([])
@@ -1516,13 +1659,9 @@ def export_relatorio_competencia_csv(request):
             c = item['calc']
             comp_out = item.get('competencia_display', item.get('competencia'))
             funcionario = l.funcionario
-            # Buscar vínculo do funcionário para a competência do lançamento
-            vinculo = funcionario.vinculos.filter(
-                empresa=l.empresa,
-                data_admissao__lte=l.competencia,
-            ).order_by('-data_admissao').first()
-            if vinculo and vinculo.data_demissao and vinculo.data_demissao < l.competencia:
-                vinculo = None
+            vinculo = l.vinculo
+            if not vinculo:
+                vinculo = funcionario.vinculos.filter(empresa=l.empresa).order_by('-data_admissao').first()
             empresa_vinculo = vinculo.empresa.nome if vinculo else l.empresa.nome
             data_admissao = vinculo.data_admissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_admissao else ''
             data_demissao = vinculo.data_demissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_demissao else ''
@@ -1530,6 +1669,8 @@ def export_relatorio_competencia_csv(request):
                 empresa.nome,
                 comp_out,
                 funcionario.nome,
+                (vinculo.matricula if vinculo and vinculo.matricula else ''),
+                (vinculo.pk if vinculo else ''),
                 empresa_vinculo,
                 data_admissao,
                 data_demissao,
@@ -1572,6 +1713,7 @@ def export_relatorio_competencia_pdf(request):
     competencias_multi = request.GET.get('competencias', '')
     competencia_unica = request.GET.get('competencia', '')
     funcionario_id = request.GET.get('funcionario')
+    matricula = (request.GET.get('matricula') or '').strip()
     data_pagamento_str = request.GET.get('data_pagamento')
     agrupamento = request.GET.get('agrupamento', 'competencia')
     ids_str = request.GET.get('ids', '').strip()
@@ -1604,7 +1746,7 @@ def export_relatorio_competencia_pdf(request):
         from indices.services.indice_service import IndiceFGTSService
         data_pagamento = IndiceFGTSService.obter_ultima_data_base() or date.today()
 
-        lancamentos = Lancamento.objects.filter(id__in=ids, pago=False).select_related('empresa', 'funcionario')
+        lancamentos = Lancamento.objects.filter(id__in=ids, pago=False).select_related('empresa', 'funcionario', 'vinculo')
         if not lancamentos.exists():
             return HttpResponse('Nenhum lançamento encontrado.', status=404)
 
@@ -1684,12 +1826,15 @@ def export_relatorio_competencia_pdf(request):
         if not resultados:
             return HttpResponse('Nenhum resultado calculado para os lançamentos selecionados.', status=404)
 
-        # Agrupar resultados por funcionário (modelo legado)
+        # Agrupar resultados por vínculo (quando disponível) para evitar ambiguidade
         from collections import defaultdict
         grupos_func = defaultdict(list)
         for item in resultados:
-            funcionario = item['lancamento'].funcionario
-            grupos_func[funcionario.id].append(item)
+            l = item['lancamento']
+            if getattr(l, 'vinculo_id', None):
+                grupos_func[f"vinc_{l.vinculo_id}"].append(item)
+            else:
+                grupos_func[f"func_{l.funcionario_id}"].append(item)
 
         def _format_money(valor):
             try:
@@ -1768,12 +1913,7 @@ def export_relatorio_competencia_pdf(request):
         for idx, (func_id, itens) in enumerate(grupos_func.items()):
             itens.sort(key=lambda x: _parse_comp(x.get('competencia') or x['lancamento'].competencia))
             funcionario = itens[0]['lancamento'].funcionario
-
-            comp_date = _parse_comp(itens[0]['lancamento'].competencia)
-            vinculo = funcionario.vinculos.filter(
-                empresa=empresa,
-                data_admissao__lte=comp_date,
-            ).order_by('-data_admissao').first()
+            vinculo = itens[0]['lancamento'].vinculo
 
             data_adm = vinculo.data_admissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_admissao else ''
             data_nasc = funcionario.data_nascimento.strftime('%d/%m/%Y') if funcionario.data_nascimento else ''
@@ -1781,11 +1921,12 @@ def export_relatorio_competencia_pdf(request):
             serie = funcionario.serie_carteira or ''
             cbo = funcionario.cbo or ''
             pis = funcionario.pis or ''
+            matricula_label = (vinculo.matricula if vinculo and vinculo.matricula else '')
 
             funcionario_header = Table(
                 [
                     [
-                        Paragraph(f"{funcionario.id}  {funcionario.nome}", normal_style),
+                        Paragraph(f"{funcionario.id}  {funcionario.nome}" + (f" (Matrícula {matricula_label})" if matricula_label else ""), normal_style),
                         Paragraph(f"Data Adm {data_adm}", normal_style),
                         Paragraph(f"C.B.O. {cbo}", normal_style),
                         Paragraph(f"Data Nasc {data_nasc}", normal_style),
@@ -1808,10 +1949,14 @@ def export_relatorio_competencia_pdf(request):
             story.append(funcionario_header)
             story.append(Spacer(1, 4))
 
-            table_data = [["Comp.", "13º", "Base FGTS", "Valor FGTS", "Valor Depósito", "Índice CEF"]]
+            # JAM é um assunto distinto da correção/depósito FGTS.
+            # No PDF, exibimos o JAM separado e não o somamos ao depósito.
+            table_data = [["Comp.", "13º", "Base FGTS", "Valor FGTS", "Correção", "JAM", "Total", "Índice CEF"]]
 
             total_fgts = Decimal('0')
-            total_calculado = Decimal('0')
+            total_deposito_sem_jam = Decimal('0')
+            total_jam = Decimal('0')
+            total_recolher = Decimal('0')
 
             for item in itens:
                 l = item['lancamento']
@@ -1820,24 +1965,38 @@ def export_relatorio_competencia_pdf(request):
                 parcela_13 = l.parcela_13 or 0
                 col_13 = "13º 1ª" if parcela_13 == 1 else "13º 2ª" if parcela_13 == 2 else ""
                 valor_fgts = c.get('valor_fgts', l.valor_fgts)
-                valor_deposito = c['total']
+                valor_deposito_sem_jam = c.get('valor_deposito_fgts')
+                valor_correcao = c.get('valor_corrigido')
+                valor_jam = c.get('valor_jam', Decimal('0'))
+                valor_total = c.get('total')
+                if valor_deposito_sem_jam is None:
+                    # Fallback seguro (não deve acontecer se calc estiver completo)
+                    valor_deposito_sem_jam = (Decimal(str(valor_fgts)) + Decimal(str(valor_correcao or 0))).quantize(Decimal('0.01'))
+                if valor_correcao is None:
+                    valor_correcao = (Decimal(str(valor_deposito_sem_jam)) - Decimal(str(valor_fgts))).quantize(Decimal('0.01'))
+                if valor_total is None:
+                    valor_total = (Decimal(str(valor_deposito_sem_jam)) + Decimal(str(valor_jam))).quantize(Decimal('0.01'))
                 indice = c.get('indice', '')
 
                 total_fgts += Decimal(str(valor_fgts))
-                total_calculado += Decimal(str(valor_deposito))
+                total_deposito_sem_jam += Decimal(str(valor_deposito_sem_jam))
+                total_jam += Decimal(str(valor_jam))
+                total_recolher += Decimal(str(valor_total))
 
                 table_data.append([
                     comp_label,
                     col_13,
                     _format_money(l.base_fgts),
                     _format_money(valor_fgts),
-                    _format_money(valor_deposito),
+                    _format_money(valor_correcao),
+                    _format_money(valor_jam),
+                    _format_money(valor_total),
                     _format_indice(indice) if indice != '' else '',
                 ])
 
             table = Table(
                 table_data,
-                colWidths=[20*mm, 10*mm, 30*mm, 30*mm, 35*mm, 35*mm],
+                colWidths=[18*mm, 10*mm, 27*mm, 23*mm, 22*mm, 18*mm, 22*mm, 30*mm],
                 hAlign='LEFT',
                 repeatRows=1,
             )
@@ -1865,8 +2024,15 @@ def export_relatorio_competencia_pdf(request):
                         "",
                         "",
                         "",
-                        Paragraph("Total do F.G.T.S. Calculado", normal_style),
-                        Paragraph(_format_money(total_calculado), normal_style),
+                        Paragraph("Total Depósito (sem JAM)", normal_style),
+                        Paragraph(_format_money(total_deposito_sem_jam), normal_style),
+                    ],
+                    [
+                        "",
+                        "",
+                        "",
+                        Paragraph("Total JAM (juros)", normal_style),
+                        Paragraph(_format_money(total_jam), normal_style),
                     ],
                     [
                         "",
@@ -1880,7 +2046,7 @@ def export_relatorio_competencia_pdf(request):
                         "",
                         "",
                         Paragraph("TOTAL A RECOLHER", styles['Heading4']),
-                        Paragraph(_format_money(total_calculado), styles['Heading4']),
+                        Paragraph(_format_money(total_recolher), styles['Heading4']),
                     ],
                 ],
                 colWidths=[35*mm, 30*mm, 10*mm, 55*mm, 30*mm],
@@ -2029,6 +2195,7 @@ def export_relatorio_competencia_pdf(request):
                 "Base FGTS",
                 "FGTS Valor",
                 "Correção",
+                "JAM",
                 "Total",
             ]
         ]
@@ -2055,7 +2222,8 @@ def export_relatorio_competencia_pdf(request):
                 f"{l.base_fgts}",
                 f"{c.get('valor_fgts', l.valor_fgts)}",
                 f"{c['valor_corrigido']}",
-                f"{c['total']}",
+                f"{c.get('valor_jam', Decimal('0.00'))}",
+                f"{c.get('total') or (c.get('valor_deposito_fgts', Decimal('0.00')) + c.get('valor_jam', Decimal('0.00')))}",
             ])
 
         # Ajustar colWidths para caber em 170mm (A4 útil)
@@ -2063,7 +2231,7 @@ def export_relatorio_competencia_pdf(request):
         # Ajustar colWidths para 8 colunas (sem admissão)
         table = Table(
             table_data,
-            colWidths=[24*mm, 40*mm, 24*mm, 22*mm, 20*mm, 22*mm, 28*mm],
+            colWidths=[22*mm, 36*mm, 22*mm, 20*mm, 18*mm, 18*mm, 16*mm, 18*mm],
             hAlign='LEFT',
             repeatRows=1,
             splitByRow=1,
@@ -2089,20 +2257,25 @@ def export_relatorio_competencia_pdf(request):
 
     story.append(Spacer(1, 10))
     story.append(Paragraph("Totais", subtitle_style))
+    total_recolher = (totais['valor_deposito_fgts'] + totais.get('valor_jam', Decimal('0'))).quantize(Decimal('0.01'))
     totais_table = Table(
         [
             [
                 "Valor sem juros",
                 "Correção",
-                "Valor com juros",
+                "Depósito (sem JAM)",
+                "JAM",
+                "Total a recolher",
             ],
             [
                 f"{totais['valor_fgts']}",
                 f"{totais['valor_corrigido']}",
-                f"{totais['total']}",
+                f"{totais['valor_deposito_fgts']}",
+                f"{totais.get('valor_jam', Decimal('0.00'))}",
+                f"{total_recolher}",
             ],
         ],
-        colWidths=[35 * mm, 35 * mm, 40 * mm],
+        colWidths=[28 * mm, 26 * mm, 34 * mm, 22 * mm, 32 * mm],
         hAlign='LEFT',
     )
     totais_table.setStyle(
@@ -2185,6 +2358,7 @@ def download_memoria_calculo(request):
     
     empresa_id = request.GET.get('empresa')
     funcionario_id = request.GET.get('funcionario')
+    vinculo_id = request.GET.get('vinculo')
     competencia_str = request.GET.get('competencia')
     data_pagamento_str = request.GET.get('data_pagamento')
     
@@ -2196,12 +2370,19 @@ def download_memoria_calculo(request):
     data_pagamento = datetime.strptime(data_pagamento_str, '%Y-%m-%d').date()
     competencia_date = datetime.strptime(competencia_str, '%m/%Y').date().replace(day=1)
     
-    # Busca o lançamento
-    lancamento = Lancamento.objects.filter(
+    # Busca o lançamento (vínculo-first para evitar ambiguidade)
+    base_qs = Lancamento.objects.filter(
         empresa=empresa,
         funcionario=funcionario,
         competencia=competencia_str
-    ).first()
+    )
+    if vinculo_id:
+        base_qs = base_qs.filter(vinculo_id=vinculo_id)
+
+    if not vinculo_id and base_qs.count() > 1:
+        return HttpResponse('Lançamento ambíguo: informe o VÍNCULO (ID) ou MATRÍCULA para baixar a memória de cálculo.', status=400)
+
+    lancamento = base_qs.first()
     
     if not lancamento:
         return HttpResponse('Lançamento não encontrado', status=404)

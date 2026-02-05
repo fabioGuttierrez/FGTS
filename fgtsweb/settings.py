@@ -41,7 +41,9 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 
-# Configuração do tipo de primary key padrão para todos os models
+# Configuração do tipo de primary key padrão para todos os models.
+# Observação: o projeto possui histórico misto (AutoField/BigAutoField).
+# Padronizado em BigAutoField e geradas migrações de alinhamento por app.
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Application definition
 
@@ -205,29 +207,81 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@bildee.com.br')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL  # Para emails de erro do servidor
 
-# LOGGING para debug em terminal
+# Logging
+# - Erros 500 aparecem em django.request (inclui Django Admin)
+# - Arquivo: FGTS/logs/django.log
+LOG_LEVEL = os.getenv('DJANGO_LOG_LEVEL', 'WARNING').upper()
+LOG_SQL = os.getenv('DJANGO_LOG_SQL', 'False') == 'True'
+
+LOG_DIR = BASE_DIR / 'logs'
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = LOG_DIR / 'django.log'
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{asctime}] {levelname} {name}: {message}',
+            'style': '{',
+        },
+    },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': str(LOG_FILE),
+            'formatter': 'verbose',
+            'encoding': 'utf-8',
         },
     },
     'root': {
-        'handlers': ['console'],
-        'level': 'WARNING',
+        'handlers': ['console', 'file'],
+        'level': LOG_LEVEL,
     },
     'loggers': {
         'django': {
-            'handlers': ['console'],
-            'level': 'WARNING',
-            'propagate': True,
+            'handlers': ['console', 'file'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console', 'file'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.server': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.db.backends': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG' if LOG_SQL else 'WARNING',
+            'propagate': False,
         },
         'funcionarios': {
-            'handlers': ['console'],
-            'level': 'WARNING',
-            'propagate': True,
+            'handlers': ['console', 'file'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'lancamentos': {
+            'handlers': ['console', 'file'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'empresas': {
+            'handlers': ['console', 'file'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'billing': {
+            'handlers': ['console', 'file'],
+            'level': LOG_LEVEL,
+            'propagate': False,
         },
     },
 }

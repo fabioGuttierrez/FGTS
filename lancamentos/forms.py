@@ -1,6 +1,7 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from empresas.models import Empresa
+from empresas.models_grupo import FuncionarioVinculo
 from funcionarios.models import Funcionario
 from fgtsweb.mixins import get_allowed_empresa_ids
 from .models import Lancamento
@@ -11,10 +12,10 @@ class LancamentoForm(forms.ModelForm):
     
     class Meta:
         model = Lancamento
-        fields = ['empresa', 'funcionario', 'competencia', 'parcela_13', 'base_fgts', 'pago', 'data_pagto', 'valor_pago']
+        fields = ['empresa', 'vinculo', 'competencia', 'parcela_13', 'base_fgts', 'pago', 'data_pagto', 'valor_pago']
         widgets = {
             'empresa': forms.Select(attrs={'autocomplete': 'off', 'class': 'form-select'}),
-            'funcionario': forms.Select(attrs={'autocomplete': 'off', 'class': 'form-select'}),
+            'vinculo': forms.Select(attrs={'autocomplete': 'off', 'class': 'form-select'}),
             'competencia': forms.TextInput(attrs={
                 'placeholder': 'MM/YYYY (ex: 01/2025)',
                 'autocomplete': 'off',
@@ -39,7 +40,7 @@ class LancamentoForm(forms.ModelForm):
         }
         labels = {
             'empresa': 'Empresa *',
-            'funcionario': 'Funcionário *',
+            'vinculo': 'Vínculo / Matrícula *',
             'competencia': 'Competência (MM/YYYY) *',
             'parcela_13': 'Parcela do 13º Salário',
             'base_fgts': 'Base FGTS (Salário)',
@@ -79,11 +80,29 @@ class LancamentoForm(forms.ModelForm):
 
         # Filtrar funcionários conforme empresa selecionada ou escopo permitido
         if empresa_id:
-            self.fields['funcionario'].queryset = Funcionario.objects.filter(vinculos__empresa_id=empresa_id).distinct()
+            self.fields['vinculo'].queryset = FuncionarioVinculo.objects.filter(empresa_id=empresa_id).select_related('funcionario', 'empresa').order_by('funcionario__nome', 'data_admissao')
         elif allowed_ids is not None:
-            self.fields['funcionario'].queryset = Funcionario.objects.filter(vinculos__empresa__codigo__in=allowed_ids).distinct()
+            self.fields['vinculo'].queryset = FuncionarioVinculo.objects.filter(empresa__codigo__in=allowed_ids).select_related('funcionario', 'empresa').order_by('empresa__nome', 'funcionario__nome', 'data_admissao')
         else:
-            self.fields['funcionario'].queryset = Funcionario.objects.all()
+            self.fields['vinculo'].queryset = FuncionarioVinculo.objects.select_related('funcionario', 'empresa').all().order_by('empresa__nome', 'funcionario__nome', 'data_admissao')
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        vinculo = cleaned_data.get('vinculo')
+        empresa = cleaned_data.get('empresa')
+
+        if vinculo is None:
+            raise ValidationError('Vínculo é obrigatório. Use a Matrícula/ID do vínculo para evitar ambiguidade.')
+
+        if empresa and vinculo.empresa_id != empresa.id:
+            self.add_error('vinculo', 'Este vínculo não pertence à empresa selecionada.')
+
+        # Garantir que o model instance tenha empresa/funcionário antes do full_clean do ModelForm
+        self.instance.vinculo = vinculo
+        self.instance.empresa = vinculo.empresa
+        self.instance.funcionario = vinculo.funcionario
+        return cleaned_data
     
     def save(self, commit=True):
         """Sobrescrever save para calcular valor_fgts automaticamente"""
@@ -102,25 +121,31 @@ class RelatorioCompetenciaForm(forms.Form):
     empresa = forms.ModelChoiceField(
         queryset=Empresa.objects.all(), 
         label='Empresa',
-        widget=forms.Select(attrs={'autocomplete': 'off'})
+        widget=forms.Select(attrs={'class': 'form-select', 'autocomplete': 'off'})
     )
     funcionario = forms.ModelChoiceField(
         queryset=Funcionario.objects.none(), 
         label='Funcionário (opcional)', 
         required=False,
-        widget=forms.Select(attrs={'autocomplete': 'off'})
+        widget=forms.Select(attrs={'class': 'form-select', 'autocomplete': 'off'})
+    )
+    matricula = forms.CharField(
+        label='Matrícula (opcional)',
+        required=False,
+        help_text='Filtra pelo vínculo (cadeira). Recomendado quando há mais de um vínculo ativo na mesma competência.',
+        widget=forms.TextInput(attrs={'class': 'form-control', 'autocomplete': 'off', 'placeholder': 'Ex: 10293'})
     )
     competencia = forms.CharField(
         label='Competência Única', 
         required=False, 
         help_text='MM/YYYY - Deixe vazio para calcular TODAS as competências em aberto',
-        widget=forms.TextInput(attrs={'autocomplete': 'off', 'placeholder': 'Vazio = todas em aberto'})
+        widget=forms.TextInput(attrs={'class': 'form-control', 'autocomplete': 'off', 'placeholder': 'Vazio = todas em aberto'})
     )
     competencias = forms.CharField(
         label='Múltiplas competências (uma por linha)', 
         required=False, 
         help_text='Uma por linha no formato MM/YYYY. Ignora se competência única estiver preenchida', 
-        widget=forms.Textarea(attrs={'rows': 3, 'autocomplete': 'off', 'placeholder': '01/2024\n02/2024\n03/2024'})
+        widget=forms.Textarea(attrs={'class': 'form-control font-monospace', 'rows': 3, 'autocomplete': 'off', 'placeholder': '01/2024\n02/2024\n03/2024'})
     )
     agrupamento = forms.ChoiceField(
         label='Agrupar por',
@@ -128,6 +153,7 @@ class RelatorioCompetenciaForm(forms.Form):
             ('competencia', 'Competência'),
             ('ano', 'Ano'),
             ('funcionario', 'Funcionário'),
+            ('vinculo', 'Vínculo / Matrícula'),
         ],
         initial='competencia',
         widget=forms.Select(attrs={'class': 'form-select'})
@@ -135,7 +161,7 @@ class RelatorioCompetenciaForm(forms.Form):
     data_pagamento = forms.DateField(
         label='Data de Pagamento', 
         required=False, 
-        widget=forms.DateInput(attrs={'type': 'date', 'autocomplete': 'off'})
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date', 'autocomplete': 'off'})
     )
 
     def __init__(self, *args, user=None, **kwargs):

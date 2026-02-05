@@ -51,32 +51,40 @@
     <div class="card-body">
       <form method="post" class="row g-3" autocomplete="off">
         {% csrf_token %}
-        <div class="col-md-6">
+        <div class="col-12 col-lg-4">
           <label class="form-label">Empresa</label>
           {{ form.empresa }}
         </div>
-        <div class="col-md-3">
+        <div class="col-12 col-lg-4">
           <label class="form-label">Funcionário (opcional)</label>
           {{ form.funcionario }}
         </div>
-        <div class="col-md-3">
+        <div class="col-12 col-lg-4">
+          <label class="form-label">Matrícula (opcional)</label>
+          {{ form.matricula }}
+          <div class="form-text text-muted">{{ form.matricula.help_text }}</div>
+        </div>
+
+        <div class="col-12 col-lg-3">
           <label class="form-label">Data Pagamento</label>
           {{ form.data_pagamento }}
         </div>
-        <div class="col-md-6">
-          <label class="form-label">Competência Única (MM/YYYY)</label>
-          {{ form.competencia }}
-          <small class="form-text text-muted">{{ form.competencia.help_text }}</small>
-        </div>
-        <div class="col-md-6">
-          <label class="form-label">Múltiplas competências (uma por linha)</label>
-          {{ form.competencias }}
-          <small class="form-text text-muted">{{ form.competencias.help_text }}</small>
-        </div>
-        <div class="col-md-4">
+        <div class="col-12 col-lg-3">
           <label class="form-label">Agrupar por</label>
           {{ form.agrupamento }}
         </div>
+        <div class="col-12 col-lg-6">
+          <label class="form-label">Competência Única (MM/YYYY)</label>
+          {{ form.competencia }}
+          <div class="form-text text-muted">{{ form.competencia.help_text }}</div>
+        </div>
+
+        <div class="col-12">
+          <label class="form-label">Múltiplas competências (uma por linha)</label>
+          {{ form.competencias }}
+          <div class="form-text text-muted">{{ form.competencias.help_text }}</div>
+        </div>
+
         <div class="col-12">
           {% if relatorio_bloqueado %}
           <div class="alert alert-warning d-flex align-items-center mb-2" role="alert">
@@ -139,8 +147,8 @@
     <div class="card-body">
       <div class="mb-3">
         <span class="badge bg-info me-2">Agrupado por: {{ agrupamento|title }}</span>
-        <a class="btn btn-outline-secondary btn-sm" href="{% url 'relatorio-competencia-export-csv' %}?empresa={{ empresa.pk }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}&competencias={{ competencias_param|join:'%0A' }}&agrupamento={{ agrupamento }}{% if funcionario %}&funcionario={{ funcionario.pk }}{% endif %}{% if from_selection and ids_param %}&ids={{ ids_param }}{% endif %}" target="_blank">Exportar CSV</a>
-        <a class="btn btn-outline-secondary btn-sm" href="{% url 'relatorio-competencia-export-pdf' %}?empresa={{ empresa.pk }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}&competencias={{ competencias_param|join:'%0A' }}&agrupamento={{ agrupamento }}{% if funcionario %}&funcionario={{ funcionario.pk }}{% endif %}{% if from_selection and ids_param %}&ids={{ ids_param }}{% endif %}" target="_blank">Exportar PDF</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'relatorio-competencia-export-csv' %}?empresa={{ empresa.pk }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}&competencias={{ competencias_param|join:'%0A' }}&agrupamento={{ agrupamento }}{% if funcionario %}&funcionario={{ funcionario.pk }}{% endif %}{% if matricula %}&matricula={{ matricula|urlencode }}{% endif %}{% if from_selection and ids_param %}&ids={{ ids_param }}{% endif %}" target="_blank">Exportar CSV</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'relatorio-competencia-export-pdf' %}?empresa={{ empresa.pk }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}&competencias={{ competencias_param|join:'%0A' }}&agrupamento={{ agrupamento }}{% if funcionario %}&funcionario={{ funcionario.pk }}{% endif %}{% if matricula %}&matricula={{ matricula|urlencode }}{% endif %}{% if from_selection and ids_param %}&ids={{ ids_param }}{% endif %}" target="_blank">Exportar PDF</a>
       </div>
 
       {% if resultados_agrupados %}
@@ -158,6 +166,7 @@
                 <tr>
                   <th>Competência</th>
                   <th>Funcionário</th>
+                  <th>Matrícula</th>
                   <th>Demissão</th>
                   <th>Base FGTS</th>
                   <th>FGTS Valor</th>
@@ -173,8 +182,13 @@
                 <tr>
                   <td><span class="badge bg-info">{{ item.competencia_display|default:item.competencia }}</span></td>
                   <td>{{ item.lancamento.funcionario.nome }}</td>
-                  {% get_vinculo_for_competencia item.lancamento.funcionario.vinculos.all item.lancamento.empresa item.competencia as vinculo %}
-                  <td>{% if vinculo and vinculo.data_demissao %}{{ vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
+                  <td>{% if item.lancamento.vinculo %}{{ item.lancamento.vinculo.matricula|default:item.lancamento.vinculo.id }}{% endif %}</td>
+                  {% if item.lancamento.vinculo %}
+                    <td>{% if item.lancamento.vinculo.data_demissao %}{{ item.lancamento.vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
+                  {% else %}
+                    {% get_vinculo_for_competencia item.lancamento.funcionario.vinculos.all item.lancamento.empresa item.competencia as vinculo %}
+                    <td>{% if vinculo and vinculo.data_demissao %}{{ vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
+                  {% endif %}
                   <td>R$ {{ item.lancamento.base_fgts|floatformat:2 }}</td>
                   <td>R$ {{ item.lancamento.valor_fgts }}</td>
                   <td>{{ item.calc.indice }}</td>
@@ -182,7 +196,7 @@
                   <td>R$ {{ item.calc.valor_jam }}</td>
                   <td><strong>R$ {{ item.calc.valor_deposito_fgts }}</strong></td>
                   <td>
-                    <a href="{% url 'relatorio-memoria-calculo' %}?empresa={{ empresa.pk }}&funcionario={{ item.lancamento.funcionario.pk }}&competencia={{ item.competencia }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}" 
+                    <a href="{% url 'relatorio-memoria-calculo' %}?empresa={{ empresa.pk }}&funcionario={{ item.lancamento.funcionario.pk }}{% if item.lancamento.vinculo %}&vinculo={{ item.lancamento.vinculo.pk }}{% endif %}&competencia={{ item.competencia }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}" 
                        class="btn btn-sm btn-info" 
                        title="Baixar Memória de Cálculo">
                       <i class="bi bi-calculator"></i>
@@ -193,7 +207,7 @@
               </tbody>
               <tfoot class="table-light">
                 <tr>
-                  <th colspan="6" class="text-end">Subtotal {{ grupo_data.label }}:</th>
+                  <th colspan="7" class="text-end">Subtotal {{ grupo_data.label }}:</th>
                   <th>R$ {{ grupo_data.totais.valor_corrigido }}</th>
                   <th>R$ {{ grupo_data.totais.valor_jam }}</th>
                   <th><strong>R$ {{ grupo_data.totais.valor_deposito_fgts }}</strong></th>
@@ -238,6 +252,7 @@
                 <tr>
                   <th>Competência</th>
                   <th>Funcionário</th>
+                  <th>Matrícula</th>
                   <th>Demissão</th>
                   <th>FGTS Valor</th>
                   <th>Índice</th>
@@ -252,15 +267,20 @@
               <tr>
                 <td><span class="badge bg-info">{{ item.competencia_display|default:item.competencia }}</span></td>
                 <td>{{ item.lancamento.funcionario.nome }}</td>
-                {% get_vinculo_for_competencia item.lancamento.funcionario.vinculos.all item.lancamento.empresa item.competencia as vinculo %}
-                <td>{% if vinculo and vinculo.data_demissao %}{{ vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
+                <td>{% if item.lancamento.vinculo %}{{ item.lancamento.vinculo.matricula|default:item.lancamento.vinculo.id }}{% endif %}</td>
+                {% if item.lancamento.vinculo %}
+                  <td>{% if item.lancamento.vinculo.data_demissao %}{{ item.lancamento.vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
+                {% else %}
+                  {% get_vinculo_for_competencia item.lancamento.funcionario.vinculos.all item.lancamento.empresa item.competencia as vinculo %}
+                  <td>{% if vinculo and vinculo.data_demissao %}{{ vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
+                {% endif %}
                 <td>R$ {{ item.lancamento.valor_fgts }}</td>
                 <td>{{ item.calc.indice }}</td>
                 <td>R$ {{ item.calc.valor_corrigido }}</td>
                 <td>R$ {{ item.calc.valor_jam }}</td>
                 <td><strong>R$ {{ item.calc.valor_deposito_fgts }}</strong></td>
                 <td>
-                  <a href="{% url 'relatorio-memoria-calculo' %}?empresa={{ empresa.pk }}&funcionario={{ item.lancamento.funcionario.pk }}&competencia={{ item.competencia }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}" 
+                  <a href="{% url 'relatorio-memoria-calculo' %}?empresa={{ empresa.pk }}&funcionario={{ item.lancamento.funcionario.pk }}{% if item.lancamento.vinculo %}&vinculo={{ item.lancamento.vinculo.pk }}{% endif %}&competencia={{ item.competencia }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}" 
                      class="btn btn-sm btn-info" 
                      title="Baixar Memória de Cálculo">
                     <i class="bi bi-calculator"></i> Memória

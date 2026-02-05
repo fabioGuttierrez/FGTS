@@ -138,6 +138,11 @@
                                 {% endfor %}
                             </select>
                         </div>
+                        <div class="col-md-2">
+                            <label for="matricula" class="form-label small fw-bold">Matrícula</label>
+                            <input type="text" class="form-control form-control-sm" id="matricula" name="matricula"
+                                   placeholder="Ex: 10293" value="{{ matricula_filtro }}">
+                        </div>
                         <div class="col-md-3">
                             <label for="empresa" class="form-label small fw-bold">Empresa</label>
                             <select class="form-select form-select-sm" id="empresa" name="empresa">
@@ -256,6 +261,9 @@
                             <td class="py-3 px-4">
                                 <div class="fw-bold text-dark">{{ lancamento.funcionario.nome }}</div>
                                 <small class="text-muted">{{ lancamento.funcionario.cpf }}</small>
+                                {% if lancamento.vinculo %}
+                                    <small class="text-muted d-block">Matrícula: {{ lancamento.vinculo.matricula|default:lancamento.vinculo.id }}</small>
+                                {% endif %}
                             </td>
                             <td class="py-3 px-4">
                                 <div class="fw-bold text-dark">{{ lancamento.empresa.nome }}</div>
@@ -295,7 +303,11 @@
                                         </button>
                                     </form>
                                     {% if lancamento.is_ultima_competencia %}
+                                    {% if lancamento.vinculo %}
+                                    <form method="post" action="{% url 'lancamento-gerar-automatico-vinculo' lancamento.vinculo.id %}" style="display: inline;" onsubmit="return confirm('Gerar lançamentos automáticos para o vínculo (matrícula {{ lancamento.vinculo.matricula|default:lancamento.vinculo.id }}) de {{ lancamento.funcionario.nome }}?')">
+                                    {% else %}
                                     <form method="post" action="{% url 'lancamento-gerar-automatico' lancamento.funcionario.id %}" style="display: inline;" onsubmit="return confirm('Gerar lançamentos automáticos para {{ lancamento.funcionario.nome }}?')">
+                                    {% endif %}
                                         {% csrf_token %}
                                         <button type="submit" class="btn btn-outline-success btn-sm" title="Gerar lançamentos automáticos até hoje" data-bs-toggle="tooltip">
                                             <i class="bi bi-magic"></i>
@@ -372,7 +384,7 @@
                 <div class="col-md-6">
                     <p class="mb-0">
                         <i class="bi bi-info-circle-fill text-info me-2"></i>
-                        <strong>Campos obrigatórios:</strong> Empresa, Funcionário e Competência (MM/YYYY).
+                        <strong>Campos obrigatórios:</strong> Empresa, Vínculo/Matrícula e Competência (MM/YYYY).
                     </p>
                 </div>
             </div>

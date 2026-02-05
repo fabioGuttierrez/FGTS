@@ -120,32 +120,42 @@
                 padding: 0.5rem 0.8rem;
             }
         }
-        {% if request.user.is_authenticated and request.resolver_match %}
-        {% if request.resolver_match.view_name == 'dashboard' or request.resolver_match.view_name == 'funcionario-list' or request.resolver_match.view_name == 'lancamento-list' or request.resolver_match.view_name == 'relatorio-competencia' or request.resolver_match.view_name == 'relatorio-por-ids' or request.resolver_match.view_name == 'painel-admin-empresa' or request.resolver_match.view_name == 'audit_logs:auditlog-list' or request.resolver_match.view_name == 'billing:feedback-criar' %}
         .content-wrapper {
+            min-height: 0;
+            padding: 2rem 0;
+            transition: margin-left 0.2s;
+        }
+
+        .content-wrapper.with-sidebar {
             margin-left: 230px;
             min-height: calc(100vh - 60px);
         }
         @media (max-width: 991.98px) {
-            .content-wrapper {
+            .content-wrapper.with-sidebar {
                 margin-left: 0;
             }
         }
-        {% else %}
-        .content-wrapper {
-            min-height: 0;
-            padding-top: 0;
+
+        .content-wrapper.page {
+            min-height: 100vh;
+            padding: 0;
         }
-        {% endif %}
-        {% else %}
-        .content-wrapper {
-            min-height: 0;
-            padding-top: 0;
+
+        .content-wrapper.page.no-sidebar {
+            width: 100vw;
+            margin: 0;
+            max-width: 100vw;
         }
-        {% endif %}
-        .content-wrapper {
-            padding: 2rem 0;
-            transition: margin-left 0.2s;
+
+        .content-wrapper.with-sidebar.page {
+            margin-left: 230px;
+            width: auto;
+            max-width: none;
+            padding: 32px 40px;
+        }
+
+        .content-wrapper.with-sidebar.page.page-compact {
+            padding: 24px;
         }
 
         /* Alerts */
@@ -319,9 +329,8 @@
 <body>
 
     {% block sidebar %}{% endblock %}
-    {% if request.user.is_authenticated and request.resolver_match %}
-    {% if request.resolver_match.view_name == 'dashboard' or request.resolver_match.view_name == 'funcionario-list' or request.resolver_match.view_name == 'lancamento-list' or request.resolver_match.view_name == 'relatorio-competencia' or request.resolver_match.view_name == 'relatorio-por-ids' or request.resolver_match.view_name == 'painel-admin-empresa' or request.resolver_match.view_name == 'audit_logs:auditlog-list' or request.resolver_match.view_name == 'billing:feedback-criar' %}
-        <div style="min-height: 100vh; display: flex;">
+    {% if request.user.is_authenticated and request.resolver_match and request.resolver_match.view_name != 'login' %}
+        <div style="min-height: 100vh;">
             <div class="sidebar">
                 <div class="sidebar-brand">
                     <a href="/" class="sidebar-brand text-decoration-none">
@@ -366,15 +375,12 @@
                 </div>
             </div>
             {% if request.resolver_match.view_name == 'lancamento-list' or request.resolver_match.view_name == 'funcionario-list' %}
-            <div class="content-wrapper" style="flex: 1; min-height: 100vh; padding: 24px; max-width: calc(100% - 230px); margin: 0 0 0 230px;">
+            <div class="content-wrapper with-sidebar page page-compact">
             {% else %}
-            <div class="content-wrapper" style="flex: 1; min-height: 100vh; padding: 32px 40px 32px 40px; max-width: 1200px; margin: 0 auto;">
+            <div class="content-wrapper with-sidebar page">
             {% endif %}
     {% else %}
-        <div class="content-wrapper" style="min-height: 100vh; width: 100vw; padding: 0; margin: 0; max-width: 100vw;">
-    {% endif %}
-    {% else %}
-        <div class="content-wrapper" style="min-height: 100vh; width: 100vw; padding: 0; margin: 0; max-width: 100vw;">
+        <div class="content-wrapper page no-sidebar">
     {% endif %}
             {% if messages %}
             <div class="container-fluid px-0 mb-3">
@@ -387,10 +393,8 @@
             {% endif %}
             {% block content %}{% endblock %}
         </div>
-    {% if request.user.is_authenticated and request.resolver_match %}
-    {% if request.resolver_match.view_name == 'dashboard' or request.resolver_match.view_name == 'funcionario-list' or request.resolver_match.view_name == 'lancamento-list' or request.resolver_match.view_name == 'relatorio-competencia' or request.resolver_match.view_name == 'relatorio-por-ids' or request.resolver_match.view_name == 'painel-admin-empresa' or request.resolver_match.view_name == 'audit_logs:auditlog-list' or request.resolver_match.view_name == 'billing:feedback-criar' %}
+    {% if request.user.is_authenticated and request.resolver_match and request.resolver_match.view_name != 'login' %}
         </div>
-    {% endif %}
     {% endif %}
 
     <!-- Mensagens e banners removidos para versão pública -->

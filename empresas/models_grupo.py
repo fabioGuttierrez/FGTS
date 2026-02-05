@@ -27,6 +27,7 @@ class FuncionarioVinculo(models.Model):
     ]
     funcionario = models.ForeignKey('funcionarios.Funcionario', on_delete=models.CASCADE, related_name='vinculos')
     empresa = models.ForeignKey('empresas.Empresa', on_delete=models.CASCADE)
+    matricula = models.CharField(max_length=30, blank=True, null=True, db_index=True, verbose_name='Matrícula')
     data_admissao = models.DateField()
     data_demissao = models.DateField(blank=True, null=True)
     motivo_saida = models.CharField(max_length=20, choices=MOTIVO_SAIDA_CHOICES, blank=True, null=True)
@@ -82,18 +83,21 @@ class FuncionarioVinculo(models.Model):
             admitido = competencia_mes_ano >= admissao_mes_ano
             nao_demitido = True
         return admitido and nao_demitido
-    funcionario = models.ForeignKey('funcionarios.Funcionario', on_delete=models.CASCADE, related_name='vinculos')
-    empresa = models.ForeignKey('empresas.Empresa', on_delete=models.CASCADE)
-    data_admissao = models.DateField()
-    data_demissao = models.DateField(blank=True, null=True)
-    motivo_saida = models.CharField(max_length=20, choices=MOTIVO_SAIDA_CHOICES, blank=True, null=True)
-    observacoes = models.TextField(blank=True, null=True)
-    cargo = models.CharField(max_length=100, blank=True, null=True)
-    salario = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
-    data_transferencia = models.DateField(blank=True, null=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['empresa', 'matricula'],
+                name='uniq_vinculo_matricula_por_empresa',
+                condition=models.Q(matricula__isnull=False) & ~models.Q(matricula=''),
+            )
+        ]
 
     def __str__(self):
-        return f"{self.funcionario.nome} - {self.empresa.nome} ({self.data_admissao} a {self.data_demissao or 'atual'})"
+        matricula_label = (self.matricula or '').strip()
+        ident = f"Matrícula {matricula_label}" if matricula_label else f"Vínculo {self.pk}"
+        periodo = f"{self.data_admissao} a {self.data_demissao or 'atual'}"
+        return f"{self.funcionario.nome} - {self.empresa.nome} ({ident}) ({periodo})"
 
 class TransferenciaFuncionario(models.Model):
     funcionario = models.ForeignKey('funcionarios.Funcionario', on_delete=models.CASCADE)

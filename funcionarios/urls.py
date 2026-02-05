@@ -9,5 +9,6 @@ urlpatterns = [
     path('baixar-modelo/', views.FuncionarioDownloadTemplateView.as_view(), name='funcionario-download-template'),
     path('importar/', views.FuncionarioUploadImportView.as_view(), name='funcionario-import'),
     path('<int:pk>/', views.FuncionarioDetailView.as_view(), name='funcionario-detail'),
+    path('<int:pk>/vinculos/novo/', views.FuncionarioVinculoCreateView.as_view(), name='funcionario-vinculo-create'),
     path('<int:pk>/transferir/', views.FuncionarioTransferenciaView.as_view(), name='funcionario-transferir'),
 ]

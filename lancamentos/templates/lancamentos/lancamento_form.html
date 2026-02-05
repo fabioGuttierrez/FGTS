@@ -93,14 +93,14 @@
                             </h6>
                             <div class="row g-3">
                                 <div class="col-12">
-                                    <label for="{{ form.funcionario.id_for_label }}" class="form-label fw-bold">
-                                        {{ form.funcionario.label }} <span class="text-danger">*</span>
+                                    <label for="{{ form.vinculo.id_for_label }}" class="form-label fw-bold">
+                                        {{ form.vinculo.label }} <span class="text-danger">*</span>
                                     </label>
-                                    {{ form.funcionario }}
-                                    {% if form.funcionario.errors %}
-                                        <div class="invalid-feedback d-block">{{ form.funcionario.errors }}</div>
+                                    {{ form.vinculo }}
+                                    {% if form.vinculo.errors %}
+                                        <div class="invalid-feedback d-block">{{ form.vinculo.errors }}</div>
                                     {% endif %}
-                                    <small class="form-text text-muted d-block mt-2">Selecione um funcionário da empresa</small>
+                                    <small class="form-text text-muted d-block mt-2">Selecione a cadeira (vínculo) do funcionário. Use a matrícula para evitar ambiguidade.</small>
                                 </div>
                             </div>
 
@@ -208,7 +208,7 @@
                 <div class="card-body py-3 px-4">
                     <p class="mb-0">
                         <i class="bi bi-lightbulb-fill text-warning me-2"></i>
-                        <strong>Campos obrigatórios:</strong> Empresa, Funcionário e Competência (MM/YYYY).
+                        <strong>Campos obrigatórios:</strong> Empresa, Vínculo/Matrícula e Competência (MM/YYYY).
                     </p>
                 </div>
             </div>

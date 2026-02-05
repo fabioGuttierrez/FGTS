@@ -1,9 +1,13 @@
 """Middleware para verificação e exibição de avisos de trial"""
 
 from datetime import date
+import logging
 from django.shortcuts import redirect
 from django.contrib import messages
 from billing.models import BillingCustomer
+
+
+logger = logging.getLogger(__name__)
 
 
 class TrialWarningMiddleware:
@@ -18,6 +22,10 @@ class TrialWarningMiddleware:
         self.get_response = get_response
     
     def __call__(self, request):
+        # Não interferir no Django Admin / assets
+        if request.path.startswith('/admin/') or request.path.startswith('/static/') or request.path.startswith('/media/'):
+            return self.get_response(request)
+
         # Aplicar apenas para usuários autenticados
         if request.user.is_authenticated:
             try:
@@ -44,11 +52,11 @@ class TrialWarningMiddleware:
                                         request,
                                         '❌ Seu trial de 7 dias expirou! Assine um plano para continuar.'
                                     )
-                                    return redirect('checkout-plano')
+                                    return redirect('billing:checkout-plano')
             
             except Exception:
-                # Se algo der errado, deixa continuar normalmente
-                pass
+                # Se algo der errado, deixa continuar normalmente, mas registra para diagnóstico
+                logger.exception('Erro no TrialWarningMiddleware')
         
         response = self.get_response(request)
         return response
