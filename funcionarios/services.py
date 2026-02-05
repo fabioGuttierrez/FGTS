@@ -5,7 +5,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from django.utils.timezone import make_aware
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from fgtsweb.utils.validators import normalize_upper_ascii, validate_cpf, validate_pis
+from fgtsweb.utils.validators import digits_only, normalize_upper_ascii, validate_cpf
 from .models import Funcionario
 from empresas.models import Empresa
 from empresas.models_grupo import FuncionarioVinculo
@@ -92,7 +92,7 @@ class FuncionarioImportService:
             "• CPF deve estar no formato XXX.XXX.XXX-XX",
             "• EMPRESA: use o CÓDIGO da empresa (número inteiro, ex: 1, 2, 3...)",
             "• Para ver o código da sua empresa, acesse a lista de empresas no sistema",
-            "• PIS deve estar no formato XXX.XXX.XXX-XX",
+            "• PIS é opcional e pode conter CPF (conforme regra atual)",
             "• DATA_DEMISSAO deixar em branco se o funcionário está ativo",
             "• SALARIO: se preenchido, cria automaticamente o primeiro lançamento de FGTS",
             "• SALARIO formato: número com ponto (ex: 3500.00)",
@@ -267,7 +267,11 @@ class FuncionarioImportService:
 
                     # Campos opcionais com validação/normalização
                     if row_data.get('PIS'):
-                        funcionario_data['pis'] = validate_pis(row_data['PIS'])
+                        # Regra atual permite CPF no lugar do PIS; não validamos DV.
+                        pis = digits_only(row_data['PIS'])
+                        if len(pis) > 15:
+                            raise ValueError('PIS muito longo. Informe no máximo 15 dígitos.')
+                        funcionario_data['pis'] = pis
 
                     if row_data.get('CBO'):
                         funcionario_data['cbo'] = normalize_upper_ascii(row_data['CBO'], allow_digits=True)

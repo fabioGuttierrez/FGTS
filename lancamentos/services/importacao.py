@@ -10,6 +10,7 @@ from empresas.models import Empresa
 from funcionarios.models import Funcionario
 from billing.models import BillingCustomer
 from fgtsweb.mixins import is_empresa_allowed
+from empresas.models_grupo import FuncionarioVinculo
 
 
 class LancamentoImportService:
@@ -20,6 +21,9 @@ class LancamentoImportService:
     ]
     
     OPTIONAL_COLUMNS = [
+        # EMPRESA é opcional, mas recomendado para grupos com múltiplos vínculos ativos.
+        # Quando informado, deve ser o código da empresa (mesmo usado no sistema).
+        'EMPRESA',
         'VALOR_FGTS', 'PAGO', 'DATA_PAGTO', 'VALOR_PAGO', 'PARCELA_13'
     ]
     
@@ -59,10 +63,12 @@ class LancamentoImportService:
             'João da Silva',         # NOME_FUNCIONARIO
             '01/2026',              # COMPETENCIA (MM/YYYY)
             '3500.00',              # BASE_FGTS
+            '1',                    # EMPRESA (código)
             '280.00',               # VALOR_FGTS (8% da base)
             'NÃO',                  # PAGO (SIM/NÃO)
             '',                     # DATA_PAGTO (dd/mm/yyyy)
             '',                     # VALOR_PAGO
+            '',                     # PARCELA_13
         ]
         
         for col_idx, value in enumerate(example_data, 1):
@@ -73,7 +79,7 @@ class LancamentoImportService:
             cell.alignment = Alignment(horizontal='left', vertical='center')
         
         # Instruções
-        ws.merge_cells('A4:H4')
+        ws.merge_cells('A4:J4')
         instructions = ws['A4']
         instructions.value = "INSTRUÇÕES DE PREENCHIMENTO"
         instructions.font = Font(bold=True, size=12, color="667eea")
@@ -84,13 +90,17 @@ class LancamentoImportService:
             "2. NOME_FUNCIONARIO: Nome completo do colaborador (para conferência)",
             "3. COMPETENCIA: Mês/Ano no formato MM/YYYY (ex: 01/2026 para Janeiro de 2026)",
             "4. BASE_FGTS: Valor da base de cálculo do FGTS (salário bruto)",
-            "5. VALOR_FGTS: (Opcional) Valor do FGTS - se não informar, será calculado 8% da base",
-            "6. PAGO: (Opcional) Se o FGTS foi pago (SIM ou NÃO)",
-            "7. DATA_PAGTO: (Opcional) Data do pagamento no formato dd/mm/yyyy",
-            "8. VALOR_PAGO: (Opcional) Valor efetivamente pago",
+            "5. EMPRESA: (Opcional) Código da empresa do vínculo para esta linha (recomendado em grupos com múltiplos vínculos)",
+            "6. VALOR_FGTS: (Opcional) Valor do FGTS - se não informar, será calculado 8% da base",
+            "7. PAGO: (Opcional) Se o FGTS foi pago (SIM ou NÃO)",
+            "8. DATA_PAGTO: (Opcional) Data do pagamento no formato dd/mm/yyyy",
+            "9. VALOR_PAGO: (Opcional) Valor efetivamente pago",
+            "10. PARCELA_13: (Opcional) Use 1 para 13º 1ª parcela, 2 para 13º 2ª parcela; deixe em branco para mês normal",
             "",
             "⚠️ IMPORTANTE:",
             "• O colaborador deve estar cadastrado no sistema",
+            "• O lançamento será vinculado ao vínculo do colaborador na empresa selecionada (ou na coluna EMPRESA) e na competência informada",
+            "• Se não existir vínculo ativo na competência, a linha será rejeitada (mais seguro)",
             "• A competência deve estar no formato MM/YYYY",
             "• Valores devem usar ponto como separador decimal (ex: 3500.00)",
             "• Delete a linha de exemplo antes de importar",
@@ -105,7 +115,7 @@ class LancamentoImportService:
                 cell.font = Font(size=10)
         
         # Ajustar largura da coluna de instruções
-        ws.merge_cells(f'A5:H{4+len(instructions_text)}')
+        ws.merge_cells(f'A5:J{4+len(instructions_text)}')
         
         # Retornar bytes do arquivo
         buffer = BytesIO()
@@ -127,33 +137,7 @@ class LancamentoImportService:
             dict: Resultado da importação com estatísticas e erros
         """
         
-        # Validar permissões da empresa (billing)
-        if not is_empresa_allowed(user, empresa.codigo):
-            raise ValueError(
-                f"Empresa '{empresa.nome}' não possui permissão para importar lançamentos. "
-                f"Verifique o status do plano."
-            )
-        
-        # Validar billing e plano
-        try:
-            billing_customer = BillingCustomer.objects.get(empresa=empresa)
-        except BillingCustomer.DoesNotExist:
-            raise ValueError(
-                f"Empresa '{empresa.nome}' não possui billing configurado. "
-                f"Entre em contato com o administrador."
-            )
-        
-        if billing_customer.status not in ['active', 'trial']:
-            raise ValueError(
-                f"Empresa '{empresa.nome}' não possui plano ativo. "
-                f"Status atual: {billing_customer.get_status_display()}"
-            )
-        
-        if not billing_customer.plan:
-            raise ValueError(
-                f"Empresa '{empresa.nome}' não possui plano configurado. "
-                f"Entre em contato com o administrador."
-            )
+        # Nota: empresa pode ser None quando o XLSX traz a coluna EMPRESA por linha.
         
         # Processar arquivo
         try:
@@ -171,6 +155,41 @@ class LancamentoImportService:
         # Validar headers
         headers = [cell.value for cell in ws[1]]
         headers_upper = [h.upper().strip() if h else '' for h in headers]
+
+        has_empresa_column = 'EMPRESA' in headers_upper
+
+        if not has_empresa_column and not empresa:
+            raise ValueError(
+                "❌ Selecione uma empresa para importar ou preencha a coluna EMPRESA no arquivo."
+            )
+
+        # Se não houver coluna EMPRESA, preserva o comportamento antigo (importação para uma empresa específica)
+        if not has_empresa_column and empresa:
+            if not is_empresa_allowed(user, empresa.codigo):
+                raise ValueError(
+                    f"Empresa '{empresa.nome}' não possui permissão para importar lançamentos. "
+                    f"Verifique o status do plano."
+                )
+
+            try:
+                billing_customer = BillingCustomer.objects.get(empresa=empresa)
+            except BillingCustomer.DoesNotExist:
+                raise ValueError(
+                    f"Empresa '{empresa.nome}' não possui billing configurado. "
+                    f"Entre em contato com o administrador."
+                )
+
+            if billing_customer.status not in ['active', 'trial']:
+                raise ValueError(
+                    f"Empresa '{empresa.nome}' não possui plano ativo. "
+                    f"Status atual: {billing_customer.get_status_display()}"
+                )
+
+            if not billing_customer.plan:
+                raise ValueError(
+                    f"Empresa '{empresa.nome}' não possui plano configurado. "
+                    f"Entre em contato com o administrador."
+                )
         
         missing_columns = [col for col in LancamentoImportService.REQUIRED_COLUMNS if col not in headers_upper]
         if missing_columns:
@@ -197,6 +216,8 @@ class LancamentoImportService:
         
         linhas_processadas = 0
         
+        billing_cache = {}
+
         for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
             # Pular linhas vazias
             if not any(row):
@@ -206,13 +227,13 @@ class LancamentoImportService:
             
             try:
                 lancamento_data = LancamentoImportService._process_row(
-                    row, column_indices, empresa, row_idx
+                    row, column_indices, empresa, user, row_idx, billing_cache
                 )
                 
                 if lancamento_data:
                     # Verificar se já existe lançamento para esta competência/parcela
                     existing = Lancamento.objects.filter(
-                        empresa=empresa,
+                        empresa=lancamento_data['empresa'],
                         funcionario=lancamento_data['funcionario'],
                         competencia=lancamento_data['competencia'],
                         parcela_13=lancamento_data.get('parcela_13')
@@ -253,7 +274,7 @@ class LancamentoImportService:
         return result
     
     @staticmethod
-    def _process_row(row, column_indices, empresa, row_idx):
+    def _process_row(row, column_indices, empresa, user, row_idx, billing_cache):
         """Processa uma linha do arquivo e retorna dados do lançamento"""
         
         # Extrair CPF
@@ -267,15 +288,31 @@ class LancamentoImportService:
         if len(cpf) != 11:
             raise ValueError(f"CPF inválido: {cpf}. O CPF deve conter 11 dígitos")
         
-        # Buscar funcionário
-        try:
-            funcionario = Funcionario.objects.get(cpf=cpf, empresa=empresa)
-        except Funcionario.DoesNotExist:
-            raise ValueError(
-                f"Colaborador com CPF {cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]} não encontrado na empresa '{empresa.nome}'. "
-                f"Certifique-se de que o colaborador está cadastrado antes de importar seus lançamentos."
-            )
-        
+        # Resolver empresa (por linha) - se existir coluna EMPRESA, ela sobrescreve a seleção do formulário
+        empresa_row = empresa
+        empresa_idx = column_indices.get('EMPRESA')
+        if empresa_idx is not None and row[empresa_idx] not in [None, '']:
+            raw = row[empresa_idx]
+            if isinstance(raw, (int, float)):
+                codigo = str(int(raw))
+            else:
+                codigo = str(raw).strip()
+                if codigo.endswith('.0') and codigo.replace('.', '', 1).isdigit():
+                    codigo = str(int(float(codigo)))
+            if codigo:
+                try:
+                    empresa_row = Empresa.objects.get(codigo=codigo)
+                except Empresa.DoesNotExist:
+                    raise ValueError(f"Empresa '{codigo}' não encontrada")
+
+        if not empresa_row:
+            raise ValueError('Empresa não informada. Selecione uma empresa ou preencha a coluna EMPRESA.')
+
+        if not is_empresa_allowed(user, empresa_row.codigo):
+            raise ValueError('Você não tem permissão para importar lançamentos para a empresa informada.')
+
+        LancamentoImportService._validate_billing_for_empresa(empresa_row, billing_cache)
+
         # Extrair competência
         competencia_idx = column_indices.get('COMPETENCIA')
         competencia = str(row[competencia_idx]).strip() if row[competencia_idx] else ''
@@ -299,6 +336,13 @@ class LancamentoImportService:
             raise ValueError(f"Competência inválida: '{competencia}'. Use o formato MM/YYYY (ex: 01/2026). {str(ve)}")
         except Exception:
             raise ValueError(f"Competência inválida: '{competencia}'. Use o formato MM/YYYY (ex: 01/2026)")
+
+        # Resolver funcionário pelo vínculo (empresa + competência)
+        funcionario = LancamentoImportService._resolve_funcionario_for_empresa_competencia(
+            cpf=cpf,
+            empresa=empresa_row,
+            competencia=competencia,
+        )
         
         # Extrair base FGTS
         base_fgts_idx = column_indices.get('BASE_FGTS')
@@ -333,7 +377,7 @@ class LancamentoImportService:
         
         # Dados do lançamento
         lancamento_data = {
-            'empresa': empresa,
+            'empresa': empresa_row,
             'funcionario': funcionario,
             'competencia': competencia,
             'base_fgts': base_fgts,
@@ -392,3 +436,86 @@ class LancamentoImportService:
                 pass  # Ignorar valor inválido
         
         return lancamento_data
+
+    @staticmethod
+    def _validate_billing_for_empresa(empresa: Empresa, billing_cache: dict) -> None:
+        """Valida billing para uma empresa, com cache simples por código."""
+        key = str(getattr(empresa, 'codigo', empresa.pk))
+        cached = billing_cache.get(key)
+        if cached is True:
+            return
+        if isinstance(cached, str):
+            raise ValueError(cached)
+
+        try:
+            billing_customer = BillingCustomer.objects.get(empresa=empresa)
+        except BillingCustomer.DoesNotExist:
+            msg = (
+                f"Empresa '{empresa.nome}' não possui billing configurado. "
+                f"Entre em contato com o administrador."
+            )
+            billing_cache[key] = msg
+            raise ValueError(msg)
+
+        if billing_customer.status not in ['active', 'trial']:
+            msg = (
+                f"Empresa '{empresa.nome}' não possui plano ativo. "
+                f"Status atual: {billing_customer.get_status_display()}"
+            )
+            billing_cache[key] = msg
+            raise ValueError(msg)
+
+        if not billing_customer.plan:
+            msg = (
+                f"Empresa '{empresa.nome}' não possui plano configurado. "
+                f"Entre em contato com o administrador."
+            )
+            billing_cache[key] = msg
+            raise ValueError(msg)
+
+        billing_cache[key] = True
+
+    @staticmethod
+    def _resolve_funcionario_for_empresa_competencia(*, cpf: str, empresa: Empresa, competencia: str) -> Funcionario:
+        """Resolve qual registro de Funcionario usar, considerando vínculos por empresa e competência.
+
+        Um CPF pode ter múltiplos registros de Funcionário (multi-vínculo). Como a planilha de lançamentos
+        não informa o vínculo, usamos a empresa selecionada para importação e a competência do lançamento.
+        """
+
+        vinculos = FuncionarioVinculo.objects.filter(
+            empresa=empresa,
+            funcionario__cpf=cpf,
+        ).select_related('funcionario').order_by('-data_admissao', '-id')
+
+        if not vinculos.exists():
+            raise ValueError(
+                f"Colaborador com CPF {cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]} não encontrado na empresa '{empresa.nome}'. "
+                f"Certifique-se de que o colaborador está cadastrado e vinculado a esta empresa antes de importar seus lançamentos."
+            )
+
+        # Exige vínculo ativo na competência (mais seguro; evita lançar no vínculo errado)
+        ativos = []
+        for v in vinculos:
+            try:
+                if v.is_ativo_em_competencia(competencia):
+                    ativos.append(v)
+            except Exception:
+                continue
+
+        if len(ativos) == 1:
+            return ativos[0].funcionario
+
+        cpf_fmt = f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}" if len(cpf) == 11 else cpf
+
+        if len(ativos) == 0:
+            raise ValueError(
+                f"Nenhum vínculo ativo encontrado para o CPF {cpf_fmt} na empresa '{empresa.nome}' "
+                f"na competência {competencia}. Verifique a competência, a empresa (coluna EMPRESA) e as datas de admissão/demissão do vínculo."
+            )
+
+        # Situação rara, mas possível em caso de dados inconsistentes
+        raise ValueError(
+            f"Vínculo ambíguo: existem múltiplos vínculos ativos para o CPF {cpf_fmt} na empresa '{empresa.nome}' "
+            f"na competência {competencia}. Corrija os vínculos antes de importar."
+        )

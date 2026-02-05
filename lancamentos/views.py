@@ -2313,21 +2313,19 @@ class LancamentoImportView(LoginRequiredMixin, EmpresaScopeMixin, View):
             messages.error(request, '❌ Apenas arquivos .xlsx são permitidos.')
             return redirect('lancamento-import')
         
-        # Validar empresa selecionada
+        # Empresa selecionada é opcional quando o XLSX traz a coluna EMPRESA por linha.
+        empresa = None
         empresa_codigo = request.POST.get('empresa')
-        if not empresa_codigo:
-            messages.error(request, '❌ Selecione uma empresa.')
-            return redirect('lancamento-import')
-        
-        try:
-            empresa = Empresa.objects.get(codigo=empresa_codigo)
-        except Empresa.DoesNotExist:
-            messages.error(request, '❌ Empresa não encontrada.')
-            return redirect('lancamento-import')
-        
-        # Validar permissões
-        if not is_empresa_allowed(request.user, empresa.codigo):
-            return HttpResponseForbidden('Você não tem permissão para importar lançamentos para esta empresa.')
+        if empresa_codigo:
+            try:
+                empresa = Empresa.objects.get(codigo=empresa_codigo)
+            except Empresa.DoesNotExist:
+                messages.error(request, '❌ Empresa não encontrada.')
+                return redirect('lancamento-import')
+
+            # Validar permissões (quando empresa foi selecionada)
+            if not is_empresa_allowed(request.user, empresa.codigo):
+                return HttpResponseForbidden('Você não tem permissão para importar lançamentos para esta empresa.')
         
         # Processar importação
         try:

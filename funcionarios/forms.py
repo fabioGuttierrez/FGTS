@@ -1,6 +1,7 @@
 from django import forms
 from decimal import Decimal
-from fgtsweb.utils.validators import normalize_upper_ascii, validate_cpf, validate_pis
+
+from fgtsweb.utils.validators import digits_only, normalize_upper_ascii, validate_cpf
 from .models import Funcionario
 from empresas.models import Empresa
 from empresas.models_grupo import FuncionarioVinculo
@@ -31,7 +32,8 @@ class FuncionarioForm(forms.ModelForm):
             'cbo': forms.TextInput(attrs={'class': 'form-control'}),
             'carteira_profissional': forms.TextInput(attrs={'class': 'form-control'}),
             'serie_carteira': forms.TextInput(attrs={'class': 'form-control'}),
-            'data_nascimento': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            # Inputs HTML5 type="date" exigem valor no formato ISO (YYYY-MM-DD)
+            'data_nascimento': forms.DateInput(format='%Y-%m-%d', attrs={'class': 'form-control', 'type': 'date'}),
             'observacao': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
 
@@ -47,12 +49,12 @@ class FuncionarioForm(forms.ModelForm):
         self.fields['data_admissao'] = forms.DateField(
             required=True,
             label='Data de Admissão',
-            widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
+            widget=forms.DateInput(format='%Y-%m-%d', attrs={'class': 'form-control', 'type': 'date'})
         )
         self.fields['data_demissao'] = forms.DateField(
             required=False,
             label='Data de Demissão',
-            widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
+            widget=forms.DateInput(format='%Y-%m-%d', attrs={'class': 'form-control', 'type': 'date'})
         )
         # Pré-popula dados do vínculo atual ao editar
         instance = getattr(self, 'instance', None)
@@ -76,8 +78,14 @@ class FuncionarioForm(forms.ModelForm):
         return validate_cpf(cpf) if cpf else ''
 
     def clean_pis(self):
-        pis = self.cleaned_data.get('pis')
-        return validate_pis(pis)
+        # Regra atual permite CPF no lugar do PIS; portanto não validamos DV.
+        # Normalizamos para somente dígitos para manter consistência de armazenamento.
+        pis = digits_only(self.cleaned_data.get('pis'))
+        if not pis:
+            return ''
+        if len(pis) > 15:
+            raise forms.ValidationError('PIS muito longo. Informe no máximo 15 dígitos.')
+        return pis
 
     def clean(self):
         cleaned_data = super().clean()

@@ -22,11 +22,11 @@
             <div class="alert alert-info border-0 small py-2">
                 <p class="mb-1">
                     <strong>Como usar:</strong>
-                    1) Baixe o modelo; 2) Preencha os dados; 3) Selecione a empresa; 4) Faça o upload.
+                    1) Baixe o modelo; 2) Preencha os dados; 3) (Opcional) Selecione a empresa; 4) Faça o upload.
                 </p>
                 <p class="mb-0">
                     <strong>Importante:</strong>
-                    Colaborador cadastrado - Formato da competência MM/YYYY - Valores com ponto decimal.
+                    Colaborador cadastrado - Formato da competência MM/YYYY - Valores com ponto decimal - Use a coluna EMPRESA para múltiplas empresas.
                 </p>
             </div>
 
@@ -53,9 +53,9 @@
 
                     <!-- Seleção de Empresa -->
                     <div class="mb-3">
-                        <label for="empresa" class="form-label small fw-bold">Empresa *</label>
-                        <select name="empresa" id="empresa" required class="form-select form-select-sm">
-                            <option value="">Selecione uma empresa</option>
+                        <label for="empresa" class="form-label small fw-bold">Empresa (opcional)</label>
+                        <select name="empresa" id="empresa" class="form-select form-select-sm">
+                            <option value="">(Opcional) Usar a coluna EMPRESA do XLSX</option>
                             {% for empresa in empresas %}
                                 <option value="{{ empresa.codigo }}">{{ empresa.nome }}</option>
                             {% endfor %}
@@ -146,12 +146,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!fileInput.files || fileInput.files.length === 0) {
                 e.preventDefault();
                 alert('Por favor, selecione um arquivo XLSX para importar.');
-                return false;
-            }
-            
-            if (!empresaSelect.value) {
-                e.preventDefault();
-                alert('Por favor, selecione uma empresa.');
                 return false;
             }
             
