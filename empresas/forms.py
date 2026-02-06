@@ -14,13 +14,14 @@ from .models_grupo import GrupoEmpresa
 class EmpresaForm(forms.ModelForm):
     class Meta:
         model = Empresa
-        fields = ['grupo', 'nome', 'cnpj', 'endereco', 'numero', 'bairro', 'cep', 'cidade', 'uf', 
-                  'nome_contato', 'fone_contato', 'cnae', 'percentual_rat', 'optante_simples', 
-                  'fpas', 'outras_entidades', 'email', 'paga_13_aniversario']
+        fields = ['grupo', 'nome', 'cnpj', 'codigo_folha', 'endereco', 'numero', 'bairro', 'cep', 'cidade', 'uf', 
+              'nome_contato', 'fone_contato', 'cnae', 'percentual_rat', 'optante_simples', 
+              'fpas', 'outras_entidades', 'email', 'paga_13_aniversario']
         widgets = {
             'grupo': forms.Select(attrs={'class': 'form-select'}),
             'nome': forms.TextInput(attrs={'class': 'form-control'}),
             'cnpj': forms.TextInput(attrs={'class': 'form-control'}),
+            'codigo_folha': forms.TextInput(attrs={'class': 'form-control'}),
             'endereco': forms.TextInput(attrs={'class': 'form-control'}),
             'numero': forms.TextInput(attrs={'class': 'form-control'}),
             'bairro': forms.TextInput(attrs={'class': 'form-control'}),
@@ -40,6 +41,8 @@ class EmpresaForm(forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if 'codigo_folha' in self.fields:
+            self.fields['codigo_folha'].required = False
         if 'grupo' in self.fields:
             allowed = get_allowed_empresa_ids(user)
             qs = GrupoEmpresa.objects.all()
@@ -65,6 +68,9 @@ class EmpresaForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+
+        if not cleaned_data.get('codigo_folha'):
+            cleaned_data['codigo_folha'] = Empresa._generate_codigo_folha()
 
         # Normalizar campos textuais para maiúsculas ASCII
         cleaned_data['nome'] = normalize_upper_ascii(cleaned_data.get('nome'), allow_digits=True)

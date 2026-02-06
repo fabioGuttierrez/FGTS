@@ -68,12 +68,16 @@
 
     <div class="mb-5">
       <h3 class="mb-3">Empresas do mesmo Grupo Econômico</h3>
-      <ul class="mb-3">
-        {% for emp in empresa.grupo.empresas.all %}
-          <li><strong>Código {{ emp.codigo|default:emp.id }}</strong> - {{ emp.nome }} ({{ emp.cnpj }})</li>
-        {% endfor %}
-      </ul>
-      <a href="{% url 'empresa-cadastrar' %}" class="btn btn-secondary">Cadastrar nova empresa ao grupo</a>
+      {% if grupo %}
+        <ul class="mb-3">
+          {% for emp in grupo.empresas.all %}
+            <li><strong>Codigo {{ emp.codigo_exibicao }}</strong> - {{ emp.nome }} ({{ emp.cnpj }})</li>
+          {% endfor %}
+        </ul>
+        <a href="{% url 'empresa-cadastrar' %}" class="btn btn-secondary">Cadastrar nova empresa ao grupo</a>
+      {% else %}
+        <div class="text-muted">Esta empresa nao esta vinculada a um grupo economico.</div>
+      {% endif %}
     </div>
 
   {% else %}

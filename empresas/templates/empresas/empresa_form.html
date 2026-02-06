@@ -141,13 +141,17 @@
         <div class="modal-body">
           {% csrf_token %}
           <div class="row g-3">
-            <div class="col-md-8">
+            <div class="col-md-6">
               <label for="id_nome" class="form-label">Nome da Empresa *</label>
               {{ form.nome }}
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
               <label for="id_cnpj" class="form-label">CNPJ *</label>
               {{ form.cnpj }}
+            </div>
+            <div class="col-md-3">
+              <label for="id_codigo_folha" class="form-label">Codigo Folha</label>
+              {{ form.codigo_folha }}
             </div>
           </div>
 

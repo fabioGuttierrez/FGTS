@@ -1,3 +1,5 @@
+import datetime
+
 from django import forms
 from django.core.exceptions import ValidationError
 from empresas.models import Empresa
@@ -91,12 +93,27 @@ class LancamentoForm(forms.ModelForm):
 
         vinculo = cleaned_data.get('vinculo')
         empresa = cleaned_data.get('empresa')
+        competencia = (cleaned_data.get('competencia') or '').strip()
 
         if vinculo is None:
             raise ValidationError('Vínculo é obrigatório. Use a Matrícula/ID do vínculo para evitar ambiguidade.')
 
         if empresa and vinculo.empresa_id != empresa.id:
             self.add_error('vinculo', 'Este vínculo não pertence à empresa selecionada.')
+
+        if vinculo and competencia:
+            try:
+                if '/' in competencia:
+                    mes_str, ano_str = competencia.split('/')
+                    comp_date = datetime.date(int(ano_str), int(mes_str), 1)
+                    adm = vinculo.data_admissao
+                    dem = vinculo.data_demissao
+                    adm_month = datetime.date(adm.year, adm.month, 1)
+                    dem_month = datetime.date(dem.year, dem.month, 1) if dem else None
+                    if comp_date < adm_month or (dem_month and comp_date > dem_month):
+                        self.add_error('competencia', 'Competência fora do período do vínculo.')
+            except Exception:
+                pass
 
         # Garantir que o model instance tenha empresa/funcionário antes do full_clean do ModelForm
         self.instance.vinculo = vinculo

@@ -1,4 +1,5 @@
 from django.db import models
+from uuid import uuid4
 from .models_feature import * 
 from .models_grupo import *
 
@@ -18,6 +19,7 @@ class Empresa(models.Model):
 		return bool(self.grupo and self.grupo.empresa_principal_id == self.codigo)
 	nome = models.CharField(max_length=255, verbose_name='Nome')
 	cnpj = models.CharField(max_length=20, unique=True, verbose_name='CNPJ')
+	codigo_folha = models.CharField(max_length=30, blank=False, verbose_name='Codigo Folha')
 	endereco = models.CharField(max_length=255, blank=True, verbose_name='Endereço')
 	numero = models.CharField(max_length=10, blank=True, verbose_name='Número')
 	bairro = models.CharField(max_length=100, blank=True, verbose_name='Bairro')
@@ -42,6 +44,22 @@ class Empresa(models.Model):
 	def id(self):
 		"""Compatibilidade: expõe PK como id para testes e código legado."""
 		return self.codigo
+
+	@property
+	def codigo_exibicao(self):
+		return self.codigo_folha or str(self.codigo)
+
+	def save(self, *args, **kwargs):
+		if not self.codigo_folha:
+			self.codigo_folha = self._generate_codigo_folha()
+		super().save(*args, **kwargs)
+
+	@classmethod
+	def _generate_codigo_folha(cls):
+		while True:
+			codigo = f"CF{uuid4().hex[:8].upper()}"
+			if not cls.objects.filter(codigo_folha=codigo).exists():
+				return codigo
 
 	def __str__(self):
 		return self.nome

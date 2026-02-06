@@ -6,7 +6,7 @@ from .models import Empresa
 
 @admin.register(Empresa)
 class EmpresaAdmin(admin.ModelAdmin):
-	list_display = ('nome', 'cnpj', 'cidade', 'uf', 'grupo', 'is_matriz_flag')
+	list_display = ('nome', 'cnpj', 'codigo_folha', 'cidade', 'uf', 'grupo', 'is_matriz_flag')
 	search_fields = ('nome', 'cnpj')
 	list_filter = ('grupo',)
 

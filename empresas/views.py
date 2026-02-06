@@ -16,10 +16,17 @@ class PainelAdminEmpresaView(LoginRequiredMixin, View):
     def get(self, request, empresa_id):
         empresa = Empresa.objects.get(pk=empresa_id)
         is_admin = EmpresaUsuarioRole.objects.filter(usuario=request.user, empresa=empresa, role=EmpresaUsuarioRole.ADMIN).exists()
+        grupo = empresa.grupo
+        if not grupo:
+            try:
+                grupo = empresa.grupo_principal
+            except Exception:
+                grupo = None
         context = {
             'empresa': empresa,
             'user': request.user,
             'is_admin_empresa': is_admin,
+            'grupo': grupo,
         }
         if not is_admin:
             return HttpResponseForbidden('Acesso restrito ao administrador da empresa.')
@@ -164,6 +171,10 @@ class EmpresaCreateView(LoginRequiredMixin, CreateView):
         # Redirecionar para o dashboard
         return redirect('dashboard')
 
+    def form_invalid(self, form):
+        messages.error(self.request, 'Foram encontradas inconsistencias nas informacoes enviadas. Revise as informacoes.')
+        return super().form_invalid(form)
+
 class EmpresaListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
     model = Empresa
     template_name = 'empresas/empresa_list.html'
@@ -204,3 +215,7 @@ class EmpresaUpdateView(LoginRequiredMixin, UpdateView):
     def form_valid(self, form):
         messages.success(self.request, '✅ Empresa atualizada com sucesso.')
         return super().form_valid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, 'Foram encontradas inconsistencias nas informacoes enviadas. Revise as informacoes.')
+        return super().form_invalid(form)

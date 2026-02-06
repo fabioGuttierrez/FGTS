@@ -86,6 +86,10 @@ class FuncionarioCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
             messages.success(self.request, f'✅ Funcionário "{funcionario.nome}" cadastrado com sucesso!')
         return super().form_valid(form)
 
+    def form_invalid(self, form):
+        messages.error(self.request, 'Foram encontradas inconsistencias nas informacoes enviadas. Revise as informacoes.')
+        return super().form_invalid(form)
+
 class FuncionarioListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
     model = Funcionario
     template_name = 'funcionarios/funcionario_list.html'
@@ -242,6 +246,10 @@ class FuncionarioUpdateView(LoginRequiredMixin, EmpresaScopeMixin, UpdateView):
         messages.success(self.request, f'✅ Funcionário "{funcionario.nome}" atualizado com sucesso!')
         return super().form_valid(form)
 
+    def form_invalid(self, form):
+        messages.error(self.request, 'Foram encontradas inconsistencias nas informacoes enviadas. Revise as informacoes.')
+        return super().form_invalid(form)
+
 
 class FuncionarioDeleteView(LoginRequiredMixin, EmpresaScopeMixin, DeleteView):
     model = Funcionario
@@ -327,6 +335,7 @@ class FuncionarioUploadImportView(LoginRequiredMixin, EmpresaScopeMixin, View):
             }
             
             if result['errors']:
+                response_data['message'] = 'Foram encontradas inconsistencias nas informacoes enviadas. Revise as informacoes.'
                 response_data['message'] += f" ⚠️ {len(result['errors'])} erro(s) encontrado(s)."
             
             return JsonResponse(response_data)
@@ -401,6 +410,10 @@ class FuncionarioVinculoCreateView(LoginRequiredMixin, EmpresaScopeMixin, Create
         )
         return redirect('funcionario-detail', pk=self.funcionario.pk)
 
+    def form_invalid(self, form):
+        messages.error(self.request, 'Foram encontradas inconsistencias nas informacoes enviadas. Revise as informacoes.')
+        return super().form_invalid(form)
+
 class FuncionarioTransferenciaView(LoginRequiredMixin, EmpresaScopeMixin, View):
     template_name = 'funcionarios/funcionario_transferencia.html'
 
@@ -467,6 +480,7 @@ class FuncionarioTransferenciaView(LoginRequiredMixin, EmpresaScopeMixin, View):
             )
             messages.success(request, f'Transferência realizada com sucesso!')
             return redirect('funcionario-detail', pk=funcionario.pk)
+        messages.error(request, 'Foram encontradas inconsistencias nas informacoes enviadas. Revise as informacoes.')
         return render(request, self.template_name, {'form': form, 'funcionario': funcionario})
 
 from datetime import datetime

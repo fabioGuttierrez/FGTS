@@ -19,12 +19,23 @@ def get_allowed_empresa_ids(user) -> Optional[list]:
         return None
 
     allowed = set()
-    if getattr(user, "empresa", None):
-        allowed.add(user.empresa.codigo)
-        # Se é a empresa_principal de um grupo, libera todas as empresas do grupo
+    user_empresa = None
+    try:
+        user_empresa = user.empresa
+    except Exception:
+        user_empresa = None
+
+    if user_empresa:
+        allowed.add(user_empresa.codigo)
+        # Se e empresa_principal de um grupo, libera todas as empresas do grupo
         try:
-            grupo = getattr(user.empresa, "grupo", None)
-            if grupo and getattr(grupo, "empresa_principal_id", None) == user.empresa.codigo:
+            grupo = getattr(user_empresa, "grupo", None)
+            if not grupo:
+                try:
+                    grupo = getattr(user_empresa, "grupo_principal", None)
+                except Exception:
+                    grupo = None
+            if grupo and getattr(grupo, "empresa_principal_id", None) == user_empresa.codigo:
                 allowed.update(grupo.empresas.values_list("codigo", flat=True))
         except Exception:
             pass

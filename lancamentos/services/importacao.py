@@ -25,14 +25,11 @@ class LancamentoImportService:
     
     OPTIONAL_COLUMNS = [
         # EMPRESA é opcional, mas recomendado para grupos com múltiplos vínculos ativos.
-        # Quando informado, deve ser o código da empresa (mesmo usado no sistema).
+        # Quando informado, deve ser o codigo folha da empresa.
         'EMPRESA',
         # MATRICULA é opcional, mas recomendado para identificar a "cadeira" sem depender de CPF.
         # Deve ser a matrícula do vínculo dentro da empresa (numérica; não reutilizável).
         'MATRICULA',
-        # VINCULO é opcional, mas necessário quando há mais de um vínculo ativo do mesmo CPF
-        # na mesma empresa e competência. Deve ser o ID do FuncionarioVinculo.
-        'VINCULO',
         'VALOR_FGTS', 'PAGO', 'DATA_PAGTO', 'VALOR_PAGO', 'PARCELA_13'
     ]
 
@@ -71,6 +68,32 @@ class LancamentoImportService:
             'PARCELA_13': 'PARCELA_13',
         }
         return aliases.get(normalized_header, normalized_header)
+
+    @staticmethod
+    def _resolve_empresa_from_identifier(value):
+        if value is None:
+            return None
+
+        raw = str(value).strip()
+        if not raw:
+            return None
+
+        if raw.endswith('.0') and raw.replace('.', '', 1).isdigit():
+            raw = str(int(float(raw)))
+
+        qs = Empresa.objects.filter(codigo_folha__iexact=raw)
+        if qs.count() > 1:
+            raise ValueError(f"Codigo Folha '{raw}' duplicado. Contate o administrador.")
+        if qs.exists():
+            return qs.first()
+
+        if raw.isdigit():
+            try:
+                return Empresa.objects.get(codigo=int(raw))
+            except Empresa.DoesNotExist:
+                return None
+
+        return None
     
     @staticmethod
     def generate_template_xlsx():
@@ -98,7 +121,6 @@ class LancamentoImportService:
 
         display_overrides = {
             'EMPRESA': 'COD_EMPRESA',
-            'VINCULO': 'ID_VINCULO',
         }
 
         for col_idx, column_name in enumerate(all_columns_internal, 1):
@@ -116,9 +138,8 @@ class LancamentoImportService:
             'João da Silva',         # NOME_FUNCIONARIO
             '01/2026',              # COMPETENCIA (MM/YYYY)
             '3500.00',              # BASE_FGTS
-            '1',                    # EMPRESA (código)
+            'CFABC1234',            # EMPRESA (codigo folha)
             '1001',                 # MATRICULA (do vínculo)
-            '',                     # VINCULO (ID do vínculo) - opcional
             '280.00',               # VALOR_FGTS (8% da base)
             'NÃO',                  # PAGO (SIM/NÃO)
             '',                     # DATA_PAGTO (dd/mm/yyyy)
@@ -141,19 +162,17 @@ class LancamentoImportService:
         title_cell.alignment = Alignment(horizontal='left', vertical='center')
 
         instructions_lines = [
-            "Fluxo recomendado (evita vínculo ambíguo): preencha EMPRESA (CodEmpresa) + MATRICULA.",
-            "- CPF_FUNCIONARIO: CPF do colaborador (apenas números). Pode ficar em branco se MATRICULA ou VINCULO estiver preenchido.",
+            "Fluxo recomendado (evita vínculo ambíguo): preencha EMPRESA (Codigo Folha) + MATRICULA.",
+            "- CPF_FUNCIONARIO: CPF do colaborador (apenas números). Pode ficar em branco se MATRICULA estiver preenchida.",
             "- NOME_FUNCIONARIO: Nome completo (apenas para conferência).",
             "- COMPETENCIA: MM/YYYY (ex: 01/2026).",
             "- BASE_FGTS: Base de cálculo (ex: 3500.00). Use ponto como separador decimal.",
-            "- COD_EMPRESA (CodEmpresa): código da empresa do vínculo nesta linha (recomendado em grupos/múltiplas empresas).",
+            "- COD_EMPRESA (Codigo Folha): código da empresa do vínculo nesta linha (recomendado em grupos/múltiplas empresas).",
             "- MATRICULA: matrícula do vínculo (cadeira) na empresa. Se houver mais de um vínculo ativo na mesma competência, informe a MATRICULA.",
-            "- ID_VINCULO (ID interno): opcional/avançado. Use apenas como fallback se não tiver MATRICULA (cadastro antigo) ou em casos pontuais.",
             "- PARCELA_13: opcional. Use 1 (1ª parcela) ou 2 (2ª parcela). Deixe em branco para competência normal.",
             "",
             "Observações:",
             "- O sistema aceita tanto EMPRESA quanto COD_EMPRESA (mesma coisa).",
-            "- O sistema aceita tanto VINCULO quanto ID_VINCULO (mesma coisa).",
             "- O colaborador e o vínculo precisam existir e estar ativos na competência.",
             "- Remova a linha de exemplo (linha 2) antes de importar.",
         ]
@@ -213,11 +232,10 @@ class LancamentoImportService:
         ]
 
         has_empresa_column = 'EMPRESA' in headers_upper
-        has_vinculo_column = 'VINCULO' in headers_upper
 
-        if not has_empresa_column and not has_vinculo_column and not empresa:
+        if not has_empresa_column and not empresa:
             raise ValueError(
-                "❌ Selecione uma empresa para importar ou preencha a coluna EMPRESA/VINCULO no arquivo."
+                "❌ Selecione uma empresa para importar ou preencha a coluna EMPRESA no arquivo."
             )
 
         # Se não houver coluna EMPRESA, preserva o comportamento antigo (importação para uma empresa específica)
@@ -370,31 +388,12 @@ class LancamentoImportService:
         empresa_idx = column_indices.get('EMPRESA')
         if empresa_idx is not None and row[empresa_idx] not in [None, '']:
             raw = row[empresa_idx]
-            if isinstance(raw, (int, float)):
-                codigo = str(int(raw))
-            else:
-                codigo = str(raw).strip()
-                if codigo.endswith('.0') and codigo.replace('.', '', 1).isdigit():
-                    codigo = str(int(float(codigo)))
-            if codigo:
-                try:
-                    empresa_row = Empresa.objects.get(codigo=codigo)
-                except Empresa.DoesNotExist:
-                    raise ValueError(f"Empresa '{codigo}' não encontrada")
+            empresa_row = LancamentoImportService._resolve_empresa_from_identifier(raw)
+            if not empresa_row:
+                raise ValueError(f"Empresa '{raw}' não encontrada")
 
         if not empresa_row:
-            vinculo_idx_tmp = column_indices.get('VINCULO')
-            raw_vinculo_tmp = row[vinculo_idx_tmp] if vinculo_idx_tmp is not None else None
-            if raw_vinculo_tmp not in [None, '']:
-                try:
-                    vinculo_id_tmp = int(raw_vinculo_tmp) if not isinstance(raw_vinculo_tmp, str) else int(raw_vinculo_tmp.strip())
-                    vinculo_tmp = FuncionarioVinculo.objects.select_related('empresa').get(pk=vinculo_id_tmp)
-                    empresa_row = vinculo_tmp.empresa
-                except Exception:
-                    pass
-
-        if not empresa_row:
-            raise ValueError('Empresa não informada. Selecione uma empresa ou preencha a coluna EMPRESA/VINCULO.')
+            raise ValueError('Empresa não informada. Selecione uma empresa ou preencha a coluna EMPRESA.')
 
         if not is_empresa_allowed(user, empresa_row.codigo):
             raise ValueError('Você não tem permissão para importar lançamentos para a empresa informada.')
@@ -425,7 +424,7 @@ class LancamentoImportService:
         except Exception:
             raise ValueError(f"Competência inválida: '{competencia}'. Use o formato MM/YYYY (ex: 01/2026)")
 
-        # Resolver vínculo (cadeira) por empresa + competência (ou por ID informado na coluna VINCULO)
+        # Resolver vínculo (cadeira) por empresa + competência
         vinculo_idx = column_indices.get('VINCULO')
         raw_vinculo = row[vinculo_idx] if vinculo_idx is not None else None
 

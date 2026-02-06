@@ -24,6 +24,32 @@ class FuncionarioImportService:
         'PIS', 'CBO', 'CARTEIRA_PROFISSIONAL', 
         'SERIE_CARTEIRA', 'DATA_NASCIMENTO', 'DATA_DEMISSAO', 'OBSERVACAO', 'SALARIO'
     ]
+
+    @staticmethod
+    def _resolve_empresa_from_identifier(value):
+        if value is None:
+            return None
+
+        raw = str(value).strip()
+        if not raw:
+            return None
+
+        if raw.endswith('.0') and raw.replace('.', '', 1).isdigit():
+            raw = str(int(float(raw)))
+
+        qs = Empresa.objects.filter(codigo_folha__iexact=raw)
+        if qs.count() > 1:
+            raise ValueError(f"Codigo Folha '{raw}' duplicado. Contate o administrador.")
+        if qs.exists():
+            return qs.first()
+
+        if raw.isdigit():
+            try:
+                return Empresa.objects.get(codigo=int(raw))
+            except Empresa.DoesNotExist:
+                return None
+
+        return None
     
     @staticmethod
     def generate_template_xlsx():
@@ -59,7 +85,7 @@ class FuncionarioImportService:
             "João da Silva",  # NOME
             "123.456.789-00",  # CPF
             "2023-01-15",  # DATA_ADMISSAO
-            "1",  # EMPRESA (código da empresa)
+            "EMP001",  # EMPRESA (codigo folha)
             "120.123.456-70",  # PIS
             "2110",  # CBO
             "AB123456",  # CARTEIRA_PROFISSIONAL
@@ -90,8 +116,8 @@ class FuncionarioImportService:
             "• Campos obrigatórios: NOME, CPF, DATA_ADMISSAO, EMPRESA",
             "• Formato de datas: YYYY-MM-DD (ex: 2023-01-15)",
             "• CPF deve estar no formato XXX.XXX.XXX-XX",
-            "• EMPRESA: use o CÓDIGO da empresa (número inteiro, ex: 1, 2, 3...)",
-            "• Para ver o código da sua empresa, acesse a lista de empresas no sistema",
+            "• EMPRESA: use o CODIGO FOLHA da empresa (pode conter letras)",
+            "• Para ver o codigo folha, acesse a lista de empresas no sistema",
             "• PIS é opcional e pode conter CPF (conforme regra atual)",
             "• DATA_DEMISSAO deixar em branco se o funcionário está ativo",
             "• SALARIO: se preenchido, cria automaticamente o primeiro lançamento de FGTS",
@@ -205,12 +231,8 @@ class FuncionarioImportService:
                     if not empresa_identifier:
                         raise ValueError("Empresa é obrigatória")
                     
-                    try:
-                        if isinstance(empresa_identifier, int):
-                            empresa = Empresa.objects.get(pk=empresa_identifier)
-                        else:
-                            empresa = Empresa.objects.get(codigo=str(empresa_identifier))
-                    except Empresa.DoesNotExist:
+                    empresa = FuncionarioImportService._resolve_empresa_from_identifier(empresa_identifier)
+                    if not empresa:
                         raise ValueError(f"Empresa '{empresa_identifier}' não encontrada")
                     
                     # VALIDAÇÃO 1: Verificar se usuário tem permissão para essa empresa

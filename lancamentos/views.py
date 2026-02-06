@@ -82,6 +82,10 @@ class LancamentoCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
         messages.success(self.request, f'✅ Lançamento para {lancamento.funcionario.nome}{vinculo_label} ({lancamento.competencia}) registrado com sucesso!')
         return super().form_valid(form)
 
+    def form_invalid(self, form):
+        messages.error(self.request, 'Foram encontradas inconsistencias nas informacoes enviadas. Revise as informacoes.')
+        return super().form_invalid(form)
+
 
 class LancamentoUpdateView(LoginRequiredMixin, EmpresaScopeMixin, UpdateView):
     """Editar lançamento mensal"""
@@ -106,6 +110,10 @@ class LancamentoUpdateView(LoginRequiredMixin, EmpresaScopeMixin, UpdateView):
         messages.success(self.request, f'✅ Lançamento para {lancamento.funcionario.nome}{vinculo_label} ({lancamento.competencia}) atualizado com sucesso!')
         return super().form_valid(form)
 
+    def form_invalid(self, form):
+        messages.error(self.request, 'Foram encontradas inconsistencias nas informacoes enviadas. Revise as informacoes.')
+        return super().form_invalid(form)
+
 
 class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
     """Listar lançamentos cadastrados"""
@@ -119,7 +127,7 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         from empresas.models_grupo import FuncionarioVinculo
         from django.db import models
         from django.db.models import OuterRef, Exists, Q, DateField, Value, F, Func, Case, When
-        from django.db.models.functions import Substr, Cast
+        from django.db.models.functions import Substr, Cast, TruncMonth
         import datetime
 
         qs = super().get_queryset().select_related('empresa', 'funcionario', 'vinculo')
@@ -206,23 +214,31 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         )
 
         vinculo_exists = Exists(
-            FuncionarioVinculo.objects.filter(
+            FuncionarioVinculo.objects.annotate(
+                adm_mes=TruncMonth('data_admissao'),
+                dem_mes=TruncMonth('data_demissao'),
+            ).filter(
                 funcionario_id=OuterRef('funcionario_id'),
                 empresa_id=OuterRef('empresa_id'),
-                data_admissao__lte=OuterRef('competencia_date'),
+                adm_mes__lte=OuterRef('competencia_date'),
             ).filter(
-                Q(data_demissao__isnull=True) | Q(data_demissao__gte=OuterRef('competencia_date'))
+                Q(dem_mes__isnull=True) | Q(dem_mes__gte=OuterRef('competencia_date'))
             )
         )
 
         qs = qs.annotate(vinculo_legado_ativo=vinculo_exists)
 
+        qs = qs.annotate(
+            vinculo_adm_mes=TruncMonth('vinculo__data_admissao'),
+            vinculo_dem_mes=TruncMonth('vinculo__data_demissao'),
+        )
+
         vinculo_ativo_explicito = Case(
             When(
                 condition=(
                     Q(vinculo__isnull=False)
-                    & Q(vinculo__data_admissao__lte=F('competencia_date'))
-                    & (Q(vinculo__data_demissao__isnull=True) | Q(vinculo__data_demissao__gte=F('competencia_date')))
+                    & Q(vinculo_adm_mes__lte=F('competencia_date'))
+                    & (Q(vinculo_dem_mes__isnull=True) | Q(vinculo_dem_mes__gte=F('competencia_date')))
                 ),
                 then=Value(True),
             ),
@@ -339,8 +355,11 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
                 empresa_contexto = Empresa.objects.filter(pk=empresa_param).first()
             except Exception:
                 empresa_contexto = None
-        if not empresa_contexto and getattr(self.request.user, 'empresa', None):
-            empresa_contexto = getattr(self.request.user, 'empresa')
+        if not empresa_contexto:
+            try:
+                empresa_contexto = self.request.user.empresa
+            except Exception:
+                empresa_contexto = None
         if not empresa_contexto and allowed_ids and len(allowed_ids) == 1:
             empresa_contexto = Empresa.objects.filter(codigo=allowed_ids[0]).first()
 
@@ -690,14 +709,21 @@ class RelatorioCompetenciaView(FormView):
                     except Exception:
                         empresa_ctx = None
 
-        if not empresa_ctx and getattr(self.request.user, 'empresa', None):
-            empresa_ctx = getattr(self.request.user, 'empresa')
+        if not empresa_ctx:
+            try:
+                empresa_ctx = self.request.user.empresa
+            except Exception:
+                empresa_ctx = None
 
         bloqueio_ctx = feature_block_context('custom_reports', user=self.request.user, empresa=empresa_ctx)
         ctx['relatorio_bloqueado'] = bloqueio_ctx['feature_blocked']
         ctx['relatorio_bloqueio_motivo'] = bloqueio_ctx['feature_block_reason']
         ctx['empresa_contexto'] = empresa_ctx
         return ctx
+
+    def form_invalid(self, form):
+        messages.error(self.request, 'Foram encontradas inconsistencias nas informacoes enviadas. Revise as informacoes.')
+        return super().form_invalid(form)
 
     def _agrupar_resultados(self, resultados, agrupamento):
         """Agrupa resultados por competência, ano, funcionário ou vínculo"""
@@ -1873,7 +1899,8 @@ def export_relatorio_competencia_pdf(request):
 
         now = datetime.now()
         usuario_label = getattr(request.user, 'username', 'Usuário')
-        empresa_label = f"{empresa.codigo} {empresa.nome}" if getattr(empresa, 'codigo', None) else empresa.nome
+        empresa_codigo = getattr(empresa, 'codigo_exibicao', None) or getattr(empresa, 'codigo', None)
+        empresa_label = f"{empresa_codigo} {empresa.nome}" if empresa_codigo else empresa.nome
         cnpj_label = empresa.cnpj or ''
 
         story = []

@@ -26,7 +26,7 @@
                 </p>
                 <p class="mb-0">
                     <strong>Importante:</strong>
-                    Competência em MM/YYYY - Valores com ponto decimal - COD_EMPRESA = CodEmpresa - Para evitar "vínculo ambíguo", use COD_EMPRESA + MATRICULA (recomendado). A coluna ID_VINCULO (ID interno) é opcional (fallback). CPF pode ficar em branco quando MATRICULA/ID_VINCULO estiver preenchido.
+                    Competência em MM/YYYY - Valores com ponto decimal - COD_EMPRESA = Codigo Folha - Para evitar "vínculo ambíguo", use COD_EMPRESA + MATRICULA (recomendado). CPF pode ficar em branco quando MATRICULA estiver preenchida.
                 </p>
             </div>
 
@@ -57,7 +57,7 @@
                         <select name="empresa" id="empresa" class="form-select form-select-sm">
                             <option value="">(Opcional) Usar a coluna EMPRESA do XLSX</option>
                             {% for empresa in empresas %}
-                                <option value="{{ empresa.codigo }}">{{ empresa.nome }}</option>
+                                <option value="{{ empresa.codigo }}">{{ empresa.codigo_exibicao }} - {{ empresa.nome }}</option>
                             {% endfor %}
                         </select>
                     </div>
