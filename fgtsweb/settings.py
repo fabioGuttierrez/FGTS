@@ -17,20 +17,29 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Carregar variáveis de ambiente do arquivo .env
-load_dotenv(BASE_DIR / '.env')
+# Carregar variáveis de ambiente do arquivo .env (sem sobrescrever env do runtime)
+load_dotenv(BASE_DIR / '.env', override=False)
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-2s9w&-meat$6vn_p5bd-5d!x(jcr+ikflqc5l!g5xl$vo@vdx$')
+# Compat: aceita tanto SECRET_KEY/DEBUG quanto DJANGO_SECRET_KEY/DJANGO_DEBUG.
+SECRET_KEY = (
+    os.getenv('DJANGO_SECRET_KEY')
+    or os.getenv('SECRET_KEY')
+    or 'django-insecure-2s9w&-meat$6vn_p5bd-5d!x(jcr+ikflqc5l!g5xl$vo@vdx$'
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+DEBUG = (os.getenv('DJANGO_DEBUG') or os.getenv('DEBUG') or 'True') == 'True'
 
 ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '*').split(',')
+
+# URL pública do sistema (usada em links enviados por email quando não há request).
+# Ex.: https://fgts.bildee.com.br
+SITE_URL = (os.getenv('SITE_URL') or '').strip().rstrip('/')
 
 # CSRF trusted origins for HTTPS
 CSRF_TRUSTED_ORIGINS = [
@@ -131,23 +140,35 @@ for var_name, var_value in [
 
 if missing_vars:
     import sys
-    print(f"\n[ERRO CRÍTICO] Variáveis de ambiente do banco Supabase ausentes: {', '.join(missing_vars)}", file=sys.stderr)
-    print("Abortando inicialização do Django. Corrija o ambiente para evitar fallback para SQLite.", file=sys.stderr)
-    sys.exit(1)
+    if not DEBUG:
+        print(f"\n[ERRO CRÍTICO] Variáveis de ambiente do banco Supabase ausentes: {', '.join(missing_vars)}", file=sys.stderr)
+        print("Abortando inicialização do Django. Corrija o ambiente para evitar fallback para SQLite.", file=sys.stderr)
+        sys.exit(1)
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'HOST': SUPABASE_HOST,
-        'PORT': int(SUPABASE_PORT),
-        'NAME': SUPABASE_DB,
-        'USER': SUPABASE_USER,
-        'PASSWORD': SUPABASE_PASSWORD,
-        'OPTIONS': {
-            'sslmode': 'require',
-        },
+    print(
+        f"\n[AVISO] Variáveis do Supabase ausentes ({', '.join(missing_vars)}). Usando SQLite em desenvolvimento.",
+        file=sys.stderr,
+    )
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'HOST': SUPABASE_HOST,
+            'PORT': int(SUPABASE_PORT),
+            'NAME': SUPABASE_DB,
+            'USER': SUPABASE_USER,
+            'PASSWORD': SUPABASE_PASSWORD,
+            'OPTIONS': {
+                'sslmode': 'require',
+            },
+        }
+    }
 
 # Modelo de usuário customizado
 AUTH_USER_MODEL = 'usuarios.Usuario'

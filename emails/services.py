@@ -9,6 +9,19 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _get_public_base_url() -> str:
+    base_url = (getattr(settings, 'SITE_URL', None) or '').strip().rstrip('/')
+    if base_url:
+        return base_url
+    if getattr(settings, 'ALLOWED_HOSTS', None):
+        host = (settings.ALLOWED_HOSTS[0] or '').strip()
+        if host and host != '*':
+            if host.startswith('http://') or host.startswith('https://'):
+                return host.rstrip('/')
+            return f"https://{host}".rstrip('/')
+    return 'http://localhost:8000'
+
+
 class EmailService:
     """Serviço centralizado para envio de emails"""
     
@@ -112,7 +125,7 @@ Equipe FGTS
 
 def enviar_recuperacao_senha(usuario, token):
     """Envia email de recuperação de senha"""
-    link = f"{settings.ALLOWED_HOSTS[0]}/recuperar-senha/{token}/"
+    link = f"{_get_public_base_url()}/recuperar-senha/{token}/"
     
     return EmailService.enviar_email_simples(
         assunto='Recuperação de Senha - Sistema FGTS',

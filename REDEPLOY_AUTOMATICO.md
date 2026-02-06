@@ -31,11 +31,11 @@ DJANGO_ALLOWED_HOSTS=fgts.bildee.com.br,127.0.0.1,localhost
 SUPABASE_HOST=db.qbyipfcyqnaptstidphj.supabase.co
 SUPABASE_DB=postgres
 SUPABASE_USER=postgres
-SUPABASE_PASSWORD=Q3fjak3FyAf4UyAV
+SUPABASE_PASSWORD=your-supabase-password
 SUPABASE_PORT=6543
 
 SUPABASE_URL=https://qbyipfcyqnaptstidphj.supabase.co
-SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFieWlwZmN5cW5hcHRzdGlkcGhqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzM5NjU2NSwiZXhwIjoyMDgyOTcyNTY1fQ.7f10RSykX1bJEIedkuAMTMPcRBzU3Zr6_cmsAbFA8xw
+SUPABASE_KEY=your-supabase-service-role-key
 
 ASAAS_API_KEY=your-asaas-key-here
 ASAAS_SANDBOX=True

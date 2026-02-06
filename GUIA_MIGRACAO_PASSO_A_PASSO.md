@@ -52,7 +52,7 @@ python manage.py dumpdata \
 SUPABASE_HOST=db.qbyipfcyqnaptstidphj.supabase.co
 SUPABASE_DB=postgres
 SUPABASE_USER=postgres
-SUPABASE_PASSWORD=Q3fjak3FyAf4UyAV
+SUPABASE_PASSWORD=your-supabase-password
 SUPABASE_PORT=6543
 DJANGO_DEBUG=False
 ```

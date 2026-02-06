@@ -1,11 +1,18 @@
 """
 Detectar credenciais Supabase PostgreSQL do novo projeto
 """
+import os
 import re
 
-# JWT token do Supabase
-jwt_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFieWlwZmN5cW5hcHRzdGlkcGhqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzM5NjU2NSwiZXhwIjoyMDgyOTcyNTY1fQ.7f10RSykX1bJEIedkuAMTMPcRBzU3Zr6_cmsAbFA8xw"
-api_url = "https://qbyipfcyqnaptstidphj.supabase.co"
+# NÃO versionar tokens/chaves aqui.
+# Informe via env:
+# - SUPABASE_URL=https://<ref>.supabase.co
+# - SUPABASE_KEY=<service_role_key>
+jwt_token = os.getenv("SUPABASE_KEY", "")
+api_url = os.getenv("SUPABASE_URL", "")
+
+if not api_url:
+	raise SystemExit("Defina SUPABASE_URL no ambiente (ex.: https://<ref>.supabase.co)")
 
 # Extrair project ID do URL
 project_id = re.search(r'https://(.+?)\.supabase\.co', api_url).group(1)

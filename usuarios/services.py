@@ -17,7 +17,16 @@ def build_confirmation_link(user, request=None) -> str:
     path = reverse('confirm-email', kwargs={'uidb64': uid, 'token': token})
     if request:
         return request.build_absolute_uri(path)
-    base_url = getattr(settings, 'SITE_URL', None) or settings.ALLOWED_HOSTS[0] if settings.ALLOWED_HOSTS else 'http://localhost:8000'
+    base_url = (getattr(settings, 'SITE_URL', None) or '').strip().rstrip('/')
+    if not base_url:
+        if settings.ALLOWED_HOSTS:
+            host = (settings.ALLOWED_HOSTS[0] or '').strip()
+            if host and host != '*':
+                base_url = host.rstrip('/')
+    if base_url and not (base_url.startswith('http://') or base_url.startswith('https://')):
+        base_url = f"https://{base_url}"
+    if not base_url:
+        base_url = 'http://localhost:8000'
     return f"{base_url}{path}"
 
 

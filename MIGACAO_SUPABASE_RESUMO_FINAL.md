@@ -19,7 +19,7 @@ Migrar todas as tabelas do sistema FGTS Python do SQLite para Supabase PostgreSQ
 - **Banco de Dados:** postgres
 - **Usuário:** postgres
 - **Porta:** 5432
-- **Connection String:** `postgresql://postgres:Q3fjak3FyAf4UyAV@db.qbyipfcyqnaptstidphj.supabase.co:5432/postgres`
+- **Connection String:** `postgresql://postgres:<your-password>@db.<your-project>.supabase.co:5432/postgres`
 
 ### 2. Configuração Django
 - **Arquivo:** `fgtsweb/settings.py` (linhas 95-125)
@@ -150,8 +150,8 @@ Migrar todas as tabelas do sistema FGTS Python do SQLite para Supabase PostgreSQ
 
 **URL Base:** http://localhost:8000  
 **Supabase Dashboard:** https://supabase.com/dashboard/project/qbyipfcyqnaptstidphj  
-**Database Password:** Q3fjak3FyAf4UyAV  
-**Service Role Key:** eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFieWlwZmN5cW5hcHRzdGlkcGhqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzM5NjU2NSwiZXhwIjoyMDgyOTcyNTY1fQ.7f10RSykX1bJEIedkuAMTMPcRBzU3Zr6_cmsAbFA8xw
+**Database Password:** <your-supabase-password>  
+**Service Role Key:** <your-supabase-service-role-key>
 
 ---
 
