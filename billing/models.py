@@ -79,6 +79,14 @@ class Plan(models.Model):
         verbose_name='Máximo de Empresas no Grupo',
         help_text='Deixe em branco para ilimitado'
     )
+
+    # Limite de histórico em meses para lançamentos
+    max_history_months = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Máximo de Meses de Histórico',
+        help_text='Deixe em branco para histórico ilimitado'
+    )
     
     # Meta
     active = models.BooleanField(default=True, verbose_name='Ativo')
@@ -121,6 +129,26 @@ class BillingCustomer(models.Model):
     email_cobranca = models.EmailField(blank=True, null=True)
     asaas_customer_id = models.CharField(max_length=100, blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+
+    # Limites especiais (excecoes por empresa)
+    override_max_employees = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Limite especial de colaboradores',
+        help_text='Se informado, substitui o limite do plano para esta empresa.'
+    )
+    override_max_companies = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Limite especial de CNPJs no grupo',
+        help_text='Se informado, substitui o limite do plano para o grupo desta empresa.'
+    )
+    override_max_history_months = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Limite especial de histórico (meses)',
+        help_text='Se informado, substitui o limite de histórico do plano para esta empresa.'
+    )
     
     # Trial de 7 dias
     trial_active = models.BooleanField(default=True, verbose_name='Trial Ativo')
@@ -133,23 +161,52 @@ class BillingCustomer(models.Model):
     def __str__(self):
         return f"{self.empresa.nome} ({self.get_status_display()})"
     
-    def can_add_employee(self):
+    def can_add_employee(self, current_count=None):
         """Verifica se é possível adicionar outro colaborador no plano atual"""
+        current_count = self.active_employees if current_count is None else current_count
+        if self.override_max_employees is not None:
+            return current_count < self.override_max_employees
         if not self.plan:
             return False
-        return self.plan.can_add_employee(self.active_employees)
+        return self.plan.can_add_employee(current_count)
     
     def get_usage_percentage(self):
         """Retorna percentual de uso do plano"""
-        if not self.plan:
+        max_employees = self.get_effective_max_employees()
+        if max_employees is None or max_employees == 0:
             return 0
-        return self.plan.get_usage_percentage(self.active_employees)
+        return (self.active_employees / max_employees) * 100
     
     def get_employees_remaining(self):
         """Retorna quantos colaboradores ainda podem ser adicionados"""
-        if not self.plan or self.plan.max_employees is None:
+        max_employees = self.get_effective_max_employees()
+        if max_employees is None:
             return None  # Ilimitado
-        return self.plan.max_employees - self.active_employees
+        return max_employees - self.active_employees
+
+    def get_effective_max_employees(self):
+        """Retorna o limite efetivo de colaboradores (plano ou excecao)."""
+        if self.override_max_employees is not None:
+            return self.override_max_employees
+        if not self.plan:
+            return None
+        return self.plan.max_employees
+
+    def get_effective_max_companies(self):
+        """Retorna o limite efetivo de CNPJs no grupo (plano ou excecao)."""
+        if self.override_max_companies is not None:
+            return self.override_max_companies
+        if not self.plan:
+            return None
+        return self.plan.max_companies
+
+    def get_effective_max_history_months(self):
+        """Retorna o limite efetivo de histórico em meses (plano ou excecao)."""
+        if self.override_max_history_months is not None:
+            return self.override_max_history_months
+        if not self.plan:
+            return None
+        return self.plan.max_history_months
     
     def is_trial_active(self):
         """Verifica se trial está ativo"""

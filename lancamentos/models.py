@@ -124,6 +124,25 @@ class Lancamento(models.Model):
 		if mes < 1 or mes > 12:
 			raise ValidationError({'competencia': 'Mês deve estar entre 01 e 12.'})
 
+		# Limite de histórico por plano/empresa
+		try:
+			billing_customer = self.empresa.billing_customer
+			max_history_months = billing_customer.get_effective_max_history_months()
+			if max_history_months is not None and max_history_months > 0:
+				competencia_date = datetime(ano, mes, 1).date()
+				today = datetime.today().date()
+				current_month = datetime(today.year, today.month, 1).date()
+				min_date = current_month - relativedelta(months=max_history_months - 1)
+				if competencia_date < min_date:
+					raise ValidationError({
+						'competencia': (
+							f"Competência fora do limite do seu plano: "
+							f"máximo de {max_history_months} meses de histórico."
+						)
+					})
+		except Exception:
+			pass
+
 		# Validação das parcelas do 13º
 		if self.parcela_13:
 			if self.parcela_13 == 1:

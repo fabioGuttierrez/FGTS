@@ -1,4 +1,5 @@
 from datetime import datetime
+from dateutil.relativedelta import relativedelta
 from io import BytesIO
 import re
 import unicodedata
@@ -423,6 +424,25 @@ class LancamentoImportService:
             raise ValueError(f"Competência inválida: '{competencia}'. Use o formato MM/YYYY (ex: 01/2026). {str(ve)}")
         except Exception:
             raise ValueError(f"Competência inválida: '{competencia}'. Use o formato MM/YYYY (ex: 01/2026)")
+
+        # Validar limite de histórico
+        try:
+            billing_customer = empresa_row.billing_customer
+            max_history_months = billing_customer.get_effective_max_history_months()
+            if max_history_months is not None and max_history_months > 0:
+                competencia_date = datetime(ano, mes, 1).date()
+                today = datetime.today().date()
+                current_month = datetime(today.year, today.month, 1).date()
+                min_date = current_month - relativedelta(months=max_history_months - 1)
+                if competencia_date < min_date:
+                    raise ValueError(
+                        f"Competência {competencia} fora do limite do plano: "
+                        f"máximo de {max_history_months} meses de histórico."
+                    )
+        except ValueError:
+            raise
+        except Exception:
+            pass
 
         # Resolver vínculo (cadeira) por empresa + competência
         vinculo_idx = column_indices.get('VINCULO')

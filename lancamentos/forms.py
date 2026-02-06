@@ -1,4 +1,5 @@
 import datetime
+from dateutil.relativedelta import relativedelta
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -112,6 +113,25 @@ class LancamentoForm(forms.ModelForm):
                     dem_month = datetime.date(dem.year, dem.month, 1) if dem else None
                     if comp_date < adm_month or (dem_month and comp_date > dem_month):
                         self.add_error('competencia', 'Competência fora do período do vínculo.')
+            except Exception:
+                pass
+
+        if vinculo and competencia:
+            try:
+                empresa_ctx = vinculo.empresa
+                billing_customer = empresa_ctx.billing_customer
+                max_history_months = billing_customer.get_effective_max_history_months()
+                if max_history_months is not None and max_history_months > 0:
+                    mes_str, ano_str = competencia.split('/')
+                    comp_date = datetime.date(int(ano_str), int(mes_str), 1)
+                    today = datetime.date.today()
+                    current_month = datetime.date(today.year, today.month, 1)
+                    min_date = current_month - relativedelta(months=max_history_months - 1)
+                    if comp_date < min_date:
+                        self.add_error(
+                            'competencia',
+                            f"Competência fora do limite do seu plano: máximo de {max_history_months} meses de histórico."
+                        )
             except Exception:
                 pass
 

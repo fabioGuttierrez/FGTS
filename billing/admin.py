@@ -4,12 +4,12 @@ from .models import Plan, BillingCustomer, Subscription, Payment, PricingPlan, F
 
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):
-    list_display = ('get_plan_type_display', 'max_employees', 'support_level', 'price_monthly', 'active')
+    list_display = ('get_plan_type_display', 'max_employees', 'max_history_months', 'support_level', 'price_monthly', 'active')
     list_filter = ('plan_type', 'support_level', 'active')
     search_fields = ('plan_type',)
     fieldsets = (
         ('Tipo de Plano', {
-            'fields': ('plan_type', 'max_employees', 'active')
+            'fields': ('plan_type', 'max_employees', 'max_history_months', 'active')
         }),
         ('Features', {
             'fields': (
@@ -35,7 +35,7 @@ class PlanAdmin(admin.ModelAdmin):
 
 @admin.register(BillingCustomer)
 class BillingCustomerAdmin(admin.ModelAdmin):
-    list_display = ('empresa', 'plan', 'active_employees', 'status', 'created_at')
+    list_display = ('empresa', 'plan', 'active_employees', 'status', 'created_at', 'override_max_employees', 'override_max_companies', 'override_max_history_months')
     list_filter = ('plan', 'status')
     search_fields = ('empresa__nome', 'asaas_customer_id')
     readonly_fields = ('created_at', 'updated_at')
@@ -45,6 +45,9 @@ class BillingCustomerAdmin(admin.ModelAdmin):
         }),
         ('Cobrança', {
             'fields': ('email_cobranca', 'status', 'asaas_customer_id')
+        }),
+        ('Exceções de Limite', {
+            'fields': ('override_max_employees', 'override_max_companies', 'override_max_history_months')
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),

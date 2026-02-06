@@ -438,14 +438,14 @@ class FuncionarioTransferenciaView(LoginRequiredMixin, EmpresaScopeMixin, View):
         funcionario = Funcionario.objects.get(pk=pk)
         if not self._verificar_permissao(request, funcionario):
             return HttpResponseForbidden('Acesso restrito ao administrador da empresa de origem.')
-        form = TransferenciaFuncionarioForm(funcionario)
+        form = TransferenciaFuncionarioForm(funcionario, user=request.user)
         return render(request, self.template_name, {'form': form, 'funcionario': funcionario})
 
     def post(self, request, pk):
         funcionario = Funcionario.objects.get(pk=pk)
         if not self._verificar_permissao(request, funcionario):
             return HttpResponseForbidden('Acesso restrito ao administrador da empresa de origem.')
-        form = TransferenciaFuncionarioForm(funcionario, request.POST)
+        form = TransferenciaFuncionarioForm(funcionario, request.POST, user=request.user)
         if form.is_valid():
             empresa_origem = funcionario.empresa
             empresa_destino = form.cleaned_data['empresa_destino']

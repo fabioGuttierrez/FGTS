@@ -256,14 +256,14 @@ class FuncionarioImportService:
                         if billing_customer.status == 'trial':
                             pass  # Pula validação de limite para empresas trial
                         # VALIDAÇÃO 3: Verificar limite de funcionários do plano (apenas para empresas active)
-                        elif billing_customer.plan:
+                        elif billing_customer.plan or billing_customer.override_max_employees is not None:
                             # Contar funcionários ativos da empresa
                             active_count = empresa.funcionarios.filter(data_demissao__isnull=True).count()
                             
                             # Verificar se pode adicionar mais um
-                            if not billing_customer.plan.can_add_employee(active_count):
-                                plan_name = billing_customer.plan.get_plan_type_display()
-                                max_employees = billing_customer.plan.max_employees
+                            if not billing_customer.can_add_employee(active_count):
+                                plan_name = billing_customer.plan.get_plan_type_display() if billing_customer.plan else 'Especial'
+                                max_employees = billing_customer.get_effective_max_employees()
                                 raise ValueError(
                                     f"Plano '{plan_name}' da empresa '{empresa.nome}' permite no máximo "
                                     f"{max_employees} colaboradores ativos. "

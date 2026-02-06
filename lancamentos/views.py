@@ -786,7 +786,6 @@ class RelatorioCompetenciaView(FormView):
             grupos_ordenados = sorted(grupos.items(), key=lambda x: parse_comp_key(x[0]))
         else:  # funcionario/vinculo
             grupos_ordenados = sorted(grupos.items(), key=lambda x: grupos[x[0]]['label'])
-        
         return grupos_ordenados
 
     def _compute_for(self, empresa, competencia_str, parcela_13, data_pagamento, funcionario=None, matricula=None, jam_state=None):
@@ -1242,6 +1241,7 @@ def relatorio_por_ids(request):
     debug_detalhado = request.GET.get('debug', '') == '1'
     debug_lancamentos = []
     ids_str = request.GET.get('ids', '')
+    agrupamento = request.GET.get('agrupamento', 'competencia')
     if not ids_str:
         return HttpResponse('Nenhum lançamento selecionado.', status=400)
     try:
@@ -1382,7 +1382,7 @@ def relatorio_por_ids(request):
         except Exception:
             return datetime(1900, 1, 1).date()
 
-    resultados_agrupados = view._agrupar_resultados(resultados, 'competencia')
+    resultados_agrupados = view._agrupar_resultados(resultados, agrupamento)
 
     def _format_comp_display(comp, parcela):
         if parcela == 1:
@@ -1401,7 +1401,7 @@ def relatorio_por_ids(request):
         'data_pagamento': data_pagamento,
         'resultados': resultados,
         'resultados_agrupados': resultados_agrupados,
-        'agrupamento': 'competencia',
+        'agrupamento': agrupamento,
         'totais': totais,
         'avisos': avisos_total,
         'from_selection': True,
@@ -2501,7 +2501,11 @@ class LancamentoImportView(LoginRequiredMixin, EmpresaScopeMixin, View):
         """Renderizar página de importação"""
         # Listar empresas permitidas
         empresa_ids = get_allowed_empresa_ids(request.user)
-        empresas = Empresa.objects.filter(codigo__in=empresa_ids)
+        if empresa_ids is None:
+            empresas = Empresa.objects.all()
+        else:
+            empresas = Empresa.objects.filter(codigo__in=empresa_ids)
+        empresas = empresas.order_by('nome')
         
         context = {
             'empresas': empresas,

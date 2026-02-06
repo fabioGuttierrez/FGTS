@@ -75,7 +75,7 @@ class Funcionario(models.Model):
         if billing_customer.status == 'trial':
             return  # Trial é ilimitado
 
-        if not billing_customer.plan:
+        if not billing_customer.plan and billing_customer.override_max_employees is None:
             raise ValidationError(
                 'Empresa não possui plano configurado. '
                 'Contacte o administrador.'
@@ -87,9 +87,9 @@ class Funcionario(models.Model):
             data_demissao__isnull=True
         ).count()
 
-        if not billing_customer.plan.can_add_employee(active_count):
-            plan_name = billing_customer.plan.get_plan_type_display()
-            max_employees = billing_customer.plan.max_employees
+        if not billing_customer.can_add_employee(active_count):
+            plan_name = billing_customer.plan.get_plan_type_display() if billing_customer.plan else 'Especial'
+            max_employees = billing_customer.get_effective_max_employees()
             raise ValidationError(
                 f'Seu plano {plan_name} permite no máximo '
                 f'{max_employees} colaboradores ativos. '

@@ -98,13 +98,13 @@ class EmpresaCreateView(LoginRequiredMixin, CreateView):
         if grupo and grupo.empresa_principal:
             try:
                 bc = grupo.empresa_principal.billing_customer
-                plan = bc.plan
-                if plan and plan.max_companies is not None:
+                max_companies = bc.get_effective_max_companies()
+                if max_companies is not None:
                     total_empresas_grupo = grupo.empresas.count()
-                    if total_empresas_grupo >= plan.max_companies:
+                    if total_empresas_grupo >= max_companies:
                         messages.error(
                             self.request,
-                            f'❌ Seu plano limita a {plan.max_companies} empresas no grupo. Faça upgrade para adicionar mais CNPJs.'
+                            f'❌ Seu plano limita a {max_companies} empresas no grupo. Faça upgrade para adicionar mais CNPJs.'
                         )
                         return redirect('empresa-create')
             except Exception:
