@@ -64,6 +64,7 @@
                                                 {{ form.nome.label }} <span class="text-danger">*</span>
                                             </label>
                                             {{ form.nome }}
+                                            <small class="form-text text-muted d-block">Usado na geracao do SEFIP.RE.</small>
                                             {% if form.nome.errors %}
                                                 <div class="invalid-feedback d-block">{{ form.nome.errors }}</div>
                                             {% endif %}
@@ -91,6 +92,7 @@
                                                 {{ form.data_admissao.label }} <span class="text-danger">*</span>
                                             </label>
                                             {{ form.data_admissao }}
+                                            <small class="form-text text-muted d-block">Usado na geracao do SEFIP.RE.</small>
                                             {% if form.data_admissao.errors %}
                                                 <div class="invalid-feedback d-block">{{ form.data_admissao.errors }}</div>
                                             {% endif %}
@@ -124,12 +126,14 @@
                                                 {{ form.pis.label }}
                                             </label>
                                             {{ form.pis }}
+                                            <small class="form-text text-muted d-block">Usado na geracao do SEFIP.RE.</small>
                                         </div>
                                         <div class="col-md-4">
                                             <label for="{{ form.cbo.id_for_label }}" class="form-label fw-bold">
                                                 {{ form.cbo.label }}
                                             </label>
                                             {{ form.cbo }}
+                                            <small class="form-text text-muted d-block">Usado na geracao do SEFIP.RE.</small>
                                         </div>
                                     </div>
 
@@ -139,12 +143,14 @@
                                                 {{ form.carteira_profissional.label }}
                                             </label>
                                             {{ form.carteira_profissional }}
+                                            <small class="form-text text-muted d-block">Usado na geracao do SEFIP.RE.</small>
                                         </div>
                                         <div class="col-md-6">
                                             <label for="{{ form.serie_carteira.id_for_label }}" class="form-label fw-bold">
                                                 {{ form.serie_carteira.label }}
                                             </label>
                                             {{ form.serie_carteira }}
+                                            <small class="form-text text-muted d-block">Usado na geracao do SEFIP.RE.</small>
                                         </div>
                                     </div>
                                 </div>
@@ -162,6 +168,7 @@
                                                 {{ form.data_nascimento.label }}
                                             </label>
                                             {{ form.data_nascimento }}
+                                            <small class="form-text text-muted d-block">Usado na geracao do SEFIP.RE.</small>
                                         </div>
                                         <div class="col-md-4">
                                             <label for="{{ form.data_demissao.id_for_label }}" class="form-label fw-bold">
