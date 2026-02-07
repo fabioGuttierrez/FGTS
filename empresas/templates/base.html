@@ -329,7 +329,8 @@
 <body>
 
     {% block sidebar %}{% endblock %}
-    {% if request.user.is_authenticated and request.resolver_match and request.resolver_match.view_name != 'login' %}
+    {% with view_name=request.resolver_match.view_name %}
+    {% if request.user.is_authenticated and view_name != 'home' and view_name != 'login' and view_name != 'register' and view_name != 'confirm-email' and view_name != 'billing:pricing' and view_name != 'billing:checkout-plano' and view_name != 'billing:checkout-plano-tipo' and view_name != 'billing:billing-checkout-empresa' %}
         <div style="min-height: 100vh;">
             <div class="sidebar">
                 <div class="sidebar-brand">
@@ -379,7 +380,7 @@
                     </form>
                 </div>
             </div>
-            {% if request.resolver_match.view_name == 'lancamento-list' or request.resolver_match.view_name == 'funcionario-list' %}
+            {% if view_name == 'lancamento-list' or view_name == 'funcionario-list' %}
             <div class="content-wrapper with-sidebar page page-compact">
             {% else %}
             <div class="content-wrapper with-sidebar page">
@@ -398,9 +399,10 @@
             {% endif %}
             {% block content %}{% endblock %}
         </div>
-    {% if request.user.is_authenticated and request.resolver_match and request.resolver_match.view_name != 'login' %}
+    {% if request.user.is_authenticated and view_name != 'home' and view_name != 'login' and view_name != 'register' and view_name != 'confirm-email' and view_name != 'billing:pricing' and view_name != 'billing:checkout-plano' and view_name != 'billing:checkout-plano-tipo' and view_name != 'billing:billing-checkout-empresa' %}
         </div>
     {% endif %}
+    {% endwith %}
 
     <!-- Mensagens e banners removidos para versão pública -->
 
