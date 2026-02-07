@@ -15,6 +15,7 @@ from .forms import (
     RelatorioCompetenciaForm, 
     LancamentoForm, 
     LegacyImportForm,
+    SefipExportForm,
     ConferenciaLancamentoForm,
     RejeicaoLancamentoForm,
     FiltroConferenciaForm
@@ -30,6 +31,8 @@ from .services.calculo import (
 )
 from .services.importacao import LancamentoImportService
 from .services.competencia_13 import Competencia13Service
+from .services.sefip_legacy import SefipLegacyFilters, SefipExportError, gerar_sefip_legacy
+from empresas.models_feature import empresa_tem_recurso
 from django.conf import settings
 from indices.services.indice_service import IndiceFGTSService
 from funcionarios.models import Funcionario
@@ -2377,6 +2380,40 @@ def export_sefip(request):
     # Mesmo nome de arquivo do legado
     response['Content-Disposition'] = 'attachment; filename="SEFIP.RE"'
     return response
+
+
+@login_required
+def sefip_export_view(request):
+    """Tela exclusiva para gerar o SEFIP.RE conforme script legado."""
+    if request.method == 'POST':
+        form = SefipExportForm(request.POST, user=request.user)
+        if form.is_valid():
+            empresa = form.cleaned_data['empresa']
+            if not is_empresa_allowed(request.user, empresa.codigo):
+                return HttpResponseForbidden('Empresa não permitida para este usuário.')
+            if not (request.user.is_staff or request.user.is_superuser) and not empresa_tem_recurso(empresa, 'gerar_sefip'):
+                messages.warning(request, 'Recurso SEFIP.RE não habilitado para esta empresa.')
+                return render(request, 'lancamentos/sefip_export.html', {'form': form, 'feature_blocked': True})
+
+            filtros = SefipLegacyFilters(
+                empresa=empresa,
+                competencia=form.cleaned_data['competencia'],
+                funcionario_de_id=form.cleaned_data['funcionario_de'].id,
+                funcionario_ate_id=form.cleaned_data['funcionario_ate'].id,
+            )
+
+            try:
+                conteudo = gerar_sefip_legacy(filtros)
+            except SefipExportError as exc:
+                messages.warning(request, str(exc))
+            else:
+                response = HttpResponse(conteudo, content_type='text/plain; charset=iso-8859-1')
+                response['Content-Disposition'] = 'attachment; filename="SEFIP.RE"'
+                return response
+    else:
+        form = SefipExportForm(user=request.user)
+
+    return render(request, 'lancamentos/sefip_export.html', {'form': form})
 
 
 def download_memoria_calculo(request):

@@ -104,6 +104,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'billing.context_processors.current_pricing',
                 'empresas.context_processors.is_admin_empresa',
+                'empresas.context_processors.sefip_feature',
             ],
         },
     },

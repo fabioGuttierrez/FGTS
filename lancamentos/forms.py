@@ -220,6 +220,83 @@ class RelatorioCompetenciaForm(forms.Form):
             self.fields['funcionario'].queryset = Funcionario.objects.filter(vinculos__empresa__codigo__in=allowed_ids).distinct()
 
 
+class SefipExportForm(forms.Form):
+    empresa = forms.ModelChoiceField(
+        queryset=Empresa.objects.all(),
+        label='Empresa',
+        widget=forms.Select(attrs={'class': 'form-select', 'autocomplete': 'off'})
+    )
+    competencia = forms.CharField(
+        label='Competencia unica',
+        help_text='Formato MM/YYYY ou 13/YYYY.',
+        widget=forms.TextInput(attrs={'class': 'form-control', 'autocomplete': 'off', 'placeholder': 'MM/YYYY'})
+    )
+    funcionario_de = forms.ModelChoiceField(
+        queryset=Funcionario.objects.none(),
+        label='Funcionario de',
+        widget=forms.Select(attrs={'class': 'form-select', 'autocomplete': 'off'})
+    )
+    funcionario_ate = forms.ModelChoiceField(
+        queryset=Funcionario.objects.none(),
+        label='Funcionario ate',
+        widget=forms.Select(attrs={'class': 'form-select', 'autocomplete': 'off'})
+    )
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        allowed_ids = None
+        if user is not None:
+            allowed_ids = get_allowed_empresa_ids(user)
+            if allowed_ids is not None:
+                self.fields['empresa'].queryset = Empresa.objects.filter(codigo__in=allowed_ids)
+
+        data_dict = kwargs.get('data') or {}
+        empresa_id = data_dict.get('empresa')
+        if empresa_id:
+            base_qs = Funcionario.objects.filter(vinculos__empresa_id=empresa_id).distinct().order_by('nome')
+        elif allowed_ids is not None:
+            base_qs = Funcionario.objects.filter(vinculos__empresa__codigo__in=allowed_ids).distinct().order_by('nome')
+        else:
+            base_qs = Funcionario.objects.all().order_by('nome')
+
+        self.fields['funcionario_de'].queryset = base_qs
+        self.fields['funcionario_ate'].queryset = base_qs
+
+    def clean_competencia(self):
+        competencia = (self.cleaned_data.get('competencia') or '').strip()
+        if not competencia:
+            raise ValidationError('Competencia obrigatoria.')
+        if '/' not in competencia:
+            raise ValidationError('Competencia deve estar no formato MM/YYYY ou 13/YYYY.')
+        mes_str, ano_str = competencia.split('/', 1)
+        if not mes_str.isdigit() or not ano_str.isdigit():
+            raise ValidationError('Competencia deve estar no formato MM/YYYY ou 13/YYYY.')
+        mes = int(mes_str)
+        if mes not in range(1, 13) and mes != 13:
+            raise ValidationError('Mes deve estar entre 01-12 ou 13.')
+        if len(ano_str) != 4:
+            raise ValidationError('Ano deve ter 4 digitos.')
+        return f"{mes:02d}/{int(ano_str):04d}" if mes != 13 else f"13/{int(ano_str):04d}"
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        empresa = cleaned_data.get('empresa')
+        func_de = cleaned_data.get('funcionario_de')
+        func_ate = cleaned_data.get('funcionario_ate')
+
+        if func_de and func_ate and func_de.id > func_ate.id:
+            self.add_error('funcionario_ate', 'Funcionario ate deve ser maior ou igual ao funcionario de.')
+
+        if empresa and (func_de or func_ate):
+            for field_name, funcionario in [('funcionario_de', func_de), ('funcionario_ate', func_ate)]:
+                if funcionario and not funcionario.vinculos.filter(empresa=empresa).exists():
+                    self.add_error(field_name, 'Funcionario nao pertence a empresa selecionada.')
+
+        return cleaned_data
+
+
 class LegacyImportForm(forms.Form):
     """Formulário para importar dados históricos do sistema legado (VB6)"""
     

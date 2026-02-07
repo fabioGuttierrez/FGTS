@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block title %}SEFIP.RE{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow-lg">
+        <div class="card-header bg-dark text-white">Gerar SEFIP.RE</div>
+        <div class="card-body">
+            {% if feature_blocked %}
+            <div class="alert alert-warning">
+                Recurso SEFIP.RE nao habilitado para esta empresa.
+            </div>
+            {% endif %}
+            <form method="post" class="row g-3" autocomplete="off">
+                {% csrf_token %}
+                {% if form.non_field_errors %}
+                <div class="col-12">
+                    <div class="alert alert-warning">{{ form.non_field_errors }}</div>
+                </div>
+                {% endif %}
+                <div class="col-12 col-lg-4">
+                    <label class="form-label">Empresa</label>
+                    {{ form.empresa }}
+                    {% if form.empresa.errors %}<div class="text-danger small">{{ form.empresa.errors }}</div>{% endif %}
+                </div>
+                <div class="col-12 col-lg-4">
+                    <label class="form-label">Competencia unica</label>
+                    {{ form.competencia }}
+                    <div class="form-text text-muted">{{ form.competencia.help_text }}</div>
+                    {% if form.competencia.errors %}<div class="text-danger small">{{ form.competencia.errors }}</div>{% endif %}
+                </div>
+                <div class="col-12"></div>
+                <div class="col-12 col-lg-4">
+                    <label class="form-label">Funcionario de</label>
+                    {{ form.funcionario_de }}
+                    {% if form.funcionario_de.errors %}<div class="text-danger small">{{ form.funcionario_de.errors }}</div>{% endif %}
+                </div>
+                <div class="col-12 col-lg-4">
+                    <label class="form-label">Funcionario ate</label>
+                    {{ form.funcionario_ate }}
+                    {% if form.funcionario_ate.errors %}<div class="text-danger small">{{ form.funcionario_ate.errors }}</div>{% endif %}
+                </div>
+                <div class="col-12">
+                    <button class="btn btn-primary" type="submit">
+                        <i class="bi bi-file-earmark-arrow-down"></i> Gerar SEFIP.RE
+                    </button>
+                </div>
+            </form>
+            <div class="alert alert-info mt-3 border-0" role="alert">
+                <i class="bi bi-info-circle-fill me-2"></i>
+                O arquivo sera gerado exatamente com as regras do legado e baixado como <strong>SEFIP.RE</strong>.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

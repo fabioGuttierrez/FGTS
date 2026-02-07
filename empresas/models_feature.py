@@ -22,6 +22,7 @@ class EmpresaFeature(models.Model):
         ("editar_lancamento", "Editar Lançamento"),
         ("excluir_lancamento", "Excluir Lançamento"),
         ("exportar_lancamentos", "Exportar Lançamentos"),
+        ("gerar_sefip", "Gerar SEFIP.RE"),
         # Adicione outros recursos conforme necessário
     ]
     empresa = models.OneToOneField('empresas.Empresa', on_delete=models.CASCADE, related_name="features")
@@ -36,6 +37,7 @@ class EmpresaFeature(models.Model):
     editar_lancamento = models.BooleanField(default=False)
     excluir_lancamento = models.BooleanField(default=False)
     exportar_lancamentos = models.BooleanField(default=False)
+    gerar_sefip = models.BooleanField(default=False)
     # ...
 
     def __str__(self):

@@ -1,4 +1,5 @@
 from django.conf import settings
+from .models_feature import empresa_tem_recurso
 
 
 def is_admin_empresa(request):
@@ -29,3 +30,22 @@ def is_admin_empresa(request):
     return {
         "is_admin_empresa": user.roles_empresas.filter(empresa=empresa, role="admin").exists()
     }
+
+
+def sefip_feature(request):
+    user = request.user
+    if not user.is_authenticated:
+        return {"is_sefip_enabled": False}
+
+    if getattr(user, 'is_superuser', False) or getattr(user, 'is_staff', False):
+        return {"is_sefip_enabled": True}
+
+    try:
+        empresa = getattr(user, "empresa", None)
+        if empresa is None:
+            return {"is_sefip_enabled": False}
+        _ = empresa.id
+    except Exception:
+        return {"is_sefip_enabled": False}
+
+    return {"is_sefip_enabled": empresa_tem_recurso(empresa, "gerar_sefip")}

@@ -350,6 +350,11 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'relatorio-competencia' %}"><i class="bi bi-bar-chart"></i> Relatório</a>
                     </li>
+                    {% if is_sefip_enabled or request.user.is_staff or request.user.is_superuser %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'sefip-export' %}"><i class="bi bi-file-earmark-text"></i> SEFIP.RE</a>
+                    </li>
+                    {% endif %}
                     {% if is_admin_empresa %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'painel-admin-empresa' user.empresa.codigo %}"><i class="bi bi-building-gear"></i> Administração da Empresa</a>

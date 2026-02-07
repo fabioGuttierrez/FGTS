@@ -6,6 +6,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path('sefip/', views.sefip_export_view, name='sefip-export'),
     # ===== LEGACY IMPORT (NOVA INTERFACE) =====
     path('legacy-import/', views.LegacyImportView.as_view(), name='legacy-import'),
     path('legacy-import/resultado/', views.LegacyImportResultView.as_view(), name='legacy-import-result'),
