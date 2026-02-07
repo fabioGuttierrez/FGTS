@@ -25,4 +25,5 @@ backup_*.json
 migration_backup_*.json
 *.bat
 *.sh
+!start.sh
 logs/
