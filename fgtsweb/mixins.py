@@ -19,6 +19,7 @@ def get_allowed_empresa_ids(user) -> Optional[list]:
         return None
 
     allowed = set()
+    base_empresa_ids = set()
     user_empresa = None
     try:
         user_empresa = user.empresa
@@ -27,6 +28,7 @@ def get_allowed_empresa_ids(user) -> Optional[list]:
 
     if user_empresa:
         allowed.add(user_empresa.codigo)
+        base_empresa_ids.add(user_empresa.codigo)
         # Se e empresa_principal de um grupo, libera todas as empresas do grupo
         try:
             grupo = getattr(user_empresa, "grupo", None)
@@ -42,10 +44,34 @@ def get_allowed_empresa_ids(user) -> Optional[list]:
 
     if getattr(user, "is_multi_empresa", False):
         try:
-            allowed.update(user.empresas_permitidas.values_list("codigo", flat=True))
+            permitted_ids = set(user.empresas_permitidas.values_list("codigo", flat=True))
+            base_empresa_ids.update(permitted_ids)
+            allowed.update(permitted_ids)
         except Exception:
             # If relation not ready yet, ignore
             pass
+
+    # Se for ADMIN em alguma empresa permitida, libera todo o grupo economico dessa empresa.
+    try:
+        from usuarios.models import EmpresaUsuarioRole
+        from empresas.models import Empresa
+
+        admin_empresa_ids = set(EmpresaUsuarioRole.objects.filter(
+            usuario=user,
+            role=EmpresaUsuarioRole.ADMIN
+        ).values_list("empresa_id", flat=True))
+
+        if base_empresa_ids:
+            admin_empresa_ids = admin_empresa_ids.intersection(base_empresa_ids)
+
+        if admin_empresa_ids:
+            admin_empresas = Empresa.objects.filter(codigo__in=admin_empresa_ids).select_related("grupo")
+            for empresa in admin_empresas:
+                grupo = getattr(empresa, "grupo", None)
+                if grupo:
+                    allowed.update(grupo.empresas.values_list("codigo", flat=True))
+    except Exception:
+        pass
 
     return list(allowed)
 

@@ -21,7 +21,7 @@ class FuncionarioImportService:
     ]
     
     OPTIONAL_COLUMNS = [
-        'PIS', 'CBO', 'CARTEIRA_PROFISSIONAL', 
+        'MATRICULA', 'PIS', 'CBO', 'CARTEIRA_PROFISSIONAL', 
         'SERIE_CARTEIRA', 'DATA_NASCIMENTO', 'DATA_DEMISSAO', 'OBSERVACAO', 'SALARIO'
     ]
 
@@ -86,6 +86,7 @@ class FuncionarioImportService:
             "123.456.789-00",  # CPF
             "2023-01-15",  # DATA_ADMISSAO
             "EMP001",  # EMPRESA (codigo folha)
+            "1001",  # MATRICULA (do vínculo)
             "120.123.456-70",  # PIS
             "2110",  # CBO
             "AB123456",  # CARTEIRA_PROFISSIONAL
@@ -117,6 +118,7 @@ class FuncionarioImportService:
             "• Formato de datas: YYYY-MM-DD (ex: 2023-01-15)",
             "• CPF deve estar no formato XXX.XXX.XXX-XX",
             "• EMPRESA: use o CODIGO FOLHA da empresa (pode conter letras)",
+            "• MATRICULA: opcional, mas recomendada para evitar vínculo ambíguo em importações futuras",
             "• Para ver o codigo folha, acesse a lista de empresas no sistema",
             "• PIS é opcional e pode conter CPF (conforme regra atual)",
             "• DATA_DEMISSAO deixar em branco se o funcionário está ativo",
@@ -139,14 +141,15 @@ class FuncionarioImportService:
         ws.column_dimensions['B'].width = 18
         ws.column_dimensions['C'].width = 15
         ws.column_dimensions['D'].width = 12
-        ws.column_dimensions['E'].width = 15
-        ws.column_dimensions['F'].width = 18
-        ws.column_dimensions['G'].width = 10
-        ws.column_dimensions['H'].width = 18
-        ws.column_dimensions['I'].width = 15
+        ws.column_dimensions['E'].width = 12
+        ws.column_dimensions['F'].width = 15
+        ws.column_dimensions['G'].width = 18
+        ws.column_dimensions['H'].width = 10
+        ws.column_dimensions['I'].width = 18
         ws.column_dimensions['J'].width = 15
         ws.column_dimensions['K'].width = 15
-        ws.column_dimensions['L'].width = 30
+        ws.column_dimensions['L'].width = 15
+        ws.column_dimensions['M'].width = 30
         
         # Definir altura da linha de header
         ws.row_dimensions[1].height = 30
@@ -309,6 +312,12 @@ class FuncionarioImportService:
 
                     if row_data.get('OBSERVACAO'):
                         funcionario_data['observacao'] = normalize_upper_ascii(row_data['OBSERVACAO'], allow_digits=True)
+
+                    vinculo_matricula = None
+                    if row_data.get('MATRICULA'):
+                        vinculo_matricula = normalize_upper_ascii(row_data['MATRICULA'], allow_digits=True).strip()
+                        if not vinculo_matricula:
+                            vinculo_matricula = None
                     
                     # Criar funcionário e vínculo de forma consistente
                     with transaction.atomic():
@@ -324,6 +333,7 @@ class FuncionarioImportService:
                         FuncionarioVinculo.objects.create(
                             funcionario=funcionario,
                             empresa=empresa,
+                            matricula=vinculo_matricula,
                             data_admissao=data_admissao,
                             data_demissao=data_demissao,
                             salario=str(row_data.get('SALARIO')).strip() if row_data.get('SALARIO') else None,

@@ -5,7 +5,7 @@ from django.views.generic.edit import CreateView, UpdateView
 from django.views.generic.list import ListView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
-from fgtsweb.mixins import EmpresaScopeMixin
+from fgtsweb.mixins import EmpresaScopeMixin, get_allowed_empresa_ids
 from .models import Empresa
 from .forms import EmpresaForm
 from billing.models import Plan, BillingCustomer
@@ -203,15 +203,26 @@ class EmpresaUpdateView(LoginRequiredMixin, UpdateView):
         user = self.request.user
         
         # Superuser vê tudo
-        if user.is_superuser:
+        if user.is_superuser or user.is_staff:
             return qs
         
         # Usuário normal só pode editar sua empresa
-        if user.empresa_id:
-            return qs.filter(codigo=user.empresa_id)
-        
-        return qs.none()
+        allowed_ids = get_allowed_empresa_ids(user)
+        if allowed_ids is None:
+            return qs
+        if not allowed_ids:
+            return qs.none()
+        return qs.filter(codigo__in=allowed_ids)
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        allowed_ids = get_allowed_empresa_ids(self.request.user)
+        if allowed_ids is None:
+            empresas = Empresa.objects.all()
+        else:
+            empresas = Empresa.objects.filter(codigo__in=allowed_ids)
+        context['empresas_permitidas'] = empresas
+        return context
     def form_valid(self, form):
         messages.success(self.request, '✅ Empresa atualizada com sucesso.')
         return super().form_valid(form)

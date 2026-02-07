@@ -4,7 +4,21 @@
 <div class="container py-4">
   <div class="card shadow-sm">
     <div class="card-header bg-light d-flex justify-content-between align-items-center">
-      <h5 class="mb-0"><i class="bi bi-building"></i> Editar Empresa</h5>
+      <div class="d-flex align-items-center gap-3">
+        <h5 class="mb-0"><i class="bi bi-building"></i> Editar Empresa</h5>
+        {% if empresas_permitidas and empresas_permitidas|length > 1 %}
+        <div class="d-flex align-items-center gap-2">
+          <label class="small text-muted mb-0" for="empresa-switch">Empresa</label>
+          <select id="empresa-switch" class="form-select form-select-sm" onchange="if (this.value) { window.location = this.value; }">
+            {% for empresa in empresas_permitidas %}
+              <option value="{% url 'empresa-update' empresa.codigo %}" {% if empresa.codigo == object.codigo %}selected{% endif %}>
+                {{ empresa.codigo_exibicao }} - {{ empresa.nome }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+      </div>
       <a href="{% url 'empresa-list' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Voltar</a>
     </div>
     <form method="post" novalidate>

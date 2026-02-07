@@ -44,7 +44,7 @@ class FuncionarioCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
             empresas = Empresa.objects.all()
         else:
             empresas = Empresa.objects.filter(codigo__in=allowed_ids)
-        context['empresas_permitidas'] = empresas.values('codigo', 'nome')
+        context['empresas_permitidas'] = empresas
         return context
 
     def form_valid(self, form):
@@ -223,7 +223,7 @@ class FuncionarioUpdateView(LoginRequiredMixin, EmpresaScopeMixin, UpdateView):
             empresas = Empresa.objects.all()
         else:
             empresas = Empresa.objects.filter(codigo__in=allowed_ids)
-        context['empresas_permitidas'] = empresas.values('codigo', 'nome')
+        context['empresas_permitidas'] = empresas
         return context
 
     def get_queryset(self):

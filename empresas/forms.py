@@ -69,6 +69,9 @@ class EmpresaForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
 
+        if 'grupo' not in self.data and getattr(self.instance, 'pk', None):
+            cleaned_data['grupo'] = self.instance.grupo
+
         if not cleaned_data.get('codigo_folha'):
             cleaned_data['codigo_folha'] = Empresa._generate_codigo_folha()
 
