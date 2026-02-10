@@ -252,6 +252,9 @@
                             </td>
                             <td class="py-3 px-4">
                                 <span class="badge bg-info text-dark fw-bold">{{ lancamento.competencia }}</span>
+                                {% if lancamento.is_duplicate %}
+                                    <span class="badge bg-danger ms-1">Duplicado</span>
+                                {% endif %}
                                 {% if lancamento.parcela_13 %}
                                     <span class="badge bg-warning text-dark ms-1">
                                         13º - {{ lancamento.parcela_13|yesno:"1ª parcela,2ª parcela" }}

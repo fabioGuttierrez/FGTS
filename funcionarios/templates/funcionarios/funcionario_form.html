@@ -168,7 +168,11 @@
                                                 {{ form.data_nascimento.label }}
                                             </label>
                                             {{ form.data_nascimento }}
+                                            <div class="invalid-feedback d-block" id="{{ form.data_nascimento.id_for_label }}-error" style="display: none;"></div>
                                             <small class="form-text text-muted d-block">Usado na geracao do SEFIP.RE.</small>
+                                            {% if form.data_nascimento.errors %}
+                                                <div class="invalid-feedback d-block">{{ form.data_nascimento.errors }}</div>
+                                            {% endif %}
                                         </div>
                                         <div class="col-md-4">
                                             <label for="{{ form.data_demissao.id_for_label }}" class="form-label fw-bold">
@@ -513,6 +517,62 @@
         const progress = document.getElementById('import-progress');
         const result = document.getElementById('import-result');
         const alert = document.getElementById('import-alert');
+        const mainForm = document.getElementById('form');
+        const nascimentoInput = document.getElementById('{{ form.data_nascimento.id_for_label }}');
+        const nascimentoError = document.getElementById('{{ form.data_nascimento.id_for_label }}-error');
+
+        function showNascimentoError(message) {
+            if (!nascimentoInput) {
+                return;
+            }
+            nascimentoInput.classList.add('is-invalid');
+            if (nascimentoError) {
+                nascimentoError.textContent = message;
+                nascimentoError.style.display = 'block';
+            }
+        }
+
+        function clearNascimentoError() {
+            if (!nascimentoInput) {
+                return;
+            }
+            nascimentoInput.classList.remove('is-invalid');
+            if (nascimentoError) {
+                nascimentoError.textContent = '';
+                nascimentoError.style.display = 'none';
+            }
+        }
+
+        function validateNascimento() {
+            if (!nascimentoInput) {
+                return true;
+            }
+            const hasValue = Boolean(nascimentoInput.value);
+            const badInput = nascimentoInput.validity && nascimentoInput.validity.badInput;
+            const parsed = nascimentoInput.valueAsDate;
+
+            if (badInput || (hasValue && !parsed)) {
+                showNascimentoError('Data de nascimento invalida. Informe uma data real.');
+                return false;
+            }
+
+            clearNascimentoError();
+            return true;
+        }
+
+        if (nascimentoInput) {
+            nascimentoInput.addEventListener('input', clearNascimentoError);
+            nascimentoInput.addEventListener('blur', validateNascimento);
+        }
+
+        if (mainForm) {
+            mainForm.addEventListener('submit', function(e) {
+                if (!validateNascimento()) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            });
+        }
 
         form.addEventListener('submit', async function(e) {
             e.preventDefault();

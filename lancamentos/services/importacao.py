@@ -319,6 +319,13 @@ class LancamentoImportService:
                     else:
                         existing_qs = existing_qs.filter(funcionario=lancamento_data['funcionario'], vinculo__isnull=True)
 
+                    existing_count = existing_qs.count()
+                    if existing_count > 1:
+                        parcela_label = f" (13º {lancamento_data.get('parcela_13')}ª parcela)" if lancamento_data.get('parcela_13') else ""
+                        raise ValueError(
+                            f"Duplicidade detectada: já existem múltiplos lançamentos para esta competência{parcela_label}."
+                        )
+
                     existing = existing_qs.first()
                     
                     if existing:

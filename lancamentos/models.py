@@ -159,6 +159,24 @@ class Lancamento(models.Model):
 		else:
 			# Competência normal já validada pelo intervalo do mês acima
 			pass
+
+		# Bloquear duplicidade por vínculo + competência + parcela_13
+		if self.competencia:
+			dup_qs = Lancamento.objects.filter(
+				competencia=self.competencia,
+				parcela_13=self.parcela_13,
+			)
+			if self.vinculo_id:
+				dup_qs = dup_qs.filter(vinculo_id=self.vinculo_id)
+			else:
+				dup_qs = dup_qs.filter(funcionario_id=self.funcionario_id, vinculo__isnull=True)
+			if self.pk:
+				dup_qs = dup_qs.exclude(pk=self.pk)
+			if dup_qs.exists():
+				parcela_label = f" (13º {self.parcela_13}ª parcela)" if self.parcela_13 else ""
+				raise ValidationError({
+					'competencia': f"Já existe lançamento para este vínculo na competência {self.competencia}{parcela_label}."
+				})
 	
 	def atualizar_lancamentos_posteriores(self):
 		"""

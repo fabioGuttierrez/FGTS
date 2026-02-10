@@ -422,6 +422,90 @@
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            function ensureErrorElement(input) {
+                if (!input) {
+                    return null;
+                }
+                const inputId = input.getAttribute('id');
+                const existing = inputId ? document.getElementById(inputId + '-error') : null;
+                if (existing) {
+                    return existing;
+                }
+                const errorEl = document.createElement('div');
+                errorEl.className = 'invalid-feedback d-block';
+                if (inputId) {
+                    errorEl.id = inputId + '-error';
+                }
+                errorEl.style.display = 'none';
+                input.insertAdjacentElement('afterend', errorEl);
+                return errorEl;
+            }
+
+            function setDateError(input, message) {
+                input.classList.add('is-invalid');
+                const errorEl = ensureErrorElement(input);
+                if (errorEl) {
+                    errorEl.textContent = message;
+                    errorEl.style.display = 'block';
+                }
+            }
+
+            function clearDateError(input) {
+                input.classList.remove('is-invalid');
+                const inputId = input.getAttribute('id');
+                const errorEl = inputId ? document.getElementById(inputId + '-error') : null;
+                if (errorEl) {
+                    errorEl.textContent = '';
+                    errorEl.style.display = 'none';
+                }
+            }
+
+            function isValidDateInput(input) {
+                if (!input.value) {
+                    return true;
+                }
+                const badInput = input.validity && input.validity.badInput;
+                const parsed = input.valueAsDate;
+                return !(badInput || !parsed);
+            }
+
+            function validateFormDates(form) {
+                let ok = true;
+                const dateInputs = form.querySelectorAll('input[type="date"]');
+                dateInputs.forEach((input) => {
+                    if (!isValidDateInput(input)) {
+                        setDateError(input, 'Data invalida. Informe uma data real.');
+                        ok = false;
+                    } else {
+                        clearDateError(input);
+                    }
+                });
+                return ok;
+            }
+
+            document.querySelectorAll('form').forEach((form) => {
+                form.addEventListener('submit', function(e) {
+                    if (!validateFormDates(form)) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                });
+            });
+
+            document.querySelectorAll('input[type="date"]').forEach((input) => {
+                input.addEventListener('input', function() {
+                    clearDateError(input);
+                });
+                input.addEventListener('blur', function() {
+                    if (!isValidDateInput(input)) {
+                        setDateError(input, 'Data invalida. Informe uma data real.');
+                    }
+                });
+            });
+        });
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>
