@@ -129,7 +129,7 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
     def get_queryset(self):
         from empresas.models_grupo import FuncionarioVinculo
         from django.db import models
-        from django.db.models import OuterRef, Exists, Q, DateField, Value, F, Func, Case, When
+        from django.db.models import OuterRef, Exists, Q, DateField, Value, F, Func, Case, When, BooleanField
         from django.db.models.functions import Substr, Cast, TruncMonth
         import datetime
 
@@ -226,6 +226,27 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
                 adm_mes__lte=OuterRef('competencia_date'),
             ).filter(
                 Q(dem_mes__isnull=True) | Q(dem_mes__gte=OuterRef('competencia_date'))
+            )
+        )
+
+        dup_vinculo_qs = Lancamento.objects.filter(
+            competencia=OuterRef('competencia'),
+            parcela_13=OuterRef('parcela_13'),
+            vinculo_id=OuterRef('vinculo_id'),
+        ).exclude(pk=OuterRef('pk'))
+
+        dup_funcionario_qs = Lancamento.objects.filter(
+            competencia=OuterRef('competencia'),
+            parcela_13=OuterRef('parcela_13'),
+            vinculo__isnull=True,
+            funcionario_id=OuterRef('funcionario_id'),
+        ).exclude(pk=OuterRef('pk'))
+
+        qs = qs.annotate(
+            is_duplicate=Case(
+                When(vinculo_id__isnull=False, then=Exists(dup_vinculo_qs)),
+                default=Exists(dup_funcionario_qs),
+                output_field=BooleanField(),
             )
         )
 
@@ -467,8 +488,8 @@ class GerarLancamentosAutomaticosView(LoginRequiredMixin, EmpresaScopeMixin, Vie
             while data_atual <= data_hoje:
                 competencia = data_atual.strftime('%m/%Y')
                 
-                # Verificar se já existe lançamento para esta competência
-                if not Lancamento.objects.filter(funcionario=funcionario, competencia=competencia).exists():
+                # Verificar se já existe lançamento mensal para esta competência
+                if not Lancamento.objects.filter(funcionario=funcionario, competencia=competencia, parcela_13__isnull=True).exists():
                     # Criar novo lançamento herdando a base FGTS do anterior
                     Lancamento.objects.create(
                         empresa=funcionario.empresa,
