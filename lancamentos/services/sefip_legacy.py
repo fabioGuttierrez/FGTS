@@ -15,6 +15,9 @@ class SefipExportError(Exception):
     pass
 
 
+SEFIP_LINE_LENGTH = 360
+
+
 @dataclass
 class SefipLegacyFilters:
     empresa: Empresa
@@ -58,6 +61,15 @@ def _parse_competencia(competencia: str) -> tuple[int, int]:
     if mes not in range(1, 13) and mes != 13:
         raise SefipExportError('Competencia invalida.')
     return mes, ano
+
+
+def _finalize_line(line: str, length: int = SEFIP_LINE_LENGTH) -> str:
+    base = (line or "").rstrip("\r\n")
+    if base.endswith("*"):
+        base = base[:-1]
+    if len(base) > length - 1:
+        base = base[: length - 1]
+    return base + _space(length - 1 - len(base)) + "*"
 
 
 def _format_base_fgts(valor: Decimal | None) -> str:
@@ -162,7 +174,7 @@ def gerar_sefip_legacy(filtros: SefipLegacyFilters) -> str:
         + _space(18)
         + "*"
     )
-    linhas.append(reg00)
+    linhas.append(_finalize_line(reg00))
 
     # Registro 10
     if var_data < "199810":
@@ -209,7 +221,7 @@ def gerar_sefip_legacy(filtros: SefipLegacyFilters) -> str:
         + _space(4)
         + "*"
     )
-    linhas.append(reg10)
+    linhas.append(_finalize_line(reg10))
 
     # Registro 30
     lancamentos = _filter_lancamentos(filtros)
@@ -258,7 +270,7 @@ def gerar_sefip_legacy(filtros: SefipLegacyFilters) -> str:
             + _space(98)
             + "*"
         )
-        linhas.append(reg30)
+        linhas.append(_finalize_line(reg30))
 
     # Registro 90
     reg90 = (
@@ -266,6 +278,6 @@ def gerar_sefip_legacy(filtros: SefipLegacyFilters) -> str:
         + _space(306)
         + "*"
     )
-    linhas.append(reg90)
+    linhas.append(_finalize_line(reg90))
 
     return "\r\n".join(linhas)

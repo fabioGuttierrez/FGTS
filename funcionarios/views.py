@@ -120,11 +120,17 @@ class FuncionarioListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
 
         busca = self.request.GET.get('q')
         if busca:
-            qs = qs.filter(
+            busca = busca.strip()
+            filtros = (
                 models.Q(nome__icontains=busca) |
                 models.Q(cpf__icontains=busca) |
-                models.Q(pis__icontains=busca)
+                models.Q(pis__icontains=busca) |
+                models.Q(vinculos__matricula__icontains=busca)
             )
+            if busca.isdigit() and busca.startswith('0'):
+                busca_sem_zeros = busca.lstrip('0') or '0'
+                filtros |= models.Q(vinculos__matricula__icontains=busca_sem_zeros)
+            qs = qs.filter(filtros)
 
         return qs.distinct()
 

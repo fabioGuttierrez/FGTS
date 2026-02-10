@@ -90,7 +90,7 @@
         <div class="card-body p-4">
             <form method="get" class="row g-3 mb-4">
                 <div class="col-lg-4 col-md-6">
-                    <label class="form-label text-muted small">Buscar por nome/CPF/PIS</label>
+                    <label class="form-label text-muted small">Buscar por nome/CPF/PIS/MATRICULA</label>
                     <input type="text" name="q" value="{{ filtro_busca }}" class="form-control" placeholder="Digite para buscar">
                 </div>
                 <div class="col-lg-3 col-md-6">
@@ -122,7 +122,7 @@
                 <table class="table table-hover align-middle mb-0">
                     <thead class="bg-light border-bottom border-2">
                         <tr>
-                            <th class="py-3 px-4 fw-bold text-dark text-nowrap" style="width: 60px;">#ID</th>
+                            <th class="py-3 px-4 fw-bold text-dark text-nowrap" style="width: 120px;">Matrícula</th>
                             <th class="py-3 px-4 fw-bold text-dark" style="width: 280px;">Nome</th>
                             <th class="py-3 px-4 fw-bold text-dark text-nowrap" style="width: 160px;">CPF</th>
                             <th class="py-3 px-4 fw-bold text-dark" style="width: 300px;">Empresa</th>
@@ -136,7 +136,13 @@
                         {% for funcionario in funcionarios %}
                         <tr class="align-middle">
                             <td class="py-3 px-4">
-                                <a href="{% url 'funcionario-detail' funcionario.id %}" class="badge bg-light text-dark fw-bold text-decoration-none">#{{ funcionario.id }}</a>
+                                {% with vinculo_atual=funcionario.vinculo_atual %}
+                                    {% if vinculo_atual and vinculo_atual.matricula %}
+                                        <a href="{% url 'funcionario-detail' funcionario.id %}" class="badge bg-light text-dark fw-bold text-decoration-none">{{ vinculo_atual.matricula }}</a>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                {% endwith %}
                             </td>
                             <td class="py-3 px-4 text-break">
                                 <div class="fw-bold text-dark mb-1">
