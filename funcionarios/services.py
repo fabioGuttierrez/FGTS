@@ -37,17 +37,22 @@ class FuncionarioImportService:
         if raw.endswith('.0') and raw.replace('.', '', 1).isdigit():
             raw = str(int(float(raw)))
 
+        # Tenta buscar por codigo_folha
         qs = Empresa.objects.filter(codigo_folha__iexact=raw)
         if qs.count() > 1:
             raise ValueError(f"Codigo Folha '{raw}' duplicado. Contate o administrador.")
         if qs.exists():
             return qs.first()
 
+        # Tenta buscar por ID/codigo
         if raw.isdigit():
             try:
-                return Empresa.objects.get(codigo=int(raw))
+                return Empresa.objects.get(pk=int(raw))
             except Empresa.DoesNotExist:
-                return None
+                try:
+                    return Empresa.objects.get(codigo=int(raw))
+                except Empresa.DoesNotExist:
+                    return None
 
         return None
     
@@ -159,7 +164,7 @@ class FuncionarioImportService:
     @staticmethod
     def parse_date(date_value):
         """Converte valor de data para objeto datetime"""
-        if not date_value or date_value.strip() == "":
+        if not date_value or str(date_value).strip() == "":
             return None
         
         if isinstance(date_value, datetime):
@@ -220,10 +225,10 @@ class FuncionarioImportService:
                         row_data[header] = cell.value
                     
                     # Validar dados obrigatórios
-                    if not row_data.get('NOME', '').strip():
+                    if not str(row_data.get('NOME', '')).strip():
                         raise ValueError("Nome é obrigatório")
                     
-                    if not row_data.get('CPF', '').strip():
+                    if not str(row_data.get('CPF', '')).strip():
                         raise ValueError("CPF é obrigatório")
                     
                     if not row_data.get('DATA_ADMISSAO'):
@@ -235,8 +240,8 @@ class FuncionarioImportService:
                         raise ValueError("Empresa é obrigatória")
                     
                     empresa = FuncionarioImportService._resolve_empresa_from_identifier(empresa_identifier)
-                    if not empresa:
-                        raise ValueError(f"Empresa '{empresa_identifier}' não encontrada")
+                    if not isinstance(empresa, Empresa):
+                        raise ValueError(f"Empresa '{empresa_identifier}' não encontrada ou inválida")
                     
                     # VALIDAÇÃO 1: Verificar se usuário tem permissão para essa empresa
                     if user and not is_empresa_allowed(user, empresa.codigo):
@@ -261,7 +266,7 @@ class FuncionarioImportService:
                         # VALIDAÇÃO 3: Verificar limite de funcionários do plano (apenas para empresas active)
                         elif billing_customer.plan or billing_customer.override_max_employees is not None:
                             # Contar funcionários ativos da empresa
-                            active_count = empresa.funcionarios.filter(data_demissao__isnull=True).count()
+                            active_count = empresa.funcionariovinculo_set.filter(data_demissao__isnull=True).count()
                             
                             # Verificar se pode adicionar mais um
                             if not billing_customer.can_add_employee(active_count):
@@ -315,7 +320,7 @@ class FuncionarioImportService:
 
                     vinculo_matricula = None
                     if row_data.get('MATRICULA'):
-                        vinculo_matricula = normalize_upper_ascii(row_data['MATRICULA'], allow_digits=True).strip()
+                        vinculo_matricula = str(normalize_upper_ascii(row_data['MATRICULA'], allow_digits=True)).strip()
                         if not vinculo_matricula:
                             vinculo_matricula = None
                     
@@ -336,7 +341,7 @@ class FuncionarioImportService:
                             matricula=vinculo_matricula,
                             data_admissao=data_admissao,
                             data_demissao=data_demissao,
-                            salario=str(row_data.get('SALARIO')).strip() if row_data.get('SALARIO') else None,
+                            salario=str(row_data.get('SALARIO')).strip() if row_data.get('SALARIO') is not None else None,
                         )
 
                         # Validar após vínculo existir
@@ -344,15 +349,13 @@ class FuncionarioImportService:
                     
                     # Criar primeiro lançamento automaticamente se salário foi informado
                     salario_str = row_data.get('SALARIO')
-                    if salario_str:
+                    if salario_str is not None and str(salario_str).strip() != "":
                         try:
                             from decimal import Decimal
                             from lancamentos.models import Lancamento
-                            
                             salario = Decimal(str(salario_str).strip())
                             if salario > 0:
                                 competencia = data_admissao.strftime('%m/%Y')
-                                
                                 # Verificar se já existe lançamento
                                 existe = Lancamento.objects.filter(
                                     empresa=empresa,
@@ -360,7 +363,6 @@ class FuncionarioImportService:
                                     competencia=competencia,
                                     parcela_13__isnull=True
                                 ).exists()
-                                
                                 if not existe:
                                     valor_fgts = salario * Decimal('0.08')
                                     Lancamento.objects.create(

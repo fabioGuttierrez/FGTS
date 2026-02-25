@@ -515,6 +515,11 @@ class LancamentoImportService:
         if pago_idx is not None and row[pago_idx]:
             pago_value = str(row[pago_idx]).strip().upper()
             lancamento_data['pago'] = pago_value in ['SIM', 'S', 'TRUE', '1', 'YES']
+
+        # Se marcado como pago, garantir que data_pagto seja preenchida
+        if lancamento_data['pago'] and not lancamento_data['data_pagto']:
+            # Se não veio do arquivo, usar data atual
+            lancamento_data['data_pagto'] = datetime.today().date()
         
         # Processar DATA_PAGTO (opcional)
         data_pagto_idx = column_indices.get('DATA_PAGTO')

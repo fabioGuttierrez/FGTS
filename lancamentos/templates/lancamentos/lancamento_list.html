@@ -3,6 +3,18 @@
 {% block title %}Lançamentos - FGTS Web{% endblock %}
 
 {% block content %}
+<style>
+    /* Alinhamento e truncamento para coluna Funcionário */
+    th.col-funcionario, td.col-funcionario {
+        max-width: 220px;
+        min-width: 180px;
+        width: 220px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        vertical-align: middle;
+    }
+</style>
 <div class="container py-5">
     <!-- Header Section -->
     <div class="mb-4">
@@ -121,7 +133,7 @@
                     <h6 class="card-title mb-3 fw-bold">
                         <i class="bi bi-funnel me-2"></i>Filtros e Ordenação
                     </h6>
-                    <form method="get" class="row g-3">
+                    <form method="get" class="row g-3" id="filtrosLancamentoForm">
                         <div class="col-md-2">
                             <label for="competencia" class="form-label small fw-bold">Competência</label>
                             <input type="text" class="form-control form-control-sm" id="competencia" name="competencia" 
@@ -202,7 +214,9 @@
                 <div>Relatório desabilitado: {{ relatorio_bloqueio_motivo|default:"Trial expirado e nenhum plano ativo. Assine um plano para gerar relatórios." }}</div>
             </div>
             {% endif %}
-            <div class="bg-light border-bottom p-3 d-flex justify-content-between align-items-center">
+            <!-- Toolbar de ações em massa deve ficar fora do <form> de filtros para evitar submit acidental -->
+            </div>
+            <div class="bg-light border-bottom p-3 d-flex justify-content-between align-items-center" id="toolbarLancamentoAcoes">
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="selectAll">
                     <label class="form-check-label fw-bold" for="selectAll">
@@ -210,7 +224,7 @@
                     </label>
                     <span class="badge bg-primary ms-2" id="selectedCount">0 selecionados</span>
                 </div>
-                <div>
+                <div class="d-flex gap-2">
                     <button
                         type="button"
                         class="btn btn-success"
@@ -221,22 +235,56 @@
                     >
                         <i class="bi bi-file-earmark-bar-graph me-2"></i>Gerar Relatório
                     </button>
+                    <button
+                        type="button"
+                        class="btn btn-danger"
+                        id="excluirSelecionadosBtn"
+                        disabled
+                    >
+                        <i class="bi bi-trash me-2"></i>Excluir Selecionados
+                    </button>
                 </div>
             </div>
             <div class="table-responsive">
+                <!-- Modal de confirmação de exclusão em lote (deve estar fora de qualquer <form> ou <div> de tabela) -->
+                <div class="modal fade" id="modalExcluirSelecionados" tabindex="-1" aria-labelledby="modalExcluirSelecionadosLabel" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header bg-danger text-white" style="background: #dc3545 !important;">
+                                <h5 class="modal-title" id="modalExcluirSelecionadosLabel"><i class="bi bi-trash me-2"></i>Excluir Lançamentos Selecionados</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>Tem certeza que deseja excluir <span id="excluirSelecionadosCount">0</span> lançamentos selecionados? Esta ação não pode ser desfeita.</p>
+                                <div class="alert alert-warning d-none" id="excluirSelecionadosErro"></div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                <button type="button" class="btn btn-danger" id="confirmarExcluirSelecionadosBtn">Excluir</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <style>
+                /* Garante que o header do modal de exclusão em lote seja sempre vermelho, mesmo com gradiente global */
+                #modalExcluirSelecionados .modal-header {
+                    background: #dc3545 !important;
+                    color: #fff !important;
+                }
+                </style>
                 <table class="table table-hover mb-0">
                     <thead class="bg-light border-bottom border-2">
                         <tr>
                             <th class="py-3 px-4 fw-bold text-dark" style="width: 40px;">
                                 <i class="bi bi-check-square"></i>
                             </th>
-                            <th class="py-3 px-4 fw-bold text-dark">Competência</th>
-                            <th class="py-3 px-4 fw-bold text-dark">Funcionário</th>
-                            <th class="py-3 px-4 fw-bold text-dark">Empresa</th>
-                            <th class="py-3 px-4 fw-bold text-dark text-end">Base FGTS</th>
-                            <th class="py-3 px-4 fw-bold text-dark">Status Pgto</th>
-                            <th class="py-3 px-4 fw-bold text-dark">Criado em</th>
-                            <th class="py-3 px-4 fw-bold text-dark">Ações</th>
+                            <th class="py-3 px-4 fw-bold text-dark" style="width: 110px;">Competência</th>
+                            <th class="py-3 px-4 fw-bold text-dark col-funcionario">Funcionário</th>
+                            <th class="py-3 px-4 fw-bold text-dark" style="width: 180px;">Empresa</th>
+                            <th class="py-3 px-4 fw-bold text-dark text-end" style="width: 120px;">Base FGTS</th>
+                            <th class="py-3 px-4 fw-bold text-dark" style="width: 110px;">Status Pgto</th>
+                            <th class="py-3 px-4 fw-bold text-dark" style="width: 110px;">Criado em</th>
+                            <th class="py-3 px-4 fw-bold text-dark" style="width: 120px;">Ações</th>
                         </tr>
                     </thead>
                     <tbody class="border-top-0">
@@ -261,15 +309,19 @@
                                     </span>
                                 {% endif %}
                             </td>
-                            <td class="py-3 px-4">
-                                <div class="fw-bold text-dark">{{ lancamento.funcionario.nome }}</div>
+                            <td class="py-3 px-4 col-funcionario">
+                                <div class="fw-bold text-dark">
+                                    {{ lancamento.funcionario.nome }}
+                                </div>
                                 <small class="text-muted">{{ lancamento.funcionario.cpf }}</small>
                                 {% if lancamento.vinculo %}
                                     <small class="text-muted d-block">Matrícula: {{ lancamento.vinculo.matricula|default:lancamento.vinculo.id }}</small>
                                 {% endif %}
                             </td>
-                            <td class="py-3 px-4">
-                                <div class="fw-bold text-dark">{{ lancamento.empresa.nome }}</div>
+                            <td class="py-3 px-4" style="max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                <div class="fw-bold text-dark" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    {{ lancamento.empresa.nome }}
+                                </div>
                                 <small class="text-muted">{{ lancamento.empresa.cnpj }}</small>
                             </td>
                             <td class="py-3 px-4 text-end">
@@ -453,6 +505,10 @@
             if (gerarRelatorioBtn) {
                 gerarRelatorioBtn.disabled = relatorioBloqueado || count === 0;
             }
+            const excluirBtn = document.getElementById('excluirSelecionadosBtn');
+            if (excluirBtn) {
+                excluirBtn.disabled = count === 0;
+            }
         }
 
         // Marca checkboxes conforme seleção persistida
@@ -534,6 +590,64 @@
 
                 const url = "{% url 'relatorio-por-ids' %}?ids=" + ids.join(',');
                 window.location.href = url;
+            });
+        }
+
+        // Exclusão em lote
+        const excluirSelecionadosBtn = document.getElementById('excluirSelecionadosBtn');
+        const modalExcluirSelecionados = document.getElementById('modalExcluirSelecionados');
+        const excluirSelecionadosCount = document.getElementById('excluirSelecionadosCount');
+        const confirmarExcluirSelecionadosBtn = document.getElementById('confirmarExcluirSelecionadosBtn');
+        const excluirSelecionadosErro = document.getElementById('excluirSelecionadosErro');
+        let excluirModalInstance = null;
+        if (modalExcluirSelecionados) {
+            excluirModalInstance = new bootstrap.Modal(modalExcluirSelecionados);
+        }
+
+        if (excluirSelecionadosBtn) {
+            excluirSelecionadosBtn.addEventListener('click', function() {
+                excluirSelecionadosCount.textContent = selectedIds.size;
+                excluirSelecionadosErro.classList.add('d-none');
+                // Fecha todos os outros modais Bootstrap abertos
+                document.querySelectorAll('.modal.show').forEach(function(modal) {
+                    bootstrap.Modal.getInstance(modal)?.hide();
+                });
+                if (excluirModalInstance) excluirModalInstance.show();
+            });
+        }
+
+        if (confirmarExcluirSelecionadosBtn) {
+            confirmarExcluirSelecionadosBtn.addEventListener('click', async function() {
+                confirmarExcluirSelecionadosBtn.disabled = true;
+                excluirSelecionadosErro.classList.add('d-none');
+                try {
+                    const ids = Array.from(selectedIds);
+                    const resp = await fetch('/lancamentos/bulk-delete/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-CSRFToken': (document.querySelector('[name=csrfmiddlewaretoken]') || {}).value || ''
+                        },
+                        body: ids.map(id => 'ids[]=' + encodeURIComponent(id)).join('&')
+                    });
+                    const data = await resp.json();
+                    if (data.success) {
+                        // Remover IDs excluídos da seleção
+                        ids.forEach(id => selectedIds.delete(id));
+                        persistSelection();
+                        if (excluirModalInstance) excluirModalInstance.hide();
+                        // Recarregar página para refletir exclusão
+                        window.location.reload();
+                    } else {
+                        excluirSelecionadosErro.textContent = (data.errors || ['Erro desconhecido']).join('\n');
+                        excluirSelecionadosErro.classList.remove('d-none');
+                    }
+                } catch (e) {
+                    excluirSelecionadosErro.textContent = 'Erro ao excluir lançamentos.';
+                    excluirSelecionadosErro.classList.remove('d-none');
+                } finally {
+                    confirmarExcluirSelecionadosBtn.disabled = false;
+                }
             });
         }
     });

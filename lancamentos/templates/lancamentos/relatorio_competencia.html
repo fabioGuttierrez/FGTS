@@ -1,4 +1,27 @@
 {% extends 'base.html' %}
+<style>
+  .col-funcionario {
+    width: 350px !important;
+    max-width: 350px !important;
+    min-width: 350px !important;
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+    display: table-cell;
+  }
+  .no-break {
+    white-space: nowrap !important;
+    min-width: 120px;
+    max-width: 180px;
+    width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+    display: table-cell;
+    font-size: 1.05em;
+  }
+</style>
 {% load lancamento_extras %}
 {% if debug_alert %}
   <div class="alert alert-info" style="white-space: pre-line;">
@@ -177,15 +200,15 @@
               <thead class="table-light">
                 <tr>
                   <th>Competência</th>
-                  <th>Funcionário</th>
-                  <th>Matrícula</th>
-                  <th>Demissão</th>
-                  <th>Base FGTS</th>
-                  <th>FGTS Valor</th>
-                  <th>Índice</th>
-                  <th>Correção</th>
-                  <th>JAM</th>
-                  <th>Total</th>
+                  {% if agrupamento != 'funcionario' %}<th class="col-funcionario">Funcionário</th>{% endif %}
+                  <th class="no-break">Matrícula</th>
+                  <th class="no-break">Demissão</th>
+                  <th class="no-break">Base FGTS</th>
+                  <th class="no-break">FGTS Valor</th>
+                  <th class="no-break">Índice</th>
+                  <th class="no-break">Correção</th>
+                  <th class="no-break">JAM</th>
+                  <th class="no-break">Total</th>
                   <th>Ações</th>
                 </tr>
               </thead>
@@ -193,20 +216,20 @@
                 {% for item in grupo_data.items %}
                 <tr>
                   <td><span class="badge bg-info">{{ item.competencia_display|default:item.competencia }}</span></td>
-                  <td>{{ item.lancamento.funcionario.nome }}</td>
-                  <td>{% if item.lancamento.vinculo %}{{ item.lancamento.vinculo.matricula|default:item.lancamento.vinculo.id }}{% endif %}</td>
+                  {% if agrupamento != 'funcionario' %}<td class="col-funcionario">{{ item.lancamento.funcionario.nome }}</td>{% endif %}
+                  <td class="no-break">{% if item.lancamento.vinculo %}{{ item.lancamento.vinculo.matricula|default:item.lancamento.vinculo.id }}{% endif %}</td>
                   {% if item.lancamento.vinculo %}
-                    <td>{% if item.lancamento.vinculo.data_demissao %}{{ item.lancamento.vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
+                    <td class="no-break">{% if item.lancamento.vinculo.data_demissao %}{{ item.lancamento.vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
                   {% else %}
                     {% get_vinculo_for_competencia item.lancamento.funcionario.vinculos.all item.lancamento.empresa item.competencia as vinculo %}
-                    <td>{% if vinculo and vinculo.data_demissao %}{{ vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
+                    <td class="no-break">{% if vinculo and vinculo.data_demissao %}{{ vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
                   {% endif %}
-                  <td>R$ {{ item.lancamento.base_fgts|floatformat:2 }}</td>
-                  <td>R$ {{ item.lancamento.valor_fgts }}</td>
-                  <td>{{ item.calc.indice }}</td>
-                  <td>R$ {{ item.calc.valor_corrigido }}</td>
-                  <td>R$ {{ item.calc.valor_jam }}</td>
-                  <td><strong>R$ {{ item.calc.valor_deposito_fgts }}</strong></td>
+                  <td class="no-break">R$ {{ item.lancamento.base_fgts|floatformat:2 }}</td>
+                  <td class="no-break">R$ {{ item.lancamento.valor_fgts }}</td>
+                  <td class="no-break">{{ item.calc.indice }}</td>
+                  <td class="no-break">R$ {{ item.calc.valor_corrigido }}</td>
+                  <td class="no-break">R$ {{ item.calc.valor_jam }}</td>
+                  <td class="no-break"><strong>R$ {{ item.calc.valor_deposito_fgts }}</strong></td>
                   <td>
                     <a href="{% url 'relatorio-memoria-calculo' %}?empresa={{ empresa.pk }}&funcionario={{ item.lancamento.funcionario.pk }}{% if item.lancamento.vinculo %}&vinculo={{ item.lancamento.vinculo.pk }}{% endif %}&competencia={{ item.competencia }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}" 
                        class="btn btn-sm btn-info" 
@@ -263,14 +286,14 @@
               <thead class="table-dark">
                 <tr>
                   <th>Competência</th>
-                  <th>Funcionário</th>
-                  <th>Matrícula</th>
-                  <th>Demissão</th>
-                  <th>FGTS Valor</th>
-                  <th>Índice</th>
-                  <th>Correção</th>
-                  <th>JAM</th>
-                  <th>Total</th>
+                  <th class="col-funcionario">Funcionário</th>
+                  <th class="no-break">Matrícula</th>
+                  <th class="no-break">Demissão</th>
+                  <th class="no-break">FGTS Valor</th>
+                  <th class="no-break">Índice</th>
+                  <th class="no-break">Correção</th>
+                  <th class="no-break">JAM</th>
+                  <th class="no-break">Total</th>
                   <th>Ações</th>
                 </tr>
               </thead>
@@ -278,19 +301,19 @@
               {% for item in resultados %}
               <tr>
                 <td><span class="badge bg-info">{{ item.competencia_display|default:item.competencia }}</span></td>
-                <td>{{ item.lancamento.funcionario.nome }}</td>
-                <td>{% if item.lancamento.vinculo %}{{ item.lancamento.vinculo.matricula|default:item.lancamento.vinculo.id }}{% endif %}</td>
+                <td class="col-funcionario">{{ item.lancamento.funcionario.nome }}</td>
+                <td class="no-break">{% if item.lancamento.vinculo %}{{ item.lancamento.vinculo.matricula|default:item.lancamento.vinculo.id }}{% endif %}</td>
                 {% if item.lancamento.vinculo %}
-                  <td>{% if item.lancamento.vinculo.data_demissao %}{{ item.lancamento.vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
+                  <td class="no-break">{% if item.lancamento.vinculo.data_demissao %}{{ item.lancamento.vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
                 {% else %}
                   {% get_vinculo_for_competencia item.lancamento.funcionario.vinculos.all item.lancamento.empresa item.competencia as vinculo %}
-                  <td>{% if vinculo and vinculo.data_demissao %}{{ vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
+                  <td class="no-break">{% if vinculo and vinculo.data_demissao %}{{ vinculo.data_demissao|date:'d/m/Y' }}{% endif %}</td>
                 {% endif %}
-                <td>R$ {{ item.lancamento.valor_fgts }}</td>
-                <td>{{ item.calc.indice }}</td>
-                <td>R$ {{ item.calc.valor_corrigido }}</td>
-                <td>R$ {{ item.calc.valor_jam }}</td>
-                <td><strong>R$ {{ item.calc.valor_deposito_fgts }}</strong></td>
+                <td class="no-break">R$ {{ item.lancamento.valor_fgts }}</td>
+                <td class="no-break">{{ item.calc.indice }}</td>
+                <td class="no-break">R$ {{ item.calc.valor_corrigido }}</td>
+                <td class="no-break">R$ {{ item.calc.valor_jam }}</td>
+                <td class="no-break"><strong>R$ {{ item.calc.valor_deposito_fgts }}</strong></td>
                 <td>
                   <a href="{% url 'relatorio-memoria-calculo' %}?empresa={{ empresa.pk }}&funcionario={{ item.lancamento.funcionario.pk }}{% if item.lancamento.vinculo %}&vinculo={{ item.lancamento.vinculo.pk }}{% endif %}&competencia={{ item.competencia }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}" 
                      class="btn btn-sm btn-info" 
