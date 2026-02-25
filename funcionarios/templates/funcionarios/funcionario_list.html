@@ -88,35 +88,49 @@
 
         <!-- Body -->
         <div class="card-body p-4">
-            <form method="get" class="row g-3 mb-4">
-                <div class="col-lg-4 col-md-6">
-                    <label class="form-label text-muted small">Buscar por nome/CPF/PIS/MATRICULA</label>
-                    <input type="text" name="q" value="{{ filtro_busca }}" class="form-control" placeholder="Digite para buscar">
+            <div class="mb-4">
+                <div class="card border-0 shadow-sm bg-white p-4">
+                    <form method="get">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-lg-3 col-md-6">
+                                <label class="form-label text-muted small">Buscar <i class="bi bi-search ms-1" title="Buscar por nome, CPF, PIS ou matrícula"></i></label>
+                                <input type="text" name="q" value="{{ filtro_busca }}" class="form-control" placeholder="Digite para buscar">
+                            </div>
+                            <div class="col-lg-3 col-md-6">
+                                <label class="form-label text-muted small">Empresa <i class="bi bi-building ms-1" title="Filtrar por empresa"></i></label>
+                                <select name="empresa" class="form-select">
+                                    <option value="">Todas</option>
+                                    {% for emp in empresas_permitidas %}
+                                        <option value="{{ emp.codigo }}" {% if emp.codigo|stringformat:'s' == filtro_empresa %}selected{% endif %}>{{ emp.nome }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-lg-2 col-md-6">
+                                <label class="form-label text-muted small">Status <i class="bi bi-circle-half ms-1" title="Filtrar por status"></i></label>
+                                <select name="status" class="form-select">
+                                    <option value="">Todos</option>
+                                    <option value="ativo" {% if filtro_status == 'ativo' %}selected{% endif %}>Ativos</option>
+                                    <option value="demitido" {% if filtro_status == 'demitido' %}selected{% endif %}>Demitidos</option>
+                                </select>
+                            </div>
+                            <div class="col-lg-2 col-md-6">
+                                <label class="form-label text-muted small">Ordenar <i class="bi bi-arrow-down-up ms-1" title="Ordenar resultados"></i></label>
+                                <select name="ordenar" class="form-select">
+                                    <option value="">Ordenar por...</option>
+                                    <option value="nome" {% if request.GET.ordenar == 'nome' %}selected{% endif %}>Nome</option>
+                                    <option value="matricula" {% if request.GET.ordenar == 'matricula' %}selected{% endif %}>Matrícula</option>
+                                    <option value="empresa" {% if request.GET.ordenar == 'empresa' %}selected{% endif %}>Empresa</option>
+                                    <option value="admissao" {% if request.GET.ordenar == 'admissao' %}selected{% endif %}>Admissão</option>
+                                </select>
+                            </div>
+                            <div class="col-lg-2 col-md-6 d-flex gap-2">
+                                <button type="submit" class="btn btn-primary w-100" title="Aplicar filtros"><i class="bi bi-funnel"></i> Filtrar</button>
+                                <a href="?" class="btn btn-outline-secondary w-100" title="Limpar filtros"><i class="bi bi-x-circle"></i> Limpar</a>
+                            </div>
+                        </div>
+                    </form>
                 </div>
-                <div class="col-lg-3 col-md-6">
-                    <label class="form-label text-muted small">Empresa</label>
-                    <select name="empresa" class="form-select">
-                        <option value="">Todas</option>
-                        {% for emp in empresas_permitidas %}
-                            <option value="{{ emp.codigo }}" {% if emp.codigo|stringformat:'s' == filtro_empresa %}selected{% endif %}>{{ emp.nome }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-lg-3 col-md-6">
-                    <label class="form-label text-muted small">Status</label>
-                    <select name="status" class="form-select">
-                        <option value="">Todos</option>
-                        <option value="ativo" {% if filtro_status == 'ativo' %}selected{% endif %}>Ativos</option>
-                        <option value="demitido" {% if filtro_status == 'demitido' %}selected{% endif %}>Demitidos</option>
-                    </select>
-                </div>
-                <div class="col-lg-2 col-md-6 d-flex align-items-end">
-                    <div class="d-flex gap-2 w-100">
-                        <button type="submit" class="btn btn-primary w-100">Filtrar</button>
-                        <a href="?" class="btn btn-outline-secondary" title="Limpar filtros">Limpar</a>
-                    </div>
-                </div>
-            </form>
+            </div>
             {% if funcionarios %}
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
