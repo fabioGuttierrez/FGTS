@@ -54,6 +54,7 @@ urlpatterns = [
     path('empresas/<int:pk>/editar/', EmpresaUpdateView.as_view(), name='empresa-update'),
     path('funcionarios/', include('funcionarios.urls')),
     path('lancamentos/', include('lancamentos.urls')),
+    path('lancamentos/', include('lancamentos.urls_novos_recursos')),
     path('lancamentos/', LancamentoListView.as_view(), name='lancamento-list'),
     path('lancamentos/novo/', LancamentoCreateView.as_view(), name='lancamento-create'),
     path('lancamentos/<int:pk>/editar/', LancamentoUpdateView.as_view(), name='lancamento-update'),

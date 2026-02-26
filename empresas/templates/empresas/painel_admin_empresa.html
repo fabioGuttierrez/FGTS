@@ -4,6 +4,11 @@
   <h2 class="mb-4">Painel Administrativo da Empresa</h2>
 
   {% if is_admin_empresa %}
+    <div class="mb-4 d-flex justify-content-end">
+      <a href="{% url 'empresa-editar' empresa.id %}" class="btn btn-outline-primary">
+        <i class="bi bi-pencil-square me-1"></i> Editar Empresa
+      </a>
+    </div>
     <div class="mb-5">
       <h3 class="mb-3">Usuários da Empresa</h3>
       <table class="table align-middle bg-white rounded shadow-sm">

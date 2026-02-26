@@ -132,6 +132,15 @@ class FuncionarioListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
                 filtros |= models.Q(vinculos__matricula__icontains=busca_sem_zeros)
             qs = qs.filter(filtros)
 
+        ordenar = self.request.GET.get('ordenar')
+        if ordenar == 'nome':
+            qs = qs.order_by('nome')
+        elif ordenar == 'matricula':
+            qs = qs.order_by('vinculos__matricula')
+        elif ordenar == 'empresa':
+            qs = qs.order_by('vinculos__empresa__nome')
+        elif ordenar == 'admissao':
+            qs = qs.order_by('vinculos__data_admissao')
         return qs.distinct()
 
     def get_context_data(self, **kwargs):
