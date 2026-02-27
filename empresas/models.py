@@ -2,6 +2,22 @@ from django.db import models
 from uuid import uuid4
 from .models_feature import * 
 from .models_grupo import *
+from .models_relatorio import RelatorioPremium
+
+class EmailLog(models.Model):
+	email = models.EmailField()
+	data_envio = models.DateTimeField(auto_now_add=True)
+	status = models.CharField(max_length=20)  # 'sucesso' ou 'erro'
+	mensagem = models.TextField(blank=True, null=True)  # mensagem de erro ou info
+	relatorio = models.ForeignKey('RelatorioPremium', on_delete=models.CASCADE, null=True, blank=True)
+
+	class Meta:
+		verbose_name = 'Log de Envio de E-mail'
+		verbose_name_plural = 'Logs de Envio de E-mail'
+		ordering = ['-data_envio']
+
+	def __str__(self):
+		return f"{self.email} - {self.status} - {self.data_envio:%d/%m/%Y %H:%M}"
 
 class Empresa(models.Model):
 	OPTANTE_SIMPLES_CHOICES = [
@@ -29,7 +45,8 @@ class Empresa(models.Model):
 	nome_contato = models.CharField(max_length=255, blank=True, verbose_name='Nome Contato')
 	fone_contato = models.CharField(max_length=20, blank=True, verbose_name='Fone de Contato')
 	cnae = models.CharField(max_length=10, blank=True, verbose_name='CNAE')
-	percentual_rat = models.DecimalField(max_digits=5, decimal_places=2, default=1, verbose_name='% RAT')
+	from decimal import Decimal
+	percentual_rat = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('1.00'), verbose_name='% RAT')
 	optante_simples = models.IntegerField(choices=OPTANTE_SIMPLES_CHOICES, default=1, verbose_name='Optante Simples')
 	fpas = models.CharField(max_length=10, blank=True, verbose_name='FPAS')
 	outras_entidades = models.CharField(max_length=10, blank=True, verbose_name='Outras Entidades')

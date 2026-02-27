@@ -2,6 +2,8 @@ from django.contrib import admin
 from .admin_feature import * 
 from .admin_grupo import *
 from .models import Empresa
+from .models_relatorio import RelatorioPremium
+from .models import EmailLog
 
 
 @admin.register(Empresa)
@@ -13,3 +15,19 @@ class EmpresaAdmin(admin.ModelAdmin):
 	@admin.display(description='Matriz?')
 	def is_matriz_flag(self, obj):
 		return obj.is_matriz
+
+
+# Admin para RelatorioPremium
+@admin.register(RelatorioPremium)
+class RelatorioPremiumAdmin(admin.ModelAdmin):
+	list_display = ('email', 'data_geracao')
+	search_fields = ('email',)
+	list_filter = ('data_geracao',)
+
+
+# Admin para EmailLog
+@admin.register(EmailLog)
+class EmailLogAdmin(admin.ModelAdmin):
+	list_display = ('email', 'status', 'data_envio', 'relatorio')
+	search_fields = ('email', 'mensagem')
+	list_filter = ('status', 'data_envio')

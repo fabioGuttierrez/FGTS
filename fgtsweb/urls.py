@@ -20,6 +20,7 @@ from django.urls import path, include
 from django.views.generic import TemplateView
 from django.contrib.auth import views as auth_views
 from empresas.views import EmpresaCreateView, EmpresaListView, EmpresaUpdateView
+from empresas.views_calculadora import calculadora_fgts_view
 from lancamentos.views import (
     RelatorioCompetenciaView,
     LancamentoCreateView,
@@ -50,6 +51,7 @@ urlpatterns = [
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('billing/', include(('billing.urls', 'billing'))),
     path('empresas/', include('empresas.urls')),
+    path('calculadora-fgts/', calculadora_fgts_view, name='calculadora-fgts'),
     path('empresas/novo/', EmpresaCreateView.as_view(), name='empresa-create'),
     path('empresas/<int:pk>/editar/', EmpresaUpdateView.as_view(), name='empresa-update'),
     path('funcionarios/', include('funcionarios.urls')),
