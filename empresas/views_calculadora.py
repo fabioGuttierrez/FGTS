@@ -1,10 +1,12 @@
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.contrib import messages
+from django.utils import timezone
 from .forms_calculadora import FGTSCalculadoraForm
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
 from indices.models import SupabaseIndice
+from indices.services.indice_service import IndiceFGTSService
 from coefjam.models import CoefJam
 from .models_relatorio import RelatorioPremium
 from .utils_fgts import enviar_relatorio_fgts
@@ -144,4 +146,6 @@ def calculadora_fgts_view(request):
         'premium_liberado': premium_liberado,
         'mensagem': mensagem,
         'steps_email': steps_email,
+        'hoje': timezone.now().date(),
+        'data_maxima': IndiceFGTSService.obter_ultima_data_base(),
     })

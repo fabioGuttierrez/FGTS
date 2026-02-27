@@ -186,16 +186,18 @@
       </a>
     </div>
     {% endif %}
-    <a href="{% url 'calculadora-fgts' %}" class="btn btn-outline-success mb-2">Testar Calculadora FGTS (Degustação)</a>
     <div class="row align-items-center">
       <div class="col-lg-7">
         <h1 class="display-5 mb-3">FGTS em atraso sem erro, sem retrabalho e sem surpresa na Caixa</h1>
         <p class="lead mb-4">Calcule, audite e valide o FGTS em atraso com base nos índices oficiais da Caixa — antes de gerar a guia oficial.</p>
 
         {% if not request.user.is_authenticated %}
-        <div class="d-flex flex-column align-items-start gap-2 mb-4">
+        <div class="d-flex flex-column align-items-start gap-3 mb-4">
           <a href="{% url 'register' %}" class="btn btn-light btn-lg px-5 shadow" style="font-weight: 700;">
             <i class="bi bi-rocket-takeoff me-2"></i> Testar grátis agora
+          </a>
+          <a href="{% url 'calculadora-fgts' %}" class="btn btn-lg px-5" style="font-weight:700; background:rgba(255,255,255,0.12); color:#fff; border:2px solid rgba(255,255,255,0.6); backdrop-filter:blur(4px);">
+            <i class="bi bi-calculator me-2"></i> Calcular sem cadastro
           </a>
           <small class="text-white-75">Sem cartão • Resultados imediatos • Dados protegidos</small>
         </div>
@@ -204,50 +206,22 @@
 
       <div class="col-lg-5 d-none d-lg-block">
         {% if not request.user.is_authenticated %}
-        <div class="card feature-card shadow-lg border-0">
-          <div class="card-body p-5">
-            <div class="text-center mb-4">
-              <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3" 
-                   style="width: 80px; height: 80px; background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);">
-                <i class="bi bi-gift-fill text-white" style="font-size: 2.5rem;"></i>
-              </div>
-              <h3 class="fw-bold mb-2" style="color: #2c3e50;">Teste por 7 dias GRÁTIS</h3>
-              <p class="text-muted mb-0">Sem cartão • Até 10 funcionários</p>
-            </div>
-
-            <div class="bg-light rounded-3 p-3 mb-4">
-              <div class="d-flex align-items-start mb-2">
-                <i class="bi bi-check-circle-fill text-success me-2 mt-1"></i>
-                <div>
-                  <strong class="d-block text-dark">Acesso completo ao sistema</strong>
-                  <small class="text-muted">Índices oficiais e relatórios detalhados</small>
-                </div>
-              </div>
-              <div class="d-flex align-items-start mb-2">
-                <i class="bi bi-check-circle-fill text-success me-2 mt-1"></i>
-                <div>
-                  <strong class="d-block text-dark">Sem cartão</strong>
-                  <small class="text-muted">Cadastre e valide de imediato</small>
-                </div>
-              </div>
-              <div class="d-flex align-items-start">
-                <i class="bi bi-shield-check text-success me-2 mt-1"></i>
-                <div>
-                  <strong class="d-block text-dark">Dados protegidos</strong>
-                  <small class="text-muted">LGPD + exclusão automática pós-teste</small>
-                </div>
-              </div>
-            </div>
-
-            <div class="d-grid gap-2">
-              <a href="{% url 'register' %}" class="btn btn-lg shadow" 
-                 style="background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%); color: white; border: none; font-weight: 700; padding: 16px;">
-                <i class="bi bi-rocket-takeoff me-2"></i> Testar grátis agora
-              </a>
-              <small class="text-center text-muted">
-                <i class="bi bi-lock-fill me-1"></i> Sem cartão • Resultados imediatos • Dados protegidos
-              </small>
-            </div>
+        <div class="card feature-card shadow-lg border-0 p-5 text-center">
+          <i class="bi bi-calculator-fill mb-3" style="font-size: 2.8rem; color: #667eea;"></i>
+          <h4 class="fw-bold mb-2" style="color: #1a1a2e; line-height: 1.35;">
+            Quer ver o poder da plataforma antes de criar conta?
+          </h4>
+          <p class="text-muted mb-4">
+            Experimente nossa calculadora instantânea e receba um relatório profissional em segundos.
+          </p>
+          <a href="{% url 'calculadora-fgts' %}" class="btn btn-lg fw-bold mb-3"
+             style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border: none; border-radius: 10px; padding: 14px 28px;">
+            <i class="bi bi-calculator me-2"></i> Experimentar agora
+          </a>
+          <div class="text-muted" style="font-size: 0.85rem; line-height: 2;">
+            <span class="d-block"><span style="color: #667eea;">✔</span> Sem cadastro de empresa</span>
+            <span class="d-block"><span style="color: #667eea;">✔</span> Sem configuração inicial</span>
+            <span class="d-block"><span style="color: #667eea;">✔</span> Resultado imediato</span>
           </div>
         </div>
         {% endif %}

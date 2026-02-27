@@ -9,15 +9,33 @@
         <div class="mb-3">
           <label for="id_base_fgts" class="form-label text-white" style="font-weight: 600;">Base FGTS:</label>
           {{ form.base_fgts }}
+          {% if form.base_fgts.errors %}
+            {% for erro in form.base_fgts.errors %}
+              <div class="campo-erro mt-1">{{ erro }}</div>
+            {% endfor %}
+          {% endif %}
         </div>
         <div class="mb-3">
           <label for="id_competencia" class="form-label text-white" style="font-weight: 600;">Competência:</label>
           {{ form.competencia }}
           <small class="form-text text-light">MM/AAAA</small>
+          {% if form.competencia.errors %}
+            {% for erro in form.competencia.errors %}
+              <div class="campo-erro mt-1">{{ erro }}</div>
+            {% endfor %}
+          {% endif %}
         </div>
         <div class="mb-3">
           <label for="id_data_pagamento" class="form-label text-white" style="font-weight: 600;">Data de Pagamento:</label>
           {{ form.data_pagamento }}
+          <small class="form-text text-light">
+            Mínimo: hoje ({{ hoje|date:"d/m/Y" }}){% if data_maxima %} &nbsp;•&nbsp; Máximo: {{ data_maxima|date:"d/m/Y" }}{% endif %}
+          </small>
+          {% if form.data_pagamento.errors %}
+            {% for erro in form.data_pagamento.errors %}
+              <div class="campo-erro mt-1">{{ erro }}</div>
+            {% endfor %}
+          {% endif %}
         </div>
         <button type="submit" class="btn btn-lg w-100" style="background: linear-gradient(90deg, #7b8dfb 0%, #7f53ac 100%); color: #fff; font-weight: 700; border: none; border-radius: 8px;">Calcular</button>
       </form>
@@ -100,6 +118,14 @@
   </div>
 </div>
 <style>
+  .campo-erro {
+    font-size: 0.83rem;
+    font-weight: 600;
+    color: #ffe066;
+    background: rgba(0,0,0,0.18);
+    border-radius: 6px;
+    padding: 4px 10px;
+  }
   @media (max-width: 600px) {
     .container.d-flex {
       min-height: unset !important;
