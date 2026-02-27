@@ -12,8 +12,8 @@
         }
 
         :root {
-            --primary: #667eea;
-            --secondary: #764ba2;
+            --primary: #005CA9;
+            --secondary: #003A78;
             --accent: #e74c3c;
             --success: #27ae60;
             --warning: #f39c12;
@@ -208,7 +208,7 @@
         .form-control:focus, 
         .form-select:focus {
             border-color: var(--primary);
-            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+            box-shadow: 0 0 0 0.2rem rgba(0, 92, 169, 0.25);
         }
 
         /* Buttons */
@@ -227,7 +227,7 @@
 
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+            box-shadow: 0 6px 20px rgba(0, 92, 169, 0.3);
             background: linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%);
         }
 
@@ -323,6 +323,24 @@
         .spinner-border {
             color: var(--primary);
         }
+
+        /* Accordion — sobrescreve o azul claro padrão do Bootstrap */
+        .accordion-button {
+            background-color: #fff;
+            color: #1a2a3a;
+        }
+        .accordion-button:not(.collapsed) {
+            background-color: #005CA9;
+            color: #fff;
+            box-shadow: none;
+        }
+        .accordion-button:not(.collapsed)::after {
+            filter: invert(1) brightness(2);
+        }
+        .accordion-button:focus {
+            box-shadow: 0 0 0 0.2rem rgba(0, 92, 169, 0.2);
+            border-color: #005CA9;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -367,6 +385,9 @@
                         <a class="nav-link" href="{% url 'audit_logs:auditlog-list' %}"><i class="bi bi-shield-check"></i> Auditoria</a>
                     </li>
                     {% endif %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'ajuda' %}" title="Documentação e ajuda"><i class="bi bi-question-circle"></i> Ajuda</a>
+                    </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'billing:feedback-criar' %}" title="Envie seu feedback"><i class="bi bi-chat-left-dots"></i> Feedback</a>
                     </li>

@@ -272,10 +272,57 @@ def gerar_sefip_legacy(filtros: SefipLegacyFilters) -> str:
         )
         linhas.append(_finalize_line(reg30))
 
-    # Registro 90
+        # Registro 40 - Remunerações variáveis (horas extras e adicionais)
+        horas_extras = lancamento.horas_extras or Decimal("0")
+        adicionais = lancamento.adicionais or Decimal("0")
+        reg40 = (
+            "40"
+            + _pad_left(cnpj, 14)
+            + _space(15)
+            + pis
+            + _format_base_fgts(horas_extras)
+            + _format_base_fgts(adicionais)
+            + "0" * 15   # outros (reservado)
+            + "*"
+        )
+        linhas.append(_finalize_line(reg40))
+
+        # Registro 50 - Descontos (INSS e IR) — somente se houver valor
+        desconto_inss = lancamento.desconto_inss or Decimal("0")
+        desconto_ir = lancamento.desconto_ir or Decimal("0")
+        if desconto_inss or desconto_ir:
+            reg50 = (
+                "50"
+                + _pad_left(cnpj, 14)
+                + _space(15)
+                + pis
+                + _format_base_fgts(desconto_inss)
+                + _format_base_fgts(desconto_ir)
+                + "0" * 15   # outros (reservado)
+                + "*"
+            )
+            linhas.append(_finalize_line(reg50))
+
+        # Registro 60 - Contribuição sindical — somente se houver valor
+        desconto_sindical = lancamento.desconto_sindical or Decimal("0")
+        if desconto_sindical:
+            reg60 = (
+                "60"
+                + _pad_left(cnpj, 14)
+                + _space(15)
+                + pis
+                + _format_base_fgts(desconto_sindical)
+                + "0" * 15   # outros (reservado)
+                + "*"
+            )
+            linhas.append(_finalize_line(reg60))
+
+    # Registro 90 — total de linhas excluindo o próprio reg90
+    total_linhas = str(len(linhas)).zfill(7)[:7]
     reg90 = (
-        "90999999999999999999999999999999999999999999999999999"
-        + _space(306)
+        "90"
+        + total_linhas
+        + "0" * 44   # demais campos (reservado)
         + "*"
     )
     linhas.append(_finalize_line(reg90))

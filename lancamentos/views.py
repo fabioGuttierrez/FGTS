@@ -910,7 +910,6 @@ class RelatorioCompetenciaView(FormView):
 
         # ⚡ Se não há lançamentos para esta competência, pular silenciosamente
         if not lancamentos_filtrados:
-            print(f"[DEBUG FGTS] Nenhum lançamento encontrado para competência/parcela/empresa/funcionario/pago=False (após filtro de vínculo ativo)")
             return [], {k: Decimal('0') for k in ['valor_corrigido', 'valor_jam', 'total']}, None, jam_state, avisos
 
         # REGRA DE NEGÓCIO IMUTÁVEL: Buscar índice EXATO
@@ -1164,8 +1163,6 @@ class RelatorioCompetenciaView(FormView):
             jam_state = {}
             total_lancamentos = 0
             competencias_com_erro = []
-            # LOG TEMPORÁRIO: imprimir competências que serão usadas no filtro
-            print('DEBUG - competencias_list:', [c['competencia'] for c in competencias_list])
             for comp_data in competencias_list:
                 comp = comp_data['competencia']
                 parc = comp_data.get('parcela_13')
@@ -1351,8 +1348,6 @@ def relatorio_por_ids(request):
                 'motivo': ', '.join(motivo),
                 'status': status
             })
-
-    print('DEBUG lancamentos_filtrados:', [(l.id, l.competencia, getattr(l, 'parcela_13', None)) for l in lancamentos_filtrados])
 
     # Usar o mesmo cálculo do relatório padrão (índice, correção, JAM)
     view = RelatorioCompetenciaView()

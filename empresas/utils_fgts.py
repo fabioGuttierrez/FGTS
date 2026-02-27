@@ -60,7 +60,6 @@ def gerar_pdf_fgts(memoria, email):
     p.showPage()
     p.save()
     buffer.seek(0)
-    print(f"[DEBUG PDF] PDF gerado com sucesso para {email}")
     return buffer
 
 def _salvar_log_erro(email, mensagem, relatorio=None):

@@ -76,4 +76,10 @@ urlpatterns = [
     path('configuracoes/', ConfiguracaoListView.as_view(), name='configuracao-list'),
     path('auditoria/', include('audit_logs.urls')),
     path('monitoring/', include('monitoring.urls')),
+    # Ajuda / Documentação
+    path('ajuda/', TemplateView.as_view(template_name='ajuda/index.html'), name='ajuda'),
+    path('ajuda/primeiros-passos/', TemplateView.as_view(template_name='ajuda/primeiros_passos.html'), name='ajuda-primeiros-passos'),
+    path('ajuda/manual/', TemplateView.as_view(template_name='ajuda/manual.html'), name='ajuda-manual'),
+    path('ajuda/faq/', TemplateView.as_view(template_name='ajuda/faq.html'), name='ajuda-faq'),
+    path('ajuda/glossario/', TemplateView.as_view(template_name='ajuda/glossario.html'), name='ajuda-glossario'),
 ]
