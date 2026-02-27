@@ -12,13 +12,14 @@ from empresas.models import Empresa
 from .models import Lancamento
 from .models_conferencia import ConferenciaLancamento
 from .forms import (
-    RelatorioCompetenciaForm, 
-    LancamentoForm, 
+    RelatorioCompetenciaForm,
+    LancamentoForm,
     LegacyImportForm,
     SefipExportForm,
     ConferenciaLancamentoForm,
     RejeicaoLancamentoForm,
-    FiltroConferenciaForm
+    FiltroConferenciaForm,
+    SefipImportForm,
 )
 from .services.calculo import (
     calcular_fgts_atualizado,
@@ -3055,8 +3056,103 @@ class ConferenciaRelatorioView(LoginRequiredMixin, EmpresaScopeMixin, View):
             'msg_consolidacao': msg_consolidacao,
             'page_title': 'Relatório de Conferências',
         }
-        
+
         return render(request, self.template_name, context)
 
 
+# ===== IMPORTAÇÃO SEFIP.RE =====
+
+class SefipImportView(LoginRequiredMixin, FormView):
+    """
+    Recebe o arquivo SEFIP.RE, executa o parser e cria Lancamentos.
+    Accessível via GET (formulário) e POST (processamento).
+    """
+    form_class = SefipImportForm
+    template_name = 'lancamentos/sefip_import.html'
+    success_url = reverse_lazy('sefip-import')
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        from .services.sefip_importer import SefipImporter, SefipImportError
+
+        empresa = form.cleaned_data['empresa']
+        arquivo = form.cleaned_data['arquivo_re']
+
+        if not is_empresa_allowed(self.request.user, empresa.codigo):
+            messages.error(self.request, 'Você não tem permissão para importar dados nesta empresa.')
+            return self.form_invalid(form)
+
+        try:
+            arquivo_bytes = arquivo.read()
+        except Exception as exc:
+            messages.error(self.request, f'Erro ao ler o arquivo: {exc}')
+            return self.form_invalid(form)
+
+        try:
+            importer = SefipImporter()
+            resultado = importer.importar(arquivo_bytes, empresa)
+        except SefipImportError as exc:
+            messages.error(self.request, f'Erro no arquivo: {exc}')
+            return self.form_invalid(form)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).error('Erro na importação SEFIP.RE', exc_info=True)
+            messages.error(self.request, f'Erro inesperado ao processar o arquivo: {exc}')
+            return self.form_invalid(form)
+
+        self.request.session['sefip_import_result'] = {
+            'empresa_nome': empresa.nome,
+            'criados': resultado['criados'],
+            'ignorados': resultado['ignorados'],
+            'competencias': resultado['competencias'],
+            'erros': resultado['erros'][:30],
+            'avisos': resultado['avisos'][:30],
+            'total_erros': len(resultado['erros']),
+            'total_avisos': len(resultado['avisos']),
+        }
+
+        competencias_str = ', '.join(resultado['competencias']) or '—'
+        msg = (
+            f"{resultado['criados']} lançamento(s) importado(s) "
+            f"(competência: {competencias_str})"
+        )
+        if resultado['ignorados']:
+            msg += f', {resultado["ignorados"]} ignorado(s)'
+        if resultado['erros']:
+            msg += f', {len(resultado["erros"])} erro(s)'
+
+        if not resultado['erros']:
+            messages.success(self.request, f'Importação concluída. {msg}.')
+        else:
+            messages.warning(self.request, f'Importação concluída com avisos. {msg}.')
+
+        return redirect('sefip-import-result')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['ultimo_resultado'] = self.request.session.get('sefip_import_result')
+        return context
+
+
+class SefipImportResultView(LoginRequiredMixin, View):
+    """Exibe o relatório detalhado da última importação SEFIP.RE."""
+    template_name = 'lancamentos/sefip_import.html'
+
+    def get(self, request, *args, **kwargs):
+        resultado = request.session.get('sefip_import_result')
+        if not resultado:
+            messages.warning(request, 'Nenhuma importação recente encontrada.')
+            return redirect('sefip-import')
+
+        form = SefipImportForm(user=request.user)
+        context = {
+            'form': form,
+            'resultado': resultado,
+            'ultimo_resultado': resultado,
+        }
+        return render(request, self.template_name, context)
 # Create your views here.

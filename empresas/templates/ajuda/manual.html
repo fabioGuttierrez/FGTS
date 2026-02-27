@@ -257,22 +257,33 @@
 
       <!-- ===================== IMPORTAÇÃO TXT ===================== -->
       <section id="importacao-txt" class="doc-section mb-5">
-        <h2><i class="bi bi-file-earmark-text me-2"></i>Importação TXT — Arquivo SEFIP Legado</h2>
+        <h2><i class="bi bi-file-earmark-text me-2"></i>Importação de Arquivo SEFIP.RE</h2>
 
         <p>
-          Permite migrar histórico de lançamentos a partir de arquivos <code>SEFIP.RE</code> gerados por outros sistemas. Acesse <strong>Lançamentos → Importar TXT (Legado)</strong>.
+          Permite migrar histórico de lançamentos a partir de arquivos <code>SEFIP.RE</code> gerados pelo aplicativo SEFIP da Caixa Econômica Federal (ou qualquer sistema compatível). Acesse <strong>SEFIP → Importar SEFIP.RE</strong> no menu lateral (<code>/lancamentos/sefip/importar/</code>).
         </p>
 
         <h3>Processo</h3>
         <ol>
-          <li>Selecione a empresa de destino.</li>
-          <li>Faça upload do arquivo <code>.RE</code> ou <code>.txt</code> no formato SEFIP (360 caracteres por linha).</li>
-          <li>O sistema lê os registros <code>301</code> (dados do trabalhador) e cria os lançamentos correspondentes.</li>
-          <li>Ao final, exibe o resultado: lançamentos criados, ignorados (duplicatas) e erros por linha.</li>
+          <li>Selecione a empresa de destino (os lançamentos serão associados a ela).</li>
+          <li>Faça upload do arquivo <code>.RE</code> ou <code>.TXT</code> no formato SEFIP (360 caracteres por linha, ISO-8859-1).</li>
+          <li>O sistema lê o registro <code>00</code> para identificar a competência (YYYYMM) e os registros <code>301</code> para os dados do trabalhador.</li>
+          <li>Ao final, exibe o resultado: lançamentos criados, ignorados (duplicatas ou PIS não encontrado) e erros por linha.</li>
         </ol>
 
+        <h3>Campos lidos do registro 301</h3>
+        <table class="table table-sm table-bordered field-table" style="font-size: 0.87rem;">
+          <thead style="background: #f0f5ff;"><tr><th>Campo</th><th>Posição</th><th>Uso</th></tr></thead>
+          <tbody>
+            <tr><td>PIS / NIS</td><td>32–42</td><td>Chave para localizar o funcionário no sistema</td></tr>
+            <tr><td>Nome</td><td>53–122</td><td>Exibido nos avisos de PIS não encontrado</td></tr>
+            <tr><td>Base FGTS</td><td>167–181</td><td>15 chars: 13 inteiros + 2 decimais</td></tr>
+            <tr><td>Competência</td><td>Reg. 00 / 291–296</td><td>YYYYMM ou YYYY13 → convertido para MM/AAAA</td></tr>
+          </tbody>
+        </table>
+
         <div class="warn-box">
-          <i class="bi bi-exclamation-triangle me-1"></i> O sistema importa apenas os campos suportados pelo modelo de lançamento. Verifique se os funcionários já estão cadastrados antes de importar — o PIS é usado como chave de correspondência.
+          <i class="bi bi-exclamation-triangle me-1"></i> O PIS é a chave de correspondência. Funcionários não encontrados no sistema são sinalados como aviso e ignorados — o lançamento não é criado. Cadastre os funcionários antes de importar.
         </div>
       </section>
 

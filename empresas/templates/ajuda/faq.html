@@ -111,7 +111,7 @@
         <div class="accordion-body" style="font-size: 0.9rem; color: #3d4f63; line-height: 1.75;">
           <strong>Manual:</strong> o usuário preenche cada campo individualmente em <em>Lançamentos → Novo</em>. Indicado para ajustes pontuais ou competências isoladas.<br><br>
           <strong>Automático:</strong> o sistema gera todos os lançamentos do período de vigência do vínculo de uma só vez, usando o salário base cadastrado. Competências já existentes são puladas automaticamente.<br><br>
-          <strong>Importação TXT:</strong> lê um arquivo <code>SEFIP.RE</code> exportado de outro sistema e cria os lançamentos correspondentes. Usado para migração de histórico.
+          <strong>Importação SEFIP.RE:</strong> lê um arquivo <code>SEFIP.RE</code> (360 chars/linha, ISO-8859-1) gerado pelo aplicativo SEFIP da Caixa e cria os lançamentos correspondentes. Acesse em <em>SEFIP → Importar SEFIP.RE</em>. Indicado para migração de histórico de sistemas anteriores.
         </div>
       </div>
     </div>
@@ -145,12 +145,12 @@
     <div class="accordion-item border-0 mb-2" style="border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.07);">
       <h2 class="accordion-header">
         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#l4" style="font-weight: 600; font-size: 0.93rem; color: #1a2a3a; background: #fff;">
-          O que o sistema importa do arquivo TXT legado (SEFIP)?
+          O que o sistema lê e importa do arquivo SEFIP.RE?
         </button>
       </h2>
       <div id="l4" class="accordion-collapse collapse" data-bs-parent="#faq-lancamentos">
         <div class="accordion-body" style="font-size: 0.9rem; color: #3d4f63; line-height: 1.75;">
-          O sistema lê os registros <strong>301</strong> (dados do trabalhador) do arquivo SEFIP e extrai: PIS, competência, base FGTS e valor FGTS. O funcionário é identificado pelo PIS — ele deve estar previamente cadastrado na plataforma com o mesmo número de PIS. Registros sem correspondência no cadastro são sinalizados no relatório de importação.
+          O sistema lê dois tipos de registro: o <strong>registro 00</strong> (cabeçalho) para identificar a competência no formato YYYYMM, e os registros <strong>301</strong> (dados do trabalhador) para extrair PIS e base FGTS. O valor FGTS é recalculado automaticamente como 8% da base. O funcionário é localizado pelo PIS — ele deve estar previamente cadastrado na plataforma. Funcionários sem correspondência geram um aviso e o lançamento é ignorado.
         </div>
       </div>
     </div>

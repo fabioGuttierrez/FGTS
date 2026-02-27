@@ -519,3 +519,59 @@ class FiltroConferenciaForm(forms.Form):
         super().__init__(*args, **kwargs)
         if empresa:
             self.fields['funcionario'].queryset = Funcionario.objects.filter(empresa=empresa)
+
+
+class SefipImportForm(forms.Form):
+    """Formulário para importar lançamentos a partir de arquivo SEFIP.RE legado."""
+
+    empresa = forms.ModelChoiceField(
+        label='Empresa de destino',
+        queryset=Empresa.objects.all(),
+        required=True,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        help_text='Os lançamentos serão criados para esta empresa.',
+    )
+
+    arquivo_re = forms.FileField(
+        label='Arquivo SEFIP.RE',
+        required=True,
+        widget=forms.FileInput(attrs={
+            'class': 'form-control',
+            'accept': '.re,.RE,.txt,.TXT',
+        }),
+        help_text='Arquivo gerado pelo SEFIP da Caixa Econômica Federal (360 caracteres/linha, ISO-8859-1).',
+    )
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user is not None:
+            allowed_ids = get_allowed_empresa_ids(user)
+            if allowed_ids is not None:
+                self.fields['empresa'].queryset = Empresa.objects.filter(codigo__in=allowed_ids)
+
+    def clean_arquivo_re(self):
+        arquivo = self.cleaned_data.get('arquivo_re')
+        if arquivo:
+            nome = arquivo.name.lower()
+            if not (nome.endswith('.re') or nome.endswith('.txt')):
+                raise ValidationError(
+                    'Arquivo deve ter extensão .RE ou .TXT (arquivo gerado pelo SEFIP).'
+                )
+            if arquivo.size > 50 * 1024 * 1024:
+                raise ValidationError('Arquivo não pode ser maior que 50 MB.')
+            # Verifica se as primeiras linhas têm comprimento compatível com SEFIP
+            try:
+                arquivo.seek(0)
+                primeira_linha = arquivo.readline()
+                arquivo.seek(0)
+                linha_str = primeira_linha.decode('latin1').rstrip('\r\n')
+                if len(linha_str) < 2 or linha_str[:2] not in ('00', '10', '30'):
+                    raise ValidationError(
+                        'O arquivo não parece ser um SEFIP.RE válido '
+                        '(primeira linha não começa com registro 00, 10 ou 30).'
+                    )
+            except ValidationError:
+                raise
+            except Exception:
+                pass  # decodagem falha → service reportará
+        return arquivo
