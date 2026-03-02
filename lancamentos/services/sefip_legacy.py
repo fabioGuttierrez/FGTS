@@ -272,47 +272,70 @@ def gerar_sefip_legacy(filtros: SefipLegacyFilters) -> str:
         )
         linhas.append(_finalize_line(reg30))
 
-        # Registro 40 - Remunerações variáveis (horas extras e adicionais)
-        horas_extras = lancamento.horas_extras or Decimal("0")
-        adicionais = lancamento.adicionais or Decimal("0")
+        def _safe_decimal(value):
+            try:
+                return Decimal(value)
+            except Exception:  # noqa: BLE001
+                return Decimal("0")
+
+        def _get_value(field_name: str) -> Decimal:
+            return _safe_decimal(getattr(lancamento, field_name, Decimal("0")))
+
+        def _has_any_value(values: list[Decimal]) -> bool:
+            return any(v != 0 for v in values)
+
+        # Registro 40 - Remunerações variáveis
+        valores_40 = [
+            _get_value('horas_extras'),
+            _get_value('adicionais'),
+            _get_value('insalubridade'),
+            _get_value('periculosidade'),
+            _get_value('outras_remuneracoes'),
+        ]
         reg40 = (
             "40"
             + _pad_left(cnpj, 14)
             + _space(15)
             + pis
-            + _format_base_fgts(horas_extras)
-            + _format_base_fgts(adicionais)
-            + "0" * 15   # outros (reservado)
+            + "".join(_format_base_fgts(v) for v in valores_40)
             + "*"
         )
         linhas.append(_finalize_line(reg40))
 
-        # Registro 50 - Descontos (INSS e IR) — somente se houver valor
-        desconto_inss = lancamento.desconto_inss or Decimal("0")
-        desconto_ir = lancamento.desconto_ir or Decimal("0")
-        if desconto_inss or desconto_ir:
+        # Registro 50 - Descontos (INSS, IR e outros) — somente se houver valor
+        valores_50 = [
+            _get_value('desconto_inss'),
+            _get_value('desconto_ir'),
+            _get_value('desconto_faltas'),
+            _get_value('desconto_dsr'),
+            _get_value('outros_descontos'),
+        ]
+        if _has_any_value(valores_50):
             reg50 = (
                 "50"
                 + _pad_left(cnpj, 14)
                 + _space(15)
                 + pis
-                + _format_base_fgts(desconto_inss)
-                + _format_base_fgts(desconto_ir)
-                + "0" * 15   # outros (reservado)
+                + "".join(_format_base_fgts(v) for v in valores_50)
                 + "*"
             )
             linhas.append(_finalize_line(reg50))
 
-        # Registro 60 - Contribuição sindical — somente se houver valor
-        desconto_sindical = lancamento.desconto_sindical or Decimal("0")
-        if desconto_sindical:
+        # Registro 60 - Contribuições sindicais — somente se houver valor
+        valores_60 = [
+            _get_value('desconto_sindical'),
+            _get_value('contribuicao_confederativa'),
+            _get_value('contribuicao_assistencial'),
+            _get_value('desconto_fgts_atraso'),
+            _get_value('outras_contribuicoes'),
+        ]
+        if _has_any_value(valores_60):
             reg60 = (
                 "60"
                 + _pad_left(cnpj, 14)
                 + _space(15)
                 + pis
-                + _format_base_fgts(desconto_sindical)
-                + "0" * 15   # outros (reservado)
+                + "".join(_format_base_fgts(v) for v in valores_60)
                 + "*"
             )
             linhas.append(_finalize_line(reg60))

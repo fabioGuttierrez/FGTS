@@ -85,8 +85,13 @@ def calculadora_fgts_view(request):
             else:
                 relatorios_count = RelatorioPremium.objects.filter(email=email).count()
                 if relatorios_count < 3:
-                    RelatorioPremium.objects.create(email=email, memoria=memoria)
-                    sucesso, steps_email = enviar_relatorio_fgts(email, memoria)
+                    memoria_envio = {
+                        **memoria,
+                        'relatorio_posicao': relatorios_count + 1,
+                        'relatorio_total': 3,
+                    }
+                    RelatorioPremium.objects.create(email=email, memoria=memoria_envio)
+                    sucesso, steps_email = enviar_relatorio_fgts(email, memoria_envio)
                     if sucesso:
                         # PRG: redireciona para GET limpo — evita re-submit no F5
                         request.session.pop('calculadora_memoria', None)

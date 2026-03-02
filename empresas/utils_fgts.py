@@ -1,4 +1,7 @@
 from io import BytesIO
+from datetime import datetime
+import os
+from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
@@ -9,10 +12,26 @@ from .models_relatorio import RelatorioPremium
 from .models import EmailLog
 
 def gerar_pdf_fgts(memoria, email):
+    def _format_currency(value):
+        try:
+            return f"R$ {value:.2f}"
+        except Exception:
+            return f"R$ {value}"
+
+    def _format_date_br(value):
+        if value is None:
+            return ''
+        if isinstance(value, datetime):
+            return value.strftime('%d/%m/%Y')
+        try:
+            return datetime.strptime(str(value), '%Y-%m-%d').strftime('%d/%m/%Y')
+        except Exception:
+            return str(value)
+
     # Validação dos campos obrigatórios
     obrigatorios = [
         'competencia', 'data_pagamento', 'base_fgts', 'fgts_mes', 'indice',
-        'deposito_fgts', 'correcao', 'jam', 'total', 'meses_jam'
+        'deposito_fgts', 'correcao', 'jam'
     ]
     for campo in obrigatorios:
         if campo not in memoria:
@@ -22,41 +41,78 @@ def gerar_pdf_fgts(memoria, email):
     buffer = BytesIO()
     p = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
+    margin_x = 30
+    y = height - 40
+
+    # Cabeçalho
+    logo_path = getattr(settings, 'PDF_LOGO_PATH', None)
+    if logo_path and os.path.exists(logo_path):
+        p.drawImage(logo_path, margin_x, y - 20, width=110, height=30, preserveAspectRatio=True, mask='auto')
+
     p.setFont("Helvetica-Bold", 18)
-    p.drawString(30, height - 50, "Relatório FGTS Corrigido")
-    p.setFont("Helvetica", 12)
-    y = height - 90
-    p.drawString(30, y, f"E-mail: {email}")
-    y -= 30
-    p.drawString(30, y, f"Competência: {memoria['competencia']}")
-    y -= 20
-    p.drawString(30, y, f"Data de Pagamento: {memoria['data_pagamento']}")
-    y -= 20
-    p.drawString(30, y, f"Base FGTS: R$ {memoria['base_fgts']:.2f}")
-    y -= 20
-    p.drawString(30, y, f"FGTS do mês: R$ {memoria['fgts_mes']:.2f}")
-    y -= 20
-    p.drawString(30, y, f"Índice FGTS: {memoria['indice']}")
-    y -= 20
-    p.drawString(30, y, f"Depósito Corrigido: R$ {memoria['deposito_fgts']:.2f}")
-    y -= 20
-    p.drawString(30, y, f"Correção: R$ {memoria['correcao']:.2f}")
-    y -= 20
-    p.drawString(30, y, f"JAM: R$ {memoria['jam']:.2f}")
-    y -= 20
-    p.drawString(30, y, f"Total Corrigido: R$ {memoria['total']:.2f}")
-    y -= 40
-    p.setFont("Helvetica-Bold", 14)
-    p.drawString(30, y, "Detalhamento JAM mês a mês:")
-    y -= 20
+    p.drawString(margin_x, y - 45, "Relatório FGTS Corrigido")
+
     p.setFont("Helvetica", 10)
-    p.drawString(30, y, "Mês         Coef.     JAM Mês     Saldo")
-    for m in memoria.get('meses_jam', []):
-        y -= 15
-        if y < 60:
-            p.showPage()
-            y = height - 60
-        p.drawString(30, y, f"{m['mes']}   {m['coef'] or '-'}   R$ {m['jam_mes']:.2f}   R$ {m['saldo']:.2f}")
+    p.setFillColor(colors.grey)
+    data_geracao = _format_date_br(datetime.now())
+    relatorio_posicao = memoria.get('relatorio_posicao', 1)
+    relatorio_total = memoria.get('relatorio_total', memoria.get('total_paginas', 1))
+    p.drawRightString(width - margin_x, y - 30, f"Data de geração: {data_geracao}")
+    p.drawRightString(width - margin_x, y - 45, f"Relatório {relatorio_posicao} de {relatorio_total}")
+    p.setFillColor(colors.black)
+
+    # Separador
+    p.setStrokeColor(colors.lightgrey)
+    p.setLineWidth(1)
+    p.line(margin_x, y - 60, width - margin_x, y - 60)
+
+    # Bloco de informações principais
+    y = y - 85
+    p.setFont("Helvetica", 11)
+    p.drawString(margin_x, y, f"E-mail: {email}")
+    y -= 18
+    p.drawString(margin_x, y, f"Competência: {memoria['competencia']}")
+    y -= 18
+    p.drawString(margin_x, y, f"Data de Pagamento: {_format_date_br(memoria['data_pagamento'])}")
+
+    # Separador
+    y -= 14
+    p.setStrokeColor(colors.lightgrey)
+    p.line(margin_x, y, width - margin_x, y)
+
+    # Tabela de resultados
+    y -= 28
+    table_x = margin_x
+    table_width = width - (2 * margin_x)
+    col_label = table_width * 0.58
+    col_value = table_width * 0.42
+    row_h = 22
+
+    p.setFillColor(colors.HexColor('#F3F4F6'))
+    p.rect(table_x, y - row_h, table_width, row_h, fill=1, stroke=0)
+    p.setFillColor(colors.black)
+    p.setFont("Helvetica-Bold", 11)
+    p.drawString(table_x + 8, y - 16, "Item")
+    p.drawRightString(table_x + table_width - 8, y - 16, "Valor")
+
+    rows = [
+        ("Base FGTS", _format_currency(memoria['base_fgts'])),
+        ("FGTS do mês", _format_currency(memoria['fgts_mes'])),
+        ("Índice FGTS", str(memoria['indice'])),
+        ("Depósito Corrigido", _format_currency(memoria['deposito_fgts'])),
+        ("Correção", _format_currency(memoria['correcao'])),
+        ("JAM", _format_currency(memoria['jam'])),
+    ]
+
+    p.setFont("Helvetica", 11)
+    y -= row_h
+    for label, value in rows:
+        p.setStrokeColor(colors.lightgrey)
+        p.rect(table_x, y - row_h, table_width, row_h, fill=0, stroke=1)
+        p.drawString(table_x + 8, y - 16, label)
+        p.drawRightString(table_x + table_width - 8, y - 16, value)
+        y -= row_h
+
     p.showPage()
     p.save()
     buffer.seek(0)
