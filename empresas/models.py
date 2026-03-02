@@ -3,6 +3,7 @@ from uuid import uuid4
 from .models_feature import * 
 from .models_grupo import *
 from .models_relatorio import RelatorioPremium
+from .models_leads import LeadEmailFlow
 
 class EmailLog(models.Model):
 	email = models.EmailField()

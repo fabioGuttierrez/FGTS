@@ -10,6 +10,7 @@ from indices.services.indice_service import IndiceFGTSService
 from coefjam.models import CoefJam
 from .models_relatorio import RelatorioPremium
 from .utils_fgts import enviar_relatorio_fgts
+from .services_leads import register_credit_trigger
 
 def buscar_indice_fgts(competencia, data_pagamento):
     # Busca o índice mais próximo da data_pagamento para a competência
@@ -85,12 +86,15 @@ def calculadora_fgts_view(request):
             else:
                 relatorios_count = RelatorioPremium.objects.filter(email=email).count()
                 if relatorios_count < 3:
+                    is_third_credit = relatorios_count == 2
                     memoria_envio = {
                         **memoria,
                         'relatorio_posicao': relatorios_count + 1,
                         'relatorio_total': 3,
                     }
                     RelatorioPremium.objects.create(email=email, memoria=memoria_envio)
+                    if is_third_credit:
+                        register_credit_trigger(email)
                     sucesso, steps_email = enviar_relatorio_fgts(email, memoria_envio)
                     if sucesso:
                         # PRG: redireciona para GET limpo — evita re-submit no F5

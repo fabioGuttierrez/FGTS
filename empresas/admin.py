@@ -4,6 +4,7 @@ from .admin_grupo import *
 from .models import Empresa
 from .models_relatorio import RelatorioPremium
 from .models import EmailLog
+from .models_leads import LeadEmailFlow
 
 
 @admin.register(Empresa)
@@ -31,3 +32,10 @@ class EmailLogAdmin(admin.ModelAdmin):
 	list_display = ('email', 'status', 'data_envio', 'relatorio')
 	search_fields = ('email', 'mensagem')
 	list_filter = ('status', 'data_envio')
+
+
+@admin.register(LeadEmailFlow)
+class LeadEmailFlowAdmin(admin.ModelAdmin):
+	list_display = ('email', 'status', 'trigger_source', 'step', 'next_send_at', 'last_sent_at')
+	search_fields = ('email',)
+	list_filter = ('status', 'trigger_source')
