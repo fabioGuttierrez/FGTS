@@ -20,6 +20,11 @@ class GrupoEmpresa(models.Model):
         return self.nome
 
 class FuncionarioVinculo(models.Model):
+    STATUS_CHOICES = [
+        ("ativo", "Ativo"),
+        ("transferido", "Transferido"),
+        ("demitido", "Demitido"),
+    ]
     MOTIVO_SAIDA_CHOICES = [
         ("demissao", "Demissão"),
         ("transferencia", "Transferência para outra empresa do grupo"),
@@ -30,6 +35,7 @@ class FuncionarioVinculo(models.Model):
     matricula = models.CharField(max_length=30, blank=True, null=True, db_index=True, verbose_name='Matrícula')
     data_admissao = models.DateField()
     data_demissao = models.DateField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ativo', verbose_name='Status do vínculo')
     motivo_saida = models.CharField(max_length=20, choices=MOTIVO_SAIDA_CHOICES, blank=True, null=True)
     observacoes = models.TextField(blank=True, null=True)
     cargo = models.CharField(max_length=100, blank=True, null=True)
@@ -83,6 +89,16 @@ class FuncionarioVinculo(models.Model):
             admitido = competencia_mes_ano >= admissao_mes_ano
             nao_demitido = True
         return admitido and nao_demitido
+
+    def save(self, *args, **kwargs):
+        """Sincroniza o status do vínculo com data_demissao e motivo_saida"""
+        if self.motivo_saida == 'transferencia':
+            self.status = 'transferido'
+        elif self.data_demissao:
+            self.status = 'demitido'
+        else:
+            self.status = 'ativo'
+        super().save(*args, **kwargs)
 
     class Meta:
         constraints = [

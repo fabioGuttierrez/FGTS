@@ -10,25 +10,25 @@ from .models_leads import LeadEmailFlow
 EMAIL_STEPS = [
     {
         'step': 0,
-        'day_offset': 0,
+        'day_offset': 0,   # Imediato - no uso do 3º crédito
         'subject': 'Seu relatorio esta pronto',
         'template': 'empresas/email_lead_d0.html',
     },
     {
         'step': 1,
-        'day_offset': 2,
+        'day_offset': 1,   # 24h após o trigger
         'subject': 'Os 3 erros mais comuns no FGTS',
         'template': 'empresas/email_lead_d2.html',
     },
     {
         'step': 2,
-        'day_offset': 5,
+        'day_offset': 4,   # 96h (4 dias) após o trigger
         'subject': 'Menos retrabalho, mais controle',
         'template': 'empresas/email_lead_d5.html',
     },
     {
         'step': 3,
-        'day_offset': 7,
+        'day_offset': 6,   # 144h (6 dias) após o trigger
         'subject': 'Ultimo dia para validar sem custo',
         'template': 'empresas/email_lead_d7.html',
     },

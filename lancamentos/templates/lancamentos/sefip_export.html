@@ -54,4 +54,49 @@
         </div>
     </div>
 </div>
+
+<script>
+// Filtro em cascata: empresa → funcionário de / até
+(function () {
+  var JSON_URL = '{% url "funcionarios-json" %}';
+  var empresaEl = document.getElementById('id_empresa');
+  var funcDeEl  = document.getElementById('id_funcionario_de');
+  var funcAteEl = document.getElementById('id_funcionario_ate');
+  if (!empresaEl || !funcDeEl || !funcAteEl) return;
+
+  function popularSelect(selectEl, lista) {
+    var currentVal = selectEl.value;
+    selectEl.innerHTML = '<option value="">---------</option>';
+    lista.forEach(function (f) {
+      var opt = document.createElement('option');
+      opt.value = f.id;
+      opt.textContent = f.nome;
+      if (String(f.id) === String(currentVal)) opt.selected = true;
+      selectEl.appendChild(opt);
+    });
+  }
+
+  function popularFuncionarios(empresaId) {
+    if (!empresaId) {
+      funcDeEl.innerHTML  = '<option value="">---------</option>';
+      funcAteEl.innerHTML = '<option value="">---------</option>';
+      return;
+    }
+    fetch(JSON_URL + '?empresa_id=' + encodeURIComponent(empresaId))
+      .then(function (r) { return r.json(); })
+      .then(function (lista) {
+        popularSelect(funcDeEl,  lista);
+        popularSelect(funcAteEl, lista);
+      });
+  }
+
+  empresaEl.addEventListener('change', function () {
+    popularFuncionarios(this.value);
+  });
+
+  if (empresaEl.value) {
+    popularFuncionarios(empresaEl.value);
+  }
+})();
+</script>
 {% endblock %}

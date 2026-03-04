@@ -245,22 +245,34 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const empresaSelect = document.getElementById('id_empresa');
-        const funcionarioSelect = document.getElementById('id_funcionario');
-        const baseFgtsInput = document.getElementById('id_base_fgts');
-        const baseAnteriorDisplay = document.getElementById('base-anterior');
-        const pagoCheckbox = document.getElementById('id_pago');
-        const camposPagamento = document.getElementById('campos-pagamento');
+        var VINCULOS_JSON_URL = '{% url "vinculos-json" %}';
+        var empresaSelect      = document.getElementById('id_empresa');
+        var vinculoSelect      = document.getElementById('id_vinculo');
+        var baseAnteriorDisplay = document.getElementById('base-anterior');
+        var pagoCheckbox       = document.getElementById('id_pago');
+        var camposPagamento    = document.getElementById('campos-pagamento');
 
-        // Desabilitar funcionário se não houver empresa selecionada
-        function atualizarFuncionarios() {
-            if (!empresaSelect.value) {
-                funcionarioSelect.disabled = true;
-                funcionarioSelect.innerHTML = '<option value="">-- Selecione uma empresa primeiro --</option>';
-                baseAnteriorDisplay.textContent = 'R$ 0,00';
-            } else {
-                funcionarioSelect.disabled = false;
+        // Popular vínculos via AJAX quando empresa muda
+        function popularVinculos(empresaId, manter) {
+            if (!empresaId) {
+                vinculoSelect.disabled = true;
+                vinculoSelect.innerHTML = '<option value="">-- Selecione uma empresa primeiro --</option>';
+                if (baseAnteriorDisplay) baseAnteriorDisplay.textContent = 'R$ 0,00';
+                return;
             }
+            vinculoSelect.disabled = false;
+            fetch(VINCULOS_JSON_URL + '?empresa_id=' + encodeURIComponent(empresaId))
+                .then(function (r) { return r.json(); })
+                .then(function (lista) {
+                    vinculoSelect.innerHTML = '<option value="">---------</option>';
+                    lista.forEach(function (v) {
+                        var opt = document.createElement('option');
+                        opt.value = v.id;
+                        opt.textContent = v.nome;
+                        if (String(v.id) === String(manter)) opt.selected = true;
+                        vinculoSelect.appendChild(opt);
+                    });
+                });
         }
 
         // Mostrar/ocultar campos de pagamento
@@ -272,12 +284,18 @@
             }
         }
 
-        empresaSelect.addEventListener('change', atualizarFuncionarios);
+        empresaSelect.addEventListener('change', function () {
+            popularVinculos(this.value, '');
+        });
+
         if (pagoCheckbox) {
             pagoCheckbox.addEventListener('change', toggleCamposPagamento);
-            toggleCamposPagamento(); // Inicializar estado
+            toggleCamposPagamento();
         }
-        atualizarFuncionarios();
+
+        // Ao carregar (novo ou edição), popula vínculos respeitando seleção atual
+        var currentVinculo = vinculoSelect ? vinculoSelect.value : '';
+        popularVinculos(empresaSelect.value, currentVinculo);
     });
 </script>
 {% endblock %}

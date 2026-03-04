@@ -30,7 +30,7 @@
 
     <!-- Stats Cards -->
     <div class="row mb-4 g-3">
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card border-0 bg-light h-100">
                 <div class="card-body py-3 px-4">
                     <div class="d-flex align-items-center">
@@ -45,7 +45,22 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
+            <div class="card border-0 bg-light h-100">
+                <div class="card-body py-3 px-4">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-warning bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="bi bi-arrow-repeat text-warning fs-5"></i>
+                        </div>
+                        <div>
+                            <small class="text-muted">Funcionários Transferidos</small>
+                            <h5 class="mb-0 fw-bold">{{ transferidos_count|default:0 }}</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
             <div class="card border-0 bg-light h-100">
                 <div class="card-body py-3 px-4">
                     <div class="d-flex align-items-center">
@@ -60,7 +75,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card border-0 bg-light h-100">
                 <div class="card-body py-3 px-4">
                     <div class="d-flex align-items-center">
@@ -110,6 +125,7 @@
                                 <select name="status" class="form-select">
                                     <option value="">Todos</option>
                                     <option value="ativo" {% if filtro_status == 'ativo' %}selected{% endif %}>Ativos</option>
+                                    <option value="transferido" {% if filtro_status == 'transferido' %}selected{% endif %}>Transferidos</option>
                                     <option value="demitido" {% if filtro_status == 'demitido' %}selected{% endif %}>Demitidos</option>
                                 </select>
                             </div>

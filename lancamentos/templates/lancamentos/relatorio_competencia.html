@@ -360,6 +360,43 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
+
+// Filtro em cascata: empresa → funcionário
+(function () {
+  var JSON_URL = '{% url "funcionarios-json" %}';
+  var empresaEl = document.getElementById('id_empresa');
+  var funcEl    = document.getElementById('id_funcionario');
+  if (!empresaEl || !funcEl) return;
+
+  function popularFuncionarios(empresaId) {
+    var currentVal = funcEl.value;
+    if (!empresaId) {
+      funcEl.innerHTML = '<option value="">---------</option>';
+      return;
+    }
+    fetch(JSON_URL + '?empresa_id=' + encodeURIComponent(empresaId))
+      .then(function (r) { return r.json(); })
+      .then(function (lista) {
+        funcEl.innerHTML = '<option value="">---------</option>';
+        lista.forEach(function (f) {
+          var opt = document.createElement('option');
+          opt.value = f.id;
+          opt.textContent = f.nome;
+          if (String(f.id) === String(currentVal)) opt.selected = true;
+          funcEl.appendChild(opt);
+        });
+      });
+  }
+
+  empresaEl.addEventListener('change', function () {
+    popularFuncionarios(this.value);
+  });
+
+  // Ao carregar, se empresa já está selecionada (ex: na volta do POST), refiltra mantendo seleção
+  if (empresaEl.value) {
+    popularFuncionarios(empresaEl.value);
+  }
+})();
 </script>
 {% endblock %}
 

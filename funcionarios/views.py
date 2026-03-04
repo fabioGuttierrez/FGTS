@@ -109,14 +109,20 @@ class FuncionarioListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
 
         # Filtros de UI
         empresa_id = self.request.GET.get('empresa')
-        if empresa_id:
-            qs = qs.filter(vinculos__empresa_id=empresa_id)
-
         status = self.request.GET.get('status')
-        if status == 'ativo':
-            qs = qs.filter(vinculos__data_demissao__isnull=True)
-        elif status == 'demitido':
-            qs = qs.filter(vinculos__data_demissao__isnull=False)
+
+        # Se empresa e status estão definidos, filtrar por vínculo específico
+        if empresa_id and status:
+            qs = qs.filter(
+                vinculos__empresa_id=empresa_id,
+                vinculos__status=status
+            )
+        elif empresa_id:
+            # Se apenas empresa está definida, filtrar por qualquer vínculo com aquela empresa
+            qs = qs.filter(vinculos__empresa_id=empresa_id)
+        elif status:
+            # Se apenas status está definido, filtrar por status em qualquer vínculo
+            qs = qs.filter(vinculos__status=status)
 
         busca = self.request.GET.get('q')
         if busca:
@@ -147,17 +153,18 @@ class FuncionarioListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         context = super().get_context_data(**kwargs)
         queryset = self.get_queryset()
 
-        # Contagem baseada no vínculo mais recente (evita duplicar quem tem histórico antigo ativo)
+        # Contagem baseada no vínculo mais recente (status atual)
         latest_vinculo = FuncionarioVinculo.objects.filter(
             funcionario=OuterRef('pk')
         ).order_by('-data_admissao', '-id')
 
         annotated = queryset.annotate(
-            ultima_demissao=Subquery(latest_vinculo.values('data_demissao')[:1])
+            status_atual=Subquery(latest_vinculo.values('status')[:1])
         )
 
-        context['ativos_count'] = annotated.filter(ultima_demissao__isnull=True).count()
-        context['demitidos_count'] = annotated.filter(ultima_demissao__isnull=False).count()
+        context['ativos_count'] = annotated.filter(status_atual='ativo').count()
+        context['transferidos_count'] = annotated.filter(status_atual='transferido').count()
+        context['demitidos_count'] = annotated.filter(status_atual='demitido').count()
         context['total_count'] = annotated.count()
         context['form'] = FuncionarioForm()
         allowed_ids = get_allowed_empresa_ids(self.request.user)
@@ -497,5 +504,65 @@ class FuncionarioTransferenciaView(LoginRequiredMixin, EmpresaScopeMixin, View):
             return redirect('funcionario-detail', pk=funcionario.pk)
         messages.error(request, 'Foram encontradas inconsistencias nas informacoes enviadas. Revise as informacoes.')
         return render(request, self.template_name, {'form': form, 'funcionario': funcionario})
+
+
+def funcionarios_json(request):
+    """Endpoint leve para popular dropdowns de funcionário filtrados por empresa."""
+    if not request.user.is_authenticated:
+        return JsonResponse([], safe=False)
+
+    empresa_id = request.GET.get('empresa_id', '').strip()
+    if not empresa_id:
+        return JsonResponse([], safe=False)
+
+    try:
+        empresa_id = int(empresa_id)
+    except ValueError:
+        return JsonResponse([], safe=False)
+
+    # Garantir que o usuário tem acesso à empresa solicitada
+    allowed_ids = get_allowed_empresa_ids(request.user)
+    if allowed_ids is not None:
+        if not Empresa.objects.filter(id=empresa_id, codigo__in=allowed_ids).exists():
+            return JsonResponse([], safe=False)
+
+    data = list(
+        Funcionario.objects
+        .filter(vinculos__empresa_id=empresa_id)
+        .distinct()
+        .order_by('nome')
+        .values('id', 'nome')
+    )
+    return JsonResponse(data, safe=False)
+
+
+def vinculos_json(request):
+    """Endpoint leve para popular o select de vínculo no form de lançamento."""
+    if not request.user.is_authenticated:
+        return JsonResponse([], safe=False)
+
+    empresa_id = request.GET.get('empresa_id', '').strip()
+    if not empresa_id:
+        return JsonResponse([], safe=False)
+
+    try:
+        empresa_id = int(empresa_id)
+    except ValueError:
+        return JsonResponse([], safe=False)
+
+    allowed_ids = get_allowed_empresa_ids(request.user)
+    if allowed_ids is not None:
+        if not Empresa.objects.filter(id=empresa_id, codigo__in=allowed_ids).exists():
+            return JsonResponse([], safe=False)
+
+    vinculos = (
+        FuncionarioVinculo.objects
+        .filter(empresa_id=empresa_id)
+        .select_related('funcionario', 'empresa')
+        .order_by('funcionario__nome', 'data_admissao')
+    )
+    data = [{'id': v.pk, 'nome': str(v)} for v in vinculos]
+    return JsonResponse(data, safe=False)
+
 
 from datetime import datetime

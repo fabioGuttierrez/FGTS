@@ -1220,6 +1220,9 @@ class RelatorioCompetenciaView(FormView):
             competencias_param = [f"{c['competencia']}|{c.get('parcela_13') or ''}" for c in competencias_list]
             competencia_primeira = competencias_list[0]['competencia'] if competencias_list else ''
 
+            # Deduplica avisos (remove mensagens duplicadas)
+            avisos_unicos = list(dict.fromkeys(avisos_total))  # Preserva ordem mantendo apenas primeira ocorrência
+
             fim_timestamp = time.time()
             fim_str = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
             tempo_total = fim_timestamp - inicio_timestamp
@@ -1236,7 +1239,7 @@ class RelatorioCompetenciaView(FormView):
                 'resultados_agrupados': resultados_agrupados,
                 'agrupamento': agrupamento,
                 'totais': totais,
-                'avisos': avisos_total,  # Adicionar avisos ao contexto
+                'avisos': avisos_unicos,  # Usar avisos deduplificados
                 'kpi_inicio': inicio_str,
                 'kpi_fim': fim_str,
                 'kpi_tempo': f'{tempo_total:.2f} segundos',
@@ -1414,6 +1417,9 @@ def relatorio_por_ids(request):
     competencias_display = [_format_comp_display(k[1], k[2]) for k in grupos.keys()]
     competencias_param = [f"{k[1]}|{k[2] or ''}" for k in grupos.keys()]
 
+    # Deduplica avisos (remove mensagens duplicadas)
+    avisos_unicos = list(dict.fromkeys(avisos_total))  # Preserva ordem mantendo apenas primeira ocorrência
+
     contexto = {
         'empresa': empresa,
         'competencias': competencias_display,
@@ -1423,7 +1429,7 @@ def relatorio_por_ids(request):
         'resultados_agrupados': resultados_agrupados,
         'agrupamento': agrupamento,
         'totais': totais,
-        'avisos': avisos_total,
+        'avisos': avisos_unicos,  # Usar avisos deduplificados
         'from_selection': True,
         'ids_param': ','.join([str(i) for i in ids]),
         'debug_lancamentos': debug_lancamentos if debug_detalhado else None,
@@ -1750,7 +1756,7 @@ def export_relatorio_competencia_pdf(request):
     from io import BytesIO
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, PageBreak
     import urllib.parse
@@ -2043,7 +2049,7 @@ def export_relatorio_competencia_pdf(request):
 
             table = Table(
                 table_data,
-                colWidths=[18*mm, 10*mm, 27*mm, 23*mm, 22*mm, 18*mm, 22*mm, 30*mm],
+                colWidths=[18*mm, 16*mm, 27*mm, 23*mm, 22*mm, 18*mm, 22*mm, 30*mm],
                 hAlign='LEFT',
                 repeatRows=1,
             )
@@ -2262,9 +2268,19 @@ def export_relatorio_competencia_pdf(request):
             empresa_vinculo = vinculo.empresa.nome if vinculo else l.empresa.nome
             data_admissao = vinculo.data_admissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_admissao else ''
             data_demissao = vinculo.data_demissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_demissao else ''
+
+            # Envolver nome do funcionário em Paragraph para permitir quebra de linha
+            nome_style = ParagraphStyle(
+                'NomeFuncionario',
+                parent=getSampleStyleSheet()['Normal'],
+                fontSize=9,
+                leading=11,
+            )
+            nome_paragraph = Paragraph(funcionario.nome, nome_style)
+
             table_data.append([
                 comp_label,
-                funcionario.nome,
+                nome_paragraph,  # Usar Paragraph em vez de string simples
                 data_demissao,
                 f"{l.base_fgts}",
                 f"{c.get('valor_fgts', l.valor_fgts)}",
@@ -2274,11 +2290,10 @@ def export_relatorio_competencia_pdf(request):
             ])
 
         # Ajustar colWidths para caber em 170mm (A4 útil)
-        # Ajustar colWidths para 9 colunas (sem empresa)
-        # Ajustar colWidths para 8 colunas (sem admissão)
+        # Ajustar colWidths para 8 colunas: aumentada coluna Funcionário para permitir quebra de texto
         table = Table(
             table_data,
-            colWidths=[22*mm, 36*mm, 22*mm, 20*mm, 18*mm, 18*mm, 16*mm, 18*mm],
+            colWidths=[22*mm, 50*mm, 20*mm, 18*mm, 18*mm, 18*mm, 16*mm, 18*mm],
             hAlign='LEFT',
             repeatRows=1,
             splitByRow=1,
@@ -2291,6 +2306,7 @@ def export_relatorio_competencia_pdf(request):
                     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                     ('ALIGN', (5, 1), (-1, -1), 'RIGHT'),
                     ('ALIGN', (0, 0), (4, -1), 'LEFT'),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),  # Alinhar ao topo para permitir quebra de linhas
                     ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#cccccc')),
                     ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#fbfbfb')]),
                     ('FONTSIZE', (0, 0), (-1, -1), 9),

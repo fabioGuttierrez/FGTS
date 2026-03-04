@@ -528,6 +528,71 @@
             });
         });
     </script>
+    <script>
+    (function () {
+        // Chaves de filtro reconhecidas em todo o projeto
+        var FILTER_KEYS = [
+            'q', 'empresa', 'status', 'ordenar',
+            'competencia', 'funcionario', 'ano', 'status_pagto',
+            'ordem', 'matricula', 'action', 'user', 'date_from', 'date_to'
+        ];
+
+        var path       = window.location.pathname;
+        var storeKey   = 'pf:' + path;   // filtros salvos
+        var clearedKey = 'pfc:' + path;  // flag de limpeza intencional
+
+        var params = new URLSearchParams(window.location.search);
+
+        // Separa as chaves de filtro que aparecem na URL
+        var presentKeys   = FILTER_KEYS.filter(function (k) { return params.has(k); });
+        var activeFilters = {};
+        presentKeys.forEach(function (k) {
+            var v = params.get(k);
+            if (v !== '') activeFilters[k] = v;
+        });
+
+        if (presentKeys.length > 0) {
+            // Formulário foi submetido (com ou sem valores)
+            sessionStorage.removeItem(clearedKey);
+            if (Object.keys(activeFilters).length > 0) {
+                sessionStorage.setItem(storeKey, JSON.stringify(activeFilters));
+            } else {
+                // Todos os campos enviados vazios = limpeza via submit
+                sessionStorage.removeItem(storeKey);
+            }
+        } else if (!params.has('page')) {
+            // URL sem filtros e sem paginação: verifica se deve restaurar
+            if (sessionStorage.getItem(clearedKey)) {
+                // Limpeza intencional recente — não restaura
+                sessionStorage.removeItem(clearedKey);
+            } else {
+                var saved = sessionStorage.getItem(storeKey);
+                if (saved) {
+                    try {
+                        var filters = JSON.parse(saved);
+                        var qs = new URLSearchParams(filters).toString();
+                        if (qs) {
+                            window.location.replace(path + '?' + qs);
+                            return;
+                        }
+                    } catch (e) {
+                        sessionStorage.removeItem(storeKey);
+                    }
+                }
+            }
+        }
+
+        // Intercepta cliques no botão "Limpar" (links que apontam para "?")
+        document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('a[href="?"]').forEach(function (link) {
+                link.addEventListener('click', function () {
+                    sessionStorage.setItem(clearedKey, '1');
+                    sessionStorage.removeItem(storeKey);
+                });
+            });
+        });
+    })();
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

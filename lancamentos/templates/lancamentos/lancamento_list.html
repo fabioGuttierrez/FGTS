@@ -479,7 +479,10 @@
         const gerarRelatorioBtn = document.getElementById('gerarRelatorioBtn');
         const selectedCountBadge = document.getElementById('selectedCount');
         const selectedIdsKey = 'lancamentosSelecionados';
-        const currentQuery = window.location.search || '';
+        // Remove 'page' da query para que a seleção persista entre páginas
+        const _qp = new URLSearchParams(window.location.search);
+        _qp.delete('page');
+        const currentQuery = _qp.toString();
         const storedSelection = JSON.parse(sessionStorage.getItem(selectedIdsKey) || '{}');
         let selectedIds = new Set(storedSelection.query === currentQuery ? storedSelection.ids || [] : []);
         const relatorioBloqueado = gerarRelatorioBtn ? gerarRelatorioBtn.dataset.bloqueado === '1' : false;
@@ -651,5 +654,43 @@
             });
         }
     });
+
+    // Filtro em cascata: empresa → funcionário
+    (function () {
+        var JSON_URL = '{% url "funcionarios-json" %}';
+        var empresaEl = document.getElementById('empresa');
+        var funcEl    = document.getElementById('funcionario');
+        if (!empresaEl || !funcEl) return;
+
+        var initialFuncId = '{{ funcionario_filtro|default:"" }}';
+
+        function popularFuncionarios(empresaId, manter) {
+            if (!empresaId) {
+                funcEl.innerHTML = '<option value="">-- Todos --</option>';
+                return;
+            }
+            fetch(JSON_URL + '?empresa_id=' + encodeURIComponent(empresaId))
+                .then(function (r) { return r.json(); })
+                .then(function (lista) {
+                    funcEl.innerHTML = '<option value="">-- Todos --</option>';
+                    lista.forEach(function (f) {
+                        var opt = document.createElement('option');
+                        opt.value = f.id;
+                        opt.textContent = f.nome;
+                        if (String(f.id) === String(manter)) opt.selected = true;
+                        funcEl.appendChild(opt);
+                    });
+                });
+        }
+
+        empresaEl.addEventListener('change', function () {
+            popularFuncionarios(this.value, '');
+        });
+
+        // Ao carregar página com empresa já selecionada (via URL), refiltra e restaura seleção
+        if (empresaEl.value) {
+            popularFuncionarios(empresaEl.value, initialFuncId);
+        }
+    })();
 </script>
 {% endblock %}

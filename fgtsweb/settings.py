@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'audit_logs',
     'monitoring',
     'emails',
+    'django_apscheduler',
 ]
 
 MIDDLEWARE = [

@@ -60,3 +60,5 @@ websockets==15.0.1
 yarl==1.22.0
 gunicorn==21.2.0
 whitenoise==6.6.0
+apscheduler==3.10.4
+django-apscheduler==0.6.2
