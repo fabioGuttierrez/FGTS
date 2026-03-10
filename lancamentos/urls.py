@@ -3,7 +3,8 @@ from .views import (
     LancamentoListView, LancamentoCreateView, LancamentoUpdateView, LancamentoDeleteView,
     LancamentoImportView, LancamentoDownloadTemplateView, GerarLancamentosAutomaticosView,
     GerarLancamentosAutomaticosVinculoView, relatorio_por_ids, lancamento_ids,
-    RelatorioCompetenciaView, export_relatorio_competencia_csv, export_relatorio_competencia_pdf, download_memoria_calculo
+    RelatorioCompetenciaView, export_relatorio_competencia_csv, export_relatorio_competencia_pdf, download_memoria_calculo,
+    RelatorioRecolhimentoFuncionarioView, export_recolhimento_funcionario_pdf,
 )
 from .bulk_delete import LancamentoBulkDeleteView
 
@@ -22,5 +23,7 @@ urlpatterns = [
     path('relatorio/export/csv', export_relatorio_competencia_csv, name='relatorio-competencia-export-csv'),
     path('relatorio/export/pdf', export_relatorio_competencia_pdf, name='relatorio-competencia-export-pdf'),
     path('relatorio/memoria-calculo', download_memoria_calculo, name='relatorio-memoria-calculo'),
+    path('relatorio/recolhimento-funcionario/', RelatorioRecolhimentoFuncionarioView.as_view(), name='recolhimento-funcionario'),
+    path('relatorio/recolhimento-funcionario/pdf', export_recolhimento_funcionario_pdf, name='recolhimento-funcionario-pdf'),
     path('bulk-delete/', LancamentoBulkDeleteView.as_view(), name='lancamento-bulk-delete'),
 ]

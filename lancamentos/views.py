@@ -20,6 +20,7 @@ from .forms import (
     RejeicaoLancamentoForm,
     FiltroConferenciaForm,
     SefipImportForm,
+    RelatorioRecolhimentoFuncionarioForm,
 )
 from .services.calculo import (
     calcular_fgts_atualizado,
@@ -3171,4 +3172,381 @@ class SefipImportResultView(LoginRequiredMixin, View):
             'ultimo_resultado': resultado,
         }
         return render(request, self.template_name, context)
-# Create your views here.
+
+
+# ---------------------------------------------------------------------------
+# Helpers para o relatório de recolhimento por funcionário
+# ---------------------------------------------------------------------------
+
+def _gerar_competencias_no_periodo(inicio_str, fim_str):
+    """Gera lista de strings 'MM/YYYY' do período [inicio, fim] inclusive."""
+    from dateutil.relativedelta import relativedelta as rd
+    fmt = '%m/%Y'
+    dt = datetime.strptime(inicio_str, fmt).replace(day=1)
+    dt_fim = datetime.strptime(fim_str, fmt).replace(day=1)
+    competencias = []
+    while dt <= dt_fim:
+        competencias.append(dt.strftime('%m/%Y'))
+        dt += rd(months=1)
+    return competencias
+
+
+def _calcular_dados_recolhimento(lancamentos_qs):
+    """
+    Dado um queryset de Lancamento, retorna dict com:
+    - valor_a_recolher: soma de valor_fgts dos não pagos
+    - total_recolhido:  soma de valor_pago dos pagos (ou valor_fgts se valor_pago nulo)
+    """
+    valor_a_recolher = Decimal('0')
+    total_recolhido = Decimal('0')
+    for lanc in lancamentos_qs:
+        if lanc.pago:
+            total_recolhido += (lanc.valor_pago or lanc.valor_fgts or Decimal('0'))
+        else:
+            valor_a_recolher += (lanc.valor_fgts or Decimal('0'))
+    return {
+        'valor_a_recolher': valor_a_recolher,
+        'total_recolhido': total_recolhido,
+        'total_geral': valor_a_recolher + total_recolhido,
+    }
+
+
+class RelatorioRecolhimentoFuncionarioView(LoginRequiredMixin, FormView):
+    """Relatório: Listagem do Recolhimento por Funcionário"""
+    template_name = 'lancamentos/relatorio_recolhimento_funcionario.html'
+    form_class = RelatorioRecolhimentoFuncionarioForm
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
+
+    def form_valid(self, form):
+        empresa = form.cleaned_data.get('empresa')
+        funcionario_filtro = form.cleaned_data.get('funcionario')
+        comp_inicio = form.cleaned_data['competencia_inicio']
+        comp_fim = form.cleaned_data['competencia_fim']
+
+        competencias_periodo = _gerar_competencias_no_periodo(comp_inicio, comp_fim)
+
+        # Monta queryset base
+        qs = Lancamento.objects.filter(competencia__in=competencias_periodo).select_related(
+            'empresa', 'funcionario', 'vinculo'
+        )
+        allowed_ids = get_allowed_empresa_ids(self.request.user)
+        if allowed_ids is not None:
+            qs = qs.filter(empresa__codigo__in=allowed_ids)
+        if empresa:
+            qs = qs.filter(empresa=empresa)
+        if funcionario_filtro:
+            qs = qs.filter(funcionario=funcionario_filtro)
+
+        # Agrupa por empresa → funcionário
+        from collections import defaultdict
+        empresas_dict = defaultdict(lambda: {'empresa': None, 'funcionarios': defaultdict(list)})
+
+        for lanc in qs:
+            emp_id = lanc.empresa_id
+            empresas_dict[emp_id]['empresa'] = lanc.empresa
+            empresas_dict[emp_id]['funcionarios'][lanc.funcionario_id].append(lanc)
+
+        # Monta estrutura final
+        empresas_resultado = []
+        total_geral_recolher = Decimal('0')
+        total_geral_recolhido = Decimal('0')
+
+        for emp_id, emp_data in sorted(empresas_dict.items()):
+            emp_obj = emp_data['empresa']
+            funcionarios_lista = []
+            emp_recolher = Decimal('0')
+            emp_recolhido = Decimal('0')
+
+            for func_id, lancamentos in sorted(
+                emp_data['funcionarios'].items(),
+                key=lambda x: x[1][0].funcionario.nome if x[1] else ''
+            ):
+                func_obj = lancamentos[0].funcionario
+                dados = _calcular_dados_recolhimento(lancamentos)
+
+                # Dados de admissão/demissão via vínculo
+                vinculo = getattr(lancamentos[0], 'vinculo', None) or func_obj.vinculo_atual()
+                data_admissao = vinculo.data_admissao if vinculo else getattr(func_obj, 'data_admissao', None)
+                data_demissao = vinculo.data_demissao if vinculo else getattr(func_obj, 'data_demissao', None)
+
+                funcionarios_lista.append({
+                    'funcionario': func_obj,
+                    'data_admissao': data_admissao,
+                    'data_demissao': data_demissao,
+                    'pis': func_obj.pis,
+                    'valor_a_recolher': dados['valor_a_recolher'],
+                    'total_recolhido': dados['total_recolhido'],
+                    'total_geral': dados['total_geral'],
+                })
+                emp_recolher += dados['valor_a_recolher']
+                emp_recolhido += dados['total_recolhido']
+
+            empresas_resultado.append({
+                'empresa': emp_obj,
+                'funcionarios': funcionarios_lista,
+                'total_a_recolher': emp_recolher,
+                'total_recolhido': emp_recolhido,
+                'total_geral': emp_recolher + emp_recolhido,
+            })
+            total_geral_recolher += emp_recolher
+            total_geral_recolhido += emp_recolhido
+
+        return render(self.request, self.template_name, {
+            'form': form,
+            'empresas_resultado': empresas_resultado,
+            'comp_inicio': comp_inicio,
+            'comp_fim': comp_fim,
+            'total_geral_recolher': total_geral_recolher,
+            'total_geral_recolhido': total_geral_recolhido,
+            'total_geral': total_geral_recolher + total_geral_recolhido,
+            'gerou_relatorio': True,
+        })
+
+    def form_invalid(self, form):
+        return render(self.request, self.template_name, {'form': form})
+
+    def get(self, request, *args, **kwargs):
+        form = self.get_form()
+        return render(request, self.template_name, {'form': form})
+
+
+def export_recolhimento_funcionario_pdf(request):
+    """Exporta o relatório de Recolhimento por Funcionário em PDF usando ReportLab."""
+    if not request.user.is_authenticated:
+        return redirect('login')
+
+    from io import BytesIO
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (
+        Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, PageBreak
+    )
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+
+    form = RelatorioRecolhimentoFuncionarioForm(data=request.GET, user=request.user)
+    if not form.is_valid():
+        messages.error(request, 'Parâmetros inválidos para exportação.')
+        return redirect('relatorio-recolhimento-funcionario')
+
+    empresa_filtro = form.cleaned_data.get('empresa')
+    funcionario_filtro = form.cleaned_data.get('funcionario')
+    comp_inicio = form.cleaned_data['competencia_inicio']
+    comp_fim = form.cleaned_data['competencia_fim']
+
+    competencias_periodo = _gerar_competencias_no_periodo(comp_inicio, comp_fim)
+
+    qs = Lancamento.objects.filter(competencia__in=competencias_periodo).select_related(
+        'empresa', 'funcionario', 'vinculo'
+    )
+    allowed_ids = get_allowed_empresa_ids(request.user)
+    if allowed_ids is not None:
+        qs = qs.filter(empresa__codigo__in=allowed_ids)
+    if empresa_filtro:
+        qs = qs.filter(empresa=empresa_filtro)
+    if funcionario_filtro:
+        qs = qs.filter(funcionario=funcionario_filtro)
+
+    from collections import defaultdict
+    empresas_dict = defaultdict(lambda: {'empresa': None, 'funcionarios': defaultdict(list)})
+    for lanc in qs:
+        empresas_dict[lanc.empresa_id]['empresa'] = lanc.empresa
+        empresas_dict[lanc.empresa_id]['funcionarios'][lanc.funcionario_id].append(lanc)
+
+    # Estilos
+    styles = getSampleStyleSheet()
+    titulo_style = ParagraphStyle('titulo', parent=styles['Normal'],
+        fontSize=10, fontName='Helvetica-Bold', alignment=TA_CENTER, spaceAfter=2,
+        textColor=colors.white)
+    sub_style = ParagraphStyle('sub', parent=styles['Normal'],
+        fontSize=7.5, fontName='Helvetica', alignment=TA_CENTER, spaceAfter=1,
+        textColor=colors.white)
+    empresa_style = ParagraphStyle('empresa', parent=styles['Normal'],
+        fontSize=8.5, fontName='Helvetica-Bold', spaceAfter=2)
+    normal_style = ParagraphStyle('normal_s', parent=styles['Normal'],
+        fontSize=7.5, fontName='Helvetica')
+    normal_white_style = ParagraphStyle('normal_white', parent=styles['Normal'],
+        fontSize=7.5, fontName='Helvetica-Bold', textColor=colors.white)
+    header_style = ParagraphStyle('header_s', parent=styles['Normal'],
+        fontSize=7.5, fontName='Helvetica-Bold', textColor=colors.white)
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=landscape(A4),
+        leftMargin=12*mm, rightMargin=12*mm,
+        topMargin=12*mm, bottomMargin=12*mm
+    )
+
+    story = []
+    agora = datetime.now().strftime('%d/%m/%Y - %H:%M')
+    cor_header = colors.HexColor('#003A78')
+    cor_linha_par = colors.HexColor('#EBF3FB')
+    col_widths = [25*mm, 75*mm, 25*mm, 25*mm, 35*mm, 35*mm, 35*mm, 35*mm]
+
+    total_geral_recolher = Decimal('0')
+    total_geral_recolhido = Decimal('0')
+    primeira_empresa = True
+
+    for emp_id, emp_data in sorted(empresas_dict.items()):
+        emp_obj = emp_data['empresa']
+        if not primeira_empresa:
+            story.append(PageBreak())
+        primeira_empresa = False
+
+        # Cabeçalho do relatório
+        cab_data = [
+            [
+                Paragraph('LISTAGEM DO RECOLHIMENTO POR FUNCIONÁRIO', titulo_style),
+                Paragraph(f'Período: {comp_inicio} Até {comp_fim}', sub_style),
+                Paragraph(f'Data/Hora: {agora}', sub_style),
+            ]
+        ]
+        cab_table = Table(cab_data, colWidths=[110*mm, 80*mm, 67*mm])
+        cab_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), cor_header),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+            ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+            ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        story.append(cab_table)
+        story.append(Spacer(1, 3*mm))
+
+        # Identificação da empresa
+        cnpj = emp_obj.cnpj or ''
+        story.append(Paragraph(f'{emp_obj.nome}  —  CNPJ: {cnpj}', empresa_style))
+        story.append(Spacer(1, 2*mm))
+
+        # Cabeçalho da tabela de dados
+        header_row = [
+            Paragraph('Cod.', header_style),
+            Paragraph('Nome do Funcionário', header_style),
+            Paragraph('Admissão', header_style),
+            Paragraph('Demissão', header_style),
+            Paragraph('P I S', header_style),
+            Paragraph('Valor a Recolher', header_style),
+            Paragraph('Total Recolhido', header_style),
+            Paragraph('Total Geral', header_style),
+        ]
+
+        table_data = [header_row]
+        emp_recolher = Decimal('0')
+        emp_recolhido = Decimal('0')
+        row_idx = 0
+
+        for func_id, lancamentos in sorted(
+            emp_data['funcionarios'].items(),
+            key=lambda x: x[1][0].funcionario.nome if x[1] else ''
+        ):
+            func_obj = lancamentos[0].funcionario
+            dados = _calcular_dados_recolhimento(lancamentos)
+            vinculo = getattr(lancamentos[0], 'vinculo', None) or func_obj.vinculo_atual()
+            data_adm = vinculo.data_admissao if vinculo else getattr(func_obj, 'data_admissao', None)
+            data_dem = vinculo.data_demissao if vinculo else getattr(func_obj, 'data_demissao', None)
+
+            emp_recolher += dados['valor_a_recolher']
+            emp_recolhido += dados['total_recolhido']
+
+            def fmt_date(d):
+                return d.strftime('%d/%m/%Y') if d else '—'
+
+            def fmt_val(v):
+                return f'R$ {v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+            table_data.append([
+                Paragraph(str(func_obj.pk), normal_style),
+                Paragraph(func_obj.nome, normal_style),
+                Paragraph(fmt_date(data_adm), normal_style),
+                Paragraph(fmt_date(data_dem), normal_style),
+                Paragraph(func_obj.pis or '—', normal_style),
+                Paragraph(fmt_val(dados['valor_a_recolher']), normal_style),
+                Paragraph(fmt_val(dados['total_recolhido']), normal_style),
+                Paragraph(fmt_val(dados['total_geral']), normal_style),
+            ])
+            row_idx += 1
+
+        # Linha de total da empresa
+        def fmt_val(v):
+            return f'R$ {v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+        total_emp = emp_recolher + emp_recolhido
+        table_data.append([
+            Paragraph('', normal_style),
+            Paragraph('<b>EMPRESA: Totais:</b>', normal_style),
+            Paragraph('', normal_style),
+            Paragraph('', normal_style),
+            Paragraph('', normal_style),
+            Paragraph(f'<b>{fmt_val(emp_recolher)}</b>', normal_style),
+            Paragraph(f'<b>{fmt_val(emp_recolhido)}</b>', normal_style),
+            Paragraph(f'<b>{fmt_val(total_emp)}</b>', normal_style),
+        ])
+        total_geral_recolher += emp_recolher
+        total_geral_recolhido += emp_recolhido
+
+        tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
+        ts = [
+            ('BACKGROUND', (0, 0), (-1, 0), cor_header),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 7.5),
+            ('ALIGN', (5, 0), (7, -1), 'RIGHT'),
+            ('ALIGN', (0, 0), (4, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, cor_linha_par]),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#D0DFF0')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#B0C4D8')),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ]
+        tbl.setStyle(TableStyle(ts))
+        story.append(tbl)
+
+    # Total geral (todas as empresas)
+    if len(empresas_dict) > 1:
+        story.append(Spacer(1, 5*mm))
+        total_rel = total_geral_recolher + total_geral_recolhido
+        def fmt_val(v):
+            return f'R$ {v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+        total_data = [[
+            Paragraph('TOTAL GERAL DO RELATÓRIO:', normal_white_style),
+            Paragraph(fmt_val(total_geral_recolher), normal_white_style),
+            Paragraph(fmt_val(total_geral_recolhido), normal_white_style),
+            Paragraph(fmt_val(total_rel), normal_white_style),
+        ]]
+        total_tbl = Table(total_data, colWidths=[165*mm, 35*mm, 35*mm, 35*mm])
+        total_tbl.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#003A78')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        story.append(total_tbl)
+
+    doc.build(story)
+    pdf = buffer.getvalue()
+    buffer.close()
+
+    resp = HttpResponse(content_type='application/pdf')
+    resp['Content-Disposition'] = (
+        f'attachment; filename="recolhimento_funcionario_{comp_inicio.replace("/","_")}_a_{comp_fim.replace("/","_")}.pdf"'
+    )
+    resp.write(pdf)
+    return resp

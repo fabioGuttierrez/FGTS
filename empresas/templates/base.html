@@ -369,6 +369,9 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'relatorio-competencia' %}"><i class="bi bi-bar-chart"></i> Relatório</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'recolhimento-funcionario' %}"><i class="bi bi-person-lines-fill"></i> Recolhimento</a>
+                    </li>
                     {# Menu SEFIP: visível apenas se admin liberar no painel #}
                     {% if is_admin_empresa and request.user.empresa.features.gerar_sefip %}
                     <li class="nav-item">
@@ -591,6 +594,66 @@
                 });
             });
         });
+    })();
+    </script>
+    <script>
+    /* Auto-formatador de campos de competência (MM/YYYY) */
+    (function() {
+      function formatarCompetencia(input) {
+        var pos = input.selectionStart;
+        var anterior = input.value;
+        // Extrai apenas dígitos
+        var digits = anterior.replace(/\D/g, '');
+        // Limita a 6 dígitos (MMYYYY)
+        digits = digits.substring(0, 6);
+        // Monta o valor formatado
+        var formatted = '';
+        if (digits.length <= 2) {
+          formatted = digits;
+        } else {
+          formatted = digits.substring(0, 2) + '/' + digits.substring(2);
+        }
+        if (input.value !== formatted) {
+          input.value = formatted;
+          // Reposiciona cursor: se inseriu a barra, avança 1 posição
+          var novaPosicao = pos;
+          if (formatted.length > anterior.length && formatted.charAt(pos - 1) === '/') {
+            novaPosicao = pos + 1;
+          } else if (anterior.length > formatted.length) {
+            novaPosicao = Math.min(pos, formatted.length);
+          }
+          try { input.setSelectionRange(novaPosicao, novaPosicao); } catch(e) {}
+        }
+      }
+
+      function formatarMultiplasCompetencias(textarea) {
+        var linhas = textarea.value.split('\n');
+        var resultado = [];
+        for (var i = 0; i < linhas.length; i++) {
+          var digits = linhas[i].replace(/\D/g, '').substring(0, 6);
+          if (digits.length <= 2) {
+            resultado.push(digits);
+          } else {
+            resultado.push(digits.substring(0, 2) + '/' + digits.substring(2));
+          }
+        }
+        var formatado = resultado.join('\n');
+        if (textarea.value !== formatado) {
+          textarea.value = formatado;
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.competencia-input').forEach(function(field) {
+          // Define maxlength para garantir limite
+          if (!field.getAttribute('maxlength')) field.setAttribute('maxlength', '7');
+          field.addEventListener('input', function() { formatarCompetencia(this); });
+          field.addEventListener('blur',  function() { formatarCompetencia(this); });
+        });
+        document.querySelectorAll('.competencias-input').forEach(function(textarea) {
+          textarea.addEventListener('blur', function() { formatarMultiplasCompetencias(this); });
+        });
+      });
     })();
     </script>
     {% block extra_js %}{% endblock %}

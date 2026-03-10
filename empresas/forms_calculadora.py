@@ -19,8 +19,9 @@ class FGTSCalculadoraForm(forms.Form):
         max_length=7,
         help_text="MM/AAAA",
         widget=forms.TextInput(attrs={
-            'class': 'form-control form-control-lg',
-            'placeholder': 'MM/AAAA'
+            'class': 'form-control form-control-lg competencia-input',
+            'placeholder': 'MM/AAAA',
+            'data-auto-format': 'competencia'
         })
     )
     data_pagamento = forms.DateField(

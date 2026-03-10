@@ -3,10 +3,12 @@ from dateutil.relativedelta import relativedelta
 
 from django import forms
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from empresas.models import Empresa
 from empresas.models_grupo import FuncionarioVinculo
 from funcionarios.models import Funcionario
 from fgtsweb.mixins import get_allowed_empresa_ids
+from indices.services.indice_service import IndiceFGTSService
 from .models import Lancamento
 
 
@@ -22,7 +24,8 @@ class LancamentoForm(forms.ModelForm):
             'competencia': forms.TextInput(attrs={
                 'placeholder': 'MM/YYYY (ex: 01/2025)',
                 'autocomplete': 'off',
-                'class': 'form-control'
+                'class': 'form-control competencia-input',
+                'data-auto-format': 'competencia'
             }),
             'parcela_13': forms.Select(attrs={'autocomplete': 'off', 'class': 'form-select'}),
             'base_fgts': forms.NumberInput(attrs={
@@ -89,6 +92,13 @@ class LancamentoForm(forms.ModelForm):
         else:
             self.fields['vinculo'].queryset = FuncionarioVinculo.objects.select_related('funcionario', 'empresa').all().order_by('empresa__nome', 'funcionario__nome', 'data_admissao')
 
+        # Aplicar restrições de data de pagamento (min = hoje, max = última data disponível)
+        hoje = timezone.now().date()
+        data_maxima = IndiceFGTSService.obter_ultima_data_base()
+        self.fields['data_pagto'].widget.attrs['min'] = hoje.strftime('%Y-%m-%d')
+        if data_maxima:
+            self.fields['data_pagto'].widget.attrs['max'] = data_maxima.strftime('%Y-%m-%d')
+
     def clean(self):
         cleaned_data = super().clean()
 
@@ -140,7 +150,18 @@ class LancamentoForm(forms.ModelForm):
         self.instance.empresa = vinculo.empresa
         self.instance.funcionario = vinculo.funcionario
         return cleaned_data
-    
+
+    def clean_data_pagto(self):
+        data_pagto = self.cleaned_data.get('data_pagto')
+        if data_pagto:
+            hoje = timezone.now().date()
+            if data_pagto < hoje:
+                raise ValidationError('A data de pagamento não pode ser anterior a hoje.')
+            data_maxima = IndiceFGTSService.obter_ultima_data_base()
+            if data_maxima and data_pagto > data_maxima:
+                raise ValidationError(f'Data máxima disponível: {data_maxima.strftime("%d/%m/%Y")}. Para datas posteriores, atualize os índices ou contrate o plano pago.')
+        return data_pagto
+
     def save(self, commit=True):
         """Sobrescrever save para calcular valor_fgts automaticamente"""
         lancamento = super().save(commit=False)
@@ -173,16 +194,16 @@ class RelatorioCompetenciaForm(forms.Form):
         widget=forms.TextInput(attrs={'class': 'form-control', 'autocomplete': 'off', 'placeholder': 'Ex: 10293'})
     )
     competencia = forms.CharField(
-        label='Competência Única', 
-        required=False, 
+        label='Competência Única',
+        required=False,
         help_text='MM/YYYY - Deixe vazio para calcular TODAS as competências em aberto',
-        widget=forms.TextInput(attrs={'class': 'form-control', 'autocomplete': 'off', 'placeholder': 'Vazio = todas em aberto'})
+        widget=forms.TextInput(attrs={'class': 'form-control competencia-input', 'autocomplete': 'off', 'placeholder': 'Vazio = todas em aberto', 'data-auto-format': 'competencia'})
     )
     competencias = forms.CharField(
-        label='Múltiplas competências (uma por linha)', 
-        required=False, 
-        help_text='Uma por linha no formato MM/YYYY. Ignora se competência única estiver preenchida', 
-        widget=forms.Textarea(attrs={'class': 'form-control font-monospace', 'rows': 3, 'autocomplete': 'off', 'placeholder': '01/2024\n02/2024\n03/2024'})
+        label='Múltiplas competências (uma por linha)',
+        required=False,
+        help_text='Uma por linha no formato MM/YYYY. Ignora se competência única estiver preenchida',
+        widget=forms.Textarea(attrs={'class': 'form-control font-monospace competencias-input', 'rows': 3, 'autocomplete': 'off', 'placeholder': '01/2024\n02/2024\n03/2024', 'data-auto-format': 'competencias'})
     )
     agrupamento = forms.ChoiceField(
         label='Agrupar por',
@@ -207,7 +228,7 @@ class RelatorioCompetenciaForm(forms.Form):
             allowed_ids = get_allowed_empresa_ids(user)
             if allowed_ids is not None:
                 self.fields['empresa'].queryset = Empresa.objects.filter(codigo__in=allowed_ids)
-        
+
         # Se o formulário tem dados (POST), filtra funcionários pela empresa selecionada
         if 'data' in kwargs and kwargs['data'].get('empresa'):
             try:
@@ -219,6 +240,24 @@ class RelatorioCompetenciaForm(forms.Form):
             # Se não tem empresa selecionada, mostra todos das empresas permitidas
             self.fields['funcionario'].queryset = Funcionario.objects.filter(vinculos__empresa__codigo__in=allowed_ids).distinct()
 
+        # Aplicar restrições de data de pagamento (min = hoje, max = última data disponível)
+        hoje = timezone.now().date()
+        data_maxima = IndiceFGTSService.obter_ultima_data_base()
+        self.fields['data_pagamento'].widget.attrs['min'] = hoje.strftime('%Y-%m-%d')
+        if data_maxima:
+            self.fields['data_pagamento'].widget.attrs['max'] = data_maxima.strftime('%Y-%m-%d')
+
+    def clean_data_pagamento(self):
+        data_pagamento = self.cleaned_data.get('data_pagamento')
+        if data_pagamento:
+            hoje = timezone.now().date()
+            if data_pagamento < hoje:
+                raise ValidationError('A data de pagamento não pode ser anterior a hoje.')
+            data_maxima = IndiceFGTSService.obter_ultima_data_base()
+            if data_maxima and data_pagamento > data_maxima:
+                raise ValidationError(f'Data máxima disponível: {data_maxima.strftime("%d/%m/%Y")}. Para datas posteriores, atualize os índices ou contrate o plano pago.')
+        return data_pagamento
+
 
 class SefipExportForm(forms.Form):
     empresa = forms.ModelChoiceField(
@@ -229,7 +268,7 @@ class SefipExportForm(forms.Form):
     competencia = forms.CharField(
         label='Competencia unica',
         help_text='Formato MM/YYYY ou 13/YYYY.',
-        widget=forms.TextInput(attrs={'class': 'form-control', 'autocomplete': 'off', 'placeholder': 'MM/YYYY'})
+        widget=forms.TextInput(attrs={'class': 'form-control competencia-input', 'autocomplete': 'off', 'placeholder': 'MM/YYYY', 'data-auto-format': 'competencia'})
     )
     funcionario_de = forms.ModelChoiceField(
         queryset=Funcionario.objects.none(),
@@ -492,8 +531,9 @@ class FiltroConferenciaForm(forms.Form):
         label='Competência',
         required=False,
         widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'MM/YYYY (ex: 01/2025)'
+            'class': 'form-control competencia-input',
+            'placeholder': 'MM/YYYY (ex: 01/2025)',
+            'data-auto-format': 'competencia'
         })
     )
     
@@ -575,3 +615,99 @@ class SefipImportForm(forms.Form):
             except Exception:
                 pass  # decodagem falha → service reportará
         return arquivo
+
+
+class RelatorioRecolhimentoFuncionarioForm(forms.Form):
+    """Formulário para o relatório de Listagem do Recolhimento por Funcionário"""
+
+    empresa = forms.ModelChoiceField(
+        queryset=Empresa.objects.all(),
+        label='Empresa',
+        required=False,
+        empty_label='Todas as empresas',
+        widget=forms.Select(attrs={'class': 'form-select', 'autocomplete': 'off'})
+    )
+    competencia_inicio = forms.CharField(
+        label='Competência Inicial',
+        max_length=7,
+        help_text='MM/YYYY',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control competencia-input',
+            'placeholder': 'MM/YYYY',
+            'autocomplete': 'off',
+            'data-auto-format': 'competencia'
+        })
+    )
+    competencia_fim = forms.CharField(
+        label='Competência Final',
+        max_length=7,
+        help_text='MM/YYYY',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control competencia-input',
+            'placeholder': 'MM/YYYY',
+            'autocomplete': 'off',
+            'data-auto-format': 'competencia'
+        })
+    )
+    funcionario = forms.ModelChoiceField(
+        queryset=Funcionario.objects.none(),
+        label='Funcionário (opcional)',
+        required=False,
+        empty_label='Todos os funcionários',
+        widget=forms.Select(attrs={'class': 'form-select', 'autocomplete': 'off'})
+    )
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        allowed_ids = None
+        if user is not None:
+            allowed_ids = get_allowed_empresa_ids(user)
+            if allowed_ids is not None:
+                self.fields['empresa'].queryset = Empresa.objects.filter(codigo__in=allowed_ids)
+
+        data_dict = kwargs.get('data') or {}
+        empresa_id = data_dict.get('empresa')
+        if empresa_id:
+            try:
+                self.fields['funcionario'].queryset = Funcionario.objects.filter(
+                    vinculos__empresa_id=empresa_id
+                ).distinct().order_by('nome')
+            except (ValueError, TypeError):
+                self.fields['funcionario'].queryset = Funcionario.objects.none()
+        elif allowed_ids is not None:
+            self.fields['funcionario'].queryset = Funcionario.objects.filter(
+                vinculos__empresa__codigo__in=allowed_ids
+            ).distinct().order_by('nome')
+
+    def _parse_competencia(self, value):
+        from datetime import datetime
+        value = (value or '').strip()
+        try:
+            return datetime.strptime(value, '%m/%Y').date().replace(day=1)
+        except Exception:
+            return None
+
+    def clean_competencia_inicio(self):
+        value = self.cleaned_data.get('competencia_inicio', '')
+        dt = self._parse_competencia(value)
+        if not dt:
+            raise ValidationError('Competência inválida. Use o formato MM/YYYY.')
+        return value.strip()
+
+    def clean_competencia_fim(self):
+        value = self.cleaned_data.get('competencia_fim', '')
+        dt = self._parse_competencia(value)
+        if not dt:
+            raise ValidationError('Competência inválida. Use o formato MM/YYYY.')
+        return value.strip()
+
+    def clean(self):
+        cleaned = super().clean()
+        inicio = cleaned.get('competencia_inicio')
+        fim = cleaned.get('competencia_fim')
+        if inicio and fim:
+            dt_inicio = self._parse_competencia(inicio)
+            dt_fim = self._parse_competencia(fim)
+            if dt_inicio and dt_fim and dt_inicio > dt_fim:
+                raise ValidationError('A competência inicial não pode ser maior que a final.')
+        return cleaned
