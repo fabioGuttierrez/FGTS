@@ -104,7 +104,7 @@
                                     <div class="d-flex justify-content-between align-items-center">
                                         <div>
                                             <strong>{{ conf.lancamento.funcionario.nome }}</strong><br>
-                                            <small class="text-muted">{{ conf.lancamento.competencia }} - R$ {{ conf.lancamento.valor_fgts|floatformat:2 }}</small>
+                                            <small class="text-muted">{{ conf.lancamento.competencia }} - {{ conf.lancamento.valor_fgts|floatformat:2 }}</small>
                                         </div>
                                         <i class="bi bi-chevron-right"></i>
                                     </div>
@@ -194,7 +194,7 @@
                                     <div class="d-flex justify-content-between align-items-start">
                                         <div>
                                             <strong>{{ conf.lancamento.funcionario.nome }}</strong><br>
-                                            <small class="text-muted">{{ conf.lancamento.competencia }} - R$ {{ conf.lancamento.valor_fgts|floatformat:2 }}</small><br>
+                                            <small class="text-muted">{{ conf.lancamento.competencia }} - {{ conf.lancamento.valor_fgts|floatformat:2 }}</small><br>
                                             <small class="text-danger">
                                                 <strong>Motivo:</strong> {{ conf.observacoes|truncatechars:50 }}
                                             </small>

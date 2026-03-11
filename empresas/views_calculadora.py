@@ -136,7 +136,7 @@ def calculadora_fgts_view(request):
                     'jam': float(jam),
                     'total': float(total),
                     'competencia': competencia,
-                    'data_pagamento': str(data_pagamento),
+                    'data_pagamento': data_pagamento.strftime('%d/%m/%Y'),
                     'meses_jam': meses_jam,
                 }
 

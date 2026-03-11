@@ -512,6 +512,9 @@ class GerarLancamentosAutomaticosView(LoginRequiredMixin, EmpresaScopeMixin, Vie
             for ano_ref in range(ano_inicio, ano_fim + 1):
                 competencias_13 = Competencia13Service.gerar_competencias_13(funcionario.empresa, ano_ref, funcionario)
                 for comp_str, parcela in competencias_13:
+                    comp_date = datetime.strptime(comp_str, '%m/%Y')
+                    if comp_date > data_hoje:  # não gerar parcelas de 13º futuras
+                        continue
                     if not Lancamento.objects.filter(funcionario=funcionario, competencia=comp_str, parcela_13=parcela).exists():
                         base_13_total = base_fgts_anterior
                         primeira_parcela_valor = base_13_total * Decimal('0.5')
@@ -608,6 +611,9 @@ class GerarLancamentosAutomaticosVinculoView(LoginRequiredMixin, EmpresaScopeMix
             for ano_ref in range(ano_inicio, ano_fim + 1):
                 competencias_13 = Competencia13Service.gerar_competencias_13(empresa, ano_ref, funcionario)
                 for comp_str, parcela in competencias_13:
+                    comp_date = datetime.strptime(comp_str, '%m/%Y')
+                    if comp_date > data_limite:  # não gerar parcelas de 13º futuras
+                        continue
                     if not Lancamento.objects.filter(vinculo=vinculo, competencia=comp_str, parcela_13=parcela).exists():
                         base_13_total = base_fgts_anterior
                         primeira_parcela_valor = base_13_total * Decimal('0.5')
@@ -745,6 +751,7 @@ class RelatorioCompetenciaView(FormView):
         ctx['relatorio_bloqueado'] = bloqueio_ctx['feature_blocked']
         ctx['relatorio_bloqueio_motivo'] = bloqueio_ctx['feature_block_reason']
         ctx['empresa_contexto'] = empresa_ctx
+        ctx['exibir_indice'] = self.request.session.get('exibir_indice', False)
         return ctx
 
     def form_invalid(self, form):
@@ -1246,6 +1253,7 @@ class RelatorioCompetenciaView(FormView):
                 'kpi_tempo': f'{tempo_total:.2f} segundos',
                 'kpi_lancamentos': total_lancamentos,
                 'kpi_competencias': len(competencias_list),
+                'exibir_indice': self.request.session.get('exibir_indice', False),
             }
             contexto.update(feature_block_context('custom_reports', user=self.request.user, empresa=empresa))
             return render(self.request, self.template_name, contexto)
@@ -1434,6 +1442,7 @@ def relatorio_por_ids(request):
         'from_selection': True,
         'ids_param': ','.join([str(i) for i in ids]),
         'debug_lancamentos': debug_lancamentos if debug_detalhado else None,
+        'exibir_indice': request.session.get('exibir_indice', False),
     }
     return render(request, 'lancamentos/relatorio_competencia.html', contexto)
 
@@ -1768,6 +1777,7 @@ def export_relatorio_competencia_pdf(request):
     funcionario_id = request.GET.get('funcionario')
     matricula = (request.GET.get('matricula') or '').strip()
     data_pagamento_str = request.GET.get('data_pagamento')
+    exibir_indice = request.session.get('exibir_indice', False)
     agrupamento = request.GET.get('agrupamento', 'competencia')
     ids_str = request.GET.get('ids', '').strip()
 
@@ -2005,7 +2015,10 @@ def export_relatorio_competencia_pdf(request):
 
             # JAM é um assunto distinto da correção/depósito FGTS.
             # No PDF, exibimos o JAM separado e não o somamos ao depósito.
-            table_data = [["Comp.", "13º", "Base FGTS", "Valor FGTS", "Correção", "JAM", "Total", "Índice CEF"]]
+            pdf_header = ["Comp.", "13º", "Base FGTS", "Valor FGTS", "Correção", "JAM", "Total"]
+            if exibir_indice:
+                pdf_header.append("Índice CEF")
+            table_data = [pdf_header]
 
             total_fgts = Decimal('0')
             total_deposito_sem_jam = Decimal('0')
@@ -2037,7 +2050,7 @@ def export_relatorio_competencia_pdf(request):
                 total_jam += Decimal(str(valor_jam))
                 total_recolher += Decimal(str(valor_total))
 
-                table_data.append([
+                row = [
                     comp_label,
                     col_13,
                     _format_money(l.base_fgts),
@@ -2045,12 +2058,17 @@ def export_relatorio_competencia_pdf(request):
                     _format_money(valor_correcao),
                     _format_money(valor_jam),
                     _format_money(valor_total),
-                    _format_indice(indice) if indice != '' else '',
-                ])
+                ]
+                if exibir_indice:
+                    row.append(_format_indice(indice) if indice != '' else '')
+                table_data.append(row)
 
+            col_widths_pdf = [18*mm, 16*mm, 27*mm, 23*mm, 22*mm, 18*mm, 22*mm]
+            if exibir_indice:
+                col_widths_pdf.append(30*mm)
             table = Table(
                 table_data,
-                colWidths=[18*mm, 16*mm, 27*mm, 23*mm, 22*mm, 18*mm, 22*mm, 30*mm],
+                colWidths=col_widths_pdf,
                 hAlign='LEFT',
                 repeatRows=1,
             )
@@ -3461,7 +3479,7 @@ def export_recolhimento_funcionario_pdf(request):
                 return d.strftime('%d/%m/%Y') if d else '—'
 
             def fmt_val(v):
-                return f'R$ {v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+                return f'{v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
 
             table_data.append([
                 Paragraph(str(func_obj.pk), normal_style),
@@ -3477,7 +3495,7 @@ def export_recolhimento_funcionario_pdf(request):
 
         # Linha de total da empresa
         def fmt_val(v):
-            return f'R$ {v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+            return f'{v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
 
         total_emp = emp_recolher + emp_recolhido
         table_data.append([
@@ -3519,7 +3537,7 @@ def export_recolhimento_funcionario_pdf(request):
         story.append(Spacer(1, 5*mm))
         total_rel = total_geral_recolher + total_geral_recolhido
         def fmt_val(v):
-            return f'R$ {v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+            return f'{v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
         total_data = [[
             Paragraph('TOTAL GERAL DO RELATÓRIO:', normal_white_style),
             Paragraph(fmt_val(total_geral_recolher), normal_white_style),
@@ -3549,4 +3567,209 @@ def export_recolhimento_funcionario_pdf(request):
         f'attachment; filename="recolhimento_funcionario_{comp_inicio.replace("/","_")}_a_{comp_fim.replace("/","_")}.pdf"'
     )
     resp.write(pdf)
+    return resp
+
+
+def export_recolhimento_funcionario_xlsx(request):
+    """Exporta o relatório de Recolhimento por Funcionário em XLSX."""
+    if not request.user.is_authenticated:
+        return redirect('login')
+
+    from io import BytesIO
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    form = RelatorioRecolhimentoFuncionarioForm(data=request.GET, user=request.user)
+    if not form.is_valid():
+        messages.error(request, 'Parâmetros inválidos para exportação.')
+        return redirect('recolhimento-funcionario')
+
+    empresa_filtro = form.cleaned_data.get('empresa')
+    funcionario_filtro = form.cleaned_data.get('funcionario')
+    comp_inicio = form.cleaned_data['competencia_inicio']
+    comp_fim = form.cleaned_data['competencia_fim']
+
+    competencias_periodo = _gerar_competencias_no_periodo(comp_inicio, comp_fim)
+
+    qs = Lancamento.objects.filter(competencia__in=competencias_periodo).select_related(
+        'empresa', 'funcionario', 'vinculo'
+    )
+    allowed_ids = get_allowed_empresa_ids(request.user)
+    if allowed_ids is not None:
+        qs = qs.filter(empresa__codigo__in=allowed_ids)
+    if empresa_filtro:
+        qs = qs.filter(empresa=empresa_filtro)
+    if funcionario_filtro:
+        qs = qs.filter(funcionario=funcionario_filtro)
+
+    from collections import defaultdict
+    empresas_dict = defaultdict(lambda: {'empresa': None, 'funcionarios': defaultdict(list)})
+    for lanc in qs:
+        empresas_dict[lanc.empresa_id]['empresa'] = lanc.empresa
+        empresas_dict[lanc.empresa_id]['funcionarios'][lanc.funcionario_id].append(lanc)
+
+    def fmt_date(d):
+        return d.strftime('%d/%m/%Y') if d else ''
+
+    cor_header = '003A78'
+    cor_total_emp = 'D0DFF0'
+    cor_total_geral = '003A78'
+    cor_linha_par = 'EBF3FB'
+
+    thin_border = Border(
+        left=Side(style='thin', color='B0C4D8'),
+        right=Side(style='thin', color='B0C4D8'),
+        top=Side(style='thin', color='B0C4D8'),
+        bottom=Side(style='thin', color='B0C4D8'),
+    )
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Recolhimento por Funcionário'
+
+    agora = datetime.now().strftime('%d/%m/%Y %H:%M')
+    ws.append([
+        'LISTAGEM DO RECOLHIMENTO POR FUNCIONÁRIO',
+        f'Período: {comp_inicio} até {comp_fim}',
+        '', '', '', '', '',
+        f'Gerado em: {agora}',
+    ])
+    titulo_row = ws.max_row
+    for col in range(1, 9):
+        cell = ws.cell(row=titulo_row, column=col)
+        cell.font = Font(bold=True, color='FFFFFF', size=11)
+        cell.fill = PatternFill(fill_type='solid', fgColor=cor_header)
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[titulo_row].height = 22
+
+    ws.append([])  # linha em branco
+
+    colunas = ['Cod.', 'Nome do Funcionário', 'Admissão', 'Demissão', 'PIS',
+               'Valor a Recolher', 'Total Recolhido', 'Total Geral']
+
+    total_geral_recolher = Decimal('0')
+    total_geral_recolhido = Decimal('0')
+
+    for emp_id, emp_data in sorted(empresas_dict.items()):
+        emp_obj = emp_data['empresa']
+
+        # Linha de identificação da empresa
+        ws.append([f'{emp_obj.nome}  —  CNPJ: {emp_obj.cnpj or ""}'])
+        emp_nome_row = ws.max_row
+        cell = ws.cell(row=emp_nome_row, column=1)
+        cell.font = Font(bold=True, size=10)
+        ws.merge_cells(start_row=emp_nome_row, start_column=1,
+                       end_row=emp_nome_row, end_column=8)
+
+        # Cabeçalho das colunas
+        ws.append(colunas)
+        header_row = ws.max_row
+        for col, _ in enumerate(colunas, start=1):
+            cell = ws.cell(row=header_row, column=col)
+            cell.font = Font(bold=True, color='FFFFFF', size=9)
+            cell.fill = PatternFill(fill_type='solid', fgColor=cor_header)
+            cell.alignment = Alignment(horizontal='center' if col > 5 else 'left',
+                                       vertical='center')
+            cell.border = thin_border
+        ws.row_dimensions[header_row].height = 16
+
+        emp_recolher = Decimal('0')
+        emp_recolhido = Decimal('0')
+        row_idx = 0
+
+        for func_id, lancamentos in sorted(
+            emp_data['funcionarios'].items(),
+            key=lambda x: x[1][0].funcionario.nome if x[1] else ''
+        ):
+            func_obj = lancamentos[0].funcionario
+            dados = _calcular_dados_recolhimento(lancamentos)
+            vinculo = getattr(lancamentos[0], 'vinculo', None) or func_obj.vinculo_atual()
+            data_adm = vinculo.data_admissao if vinculo else getattr(func_obj, 'data_admissao', None)
+            data_dem = vinculo.data_demissao if vinculo else getattr(func_obj, 'data_demissao', None)
+
+            emp_recolher += dados['valor_a_recolher']
+            emp_recolhido += dados['total_recolhido']
+
+            fill = PatternFill(fill_type='solid', fgColor=cor_linha_par) if row_idx % 2 == 1 else None
+
+            ws.append([
+                str(func_obj.pk),
+                func_obj.nome,
+                fmt_date(data_adm),
+                fmt_date(data_dem),
+                func_obj.pis or '',
+                float(dados['valor_a_recolher']),
+                float(dados['total_recolhido']),
+                float(dados['total_geral']),
+            ])
+            data_row = ws.max_row
+            for col in range(1, 9):
+                cell = ws.cell(row=data_row, column=col)
+                cell.border = thin_border
+                cell.font = Font(size=9)
+                if fill:
+                    cell.fill = fill
+                if col >= 6:
+                    cell.number_format = '#,##0.00'
+                    cell.alignment = Alignment(horizontal='right')
+            row_idx += 1
+
+        # Total da empresa
+        total_emp = emp_recolher + emp_recolhido
+        ws.append([
+            '', 'EMPRESA: Totais:', '', '', '',
+            float(emp_recolher), float(emp_recolhido), float(total_emp)
+        ])
+        total_emp_row = ws.max_row
+        for col in range(1, 9):
+            cell = ws.cell(row=total_emp_row, column=col)
+            cell.font = Font(bold=True, size=9)
+            cell.fill = PatternFill(fill_type='solid', fgColor=cor_total_emp)
+            cell.border = thin_border
+            if col >= 6:
+                cell.number_format = '#,##0.00'
+                cell.alignment = Alignment(horizontal='right')
+
+        total_geral_recolher += emp_recolher
+        total_geral_recolhido += emp_recolhido
+
+        ws.append([])  # separador entre empresas
+
+    # Total geral (quando há > 1 empresa)
+    if len(empresas_dict) > 1:
+        total_rel = total_geral_recolher + total_geral_recolhido
+        ws.append([
+            'TOTAL GERAL DO RELATÓRIO:', '', '', '', '',
+            float(total_geral_recolher), float(total_geral_recolhido), float(total_rel)
+        ])
+        total_geral_row = ws.max_row
+        ws.merge_cells(start_row=total_geral_row, start_column=1,
+                       end_row=total_geral_row, end_column=5)
+        for col in range(1, 9):
+            cell = ws.cell(row=total_geral_row, column=col)
+            cell.font = Font(bold=True, color='FFFFFF', size=9)
+            cell.fill = PatternFill(fill_type='solid', fgColor=cor_total_geral)
+            cell.border = thin_border
+            if col >= 6:
+                cell.number_format = '#,##0.00'
+                cell.alignment = Alignment(horizontal='right')
+
+    col_widths_xlsx = [10, 40, 13, 13, 18, 18, 18, 18]
+    for i, width in enumerate(col_widths_xlsx, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = width
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    xlsx_bytes = buffer.getvalue()
+    buffer.close()
+
+    resp = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    resp['Content-Disposition'] = (
+        f'attachment; filename="recolhimento_funcionario_{comp_inicio.replace("/","_")}'
+        f'_a_{comp_fim.replace("/","_")}.xlsx"'
+    )
+    resp.write(xlsx_bytes)
     return resp

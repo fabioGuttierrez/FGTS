@@ -5,6 +5,7 @@ from .views import (
     GerarLancamentosAutomaticosVinculoView, relatorio_por_ids, lancamento_ids,
     RelatorioCompetenciaView, export_relatorio_competencia_csv, export_relatorio_competencia_pdf, download_memoria_calculo,
     RelatorioRecolhimentoFuncionarioView, export_recolhimento_funcionario_pdf,
+    export_recolhimento_funcionario_xlsx,
 )
 from .bulk_delete import LancamentoBulkDeleteView
 
@@ -25,5 +26,6 @@ urlpatterns = [
     path('relatorio/memoria-calculo', download_memoria_calculo, name='relatorio-memoria-calculo'),
     path('relatorio/recolhimento-funcionario/', RelatorioRecolhimentoFuncionarioView.as_view(), name='recolhimento-funcionario'),
     path('relatorio/recolhimento-funcionario/pdf', export_recolhimento_funcionario_pdf, name='recolhimento-funcionario-pdf'),
+    path('relatorio/recolhimento-funcionario/xlsx', export_recolhimento_funcionario_xlsx, name='recolhimento-funcionario-xlsx'),
     path('bulk-delete/', LancamentoBulkDeleteView.as_view(), name='lancamento-bulk-delete'),
 ]

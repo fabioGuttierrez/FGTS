@@ -14,9 +14,9 @@ from .models import EmailLog
 def gerar_pdf_fgts(memoria, email):
     def _format_currency(value):
         try:
-            return f"R$ {value:.2f}"
+            return f"{value:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
         except Exception:
-            return f"R$ {value}"
+            return str(value)
 
     def _format_date_br(value):
         if value is None:
@@ -127,23 +127,14 @@ def _salvar_log_erro(email, mensagem, relatorio=None):
 
 def enviar_relatorio_fgts(email, memoria):
     """
-    Envia o relatório FGTS por e-mail com PDF em anexo.
+    Envia o relatório FGTS por e-mail com a memória de cálculo no corpo HTML.
     Retorna (sucesso: bool, steps: list[dict]) para diagnóstico visual.
     Cada step: {'descricao': str, 'status': 'ok'|'erro'|'aviso', 'detalhe': str|None}
     """
     steps = []
     relatorio = None
 
-    # Etapa 1: Gerar PDF
-    try:
-        pdf_buffer = gerar_pdf_fgts(memoria, email)
-        steps.append({'descricao': 'Gerar PDF', 'status': 'ok', 'detalhe': None})
-    except Exception as e:
-        steps.append({'descricao': 'Gerar PDF', 'status': 'erro', 'detalhe': str(e)})
-        _salvar_log_erro(email, str(e))
-        return False, steps
-
-    # Etapa 2: Montar corpo do e-mail (HTML)
+    # Etapa 1: Montar corpo do e-mail (HTML)
     try:
         corpo = render_to_string('empresas/email_fgts.html', {
             'email': email,
@@ -156,7 +147,7 @@ def enviar_relatorio_fgts(email, memoria):
         _salvar_log_erro(email, str(e))
         return False, steps
 
-    # Etapa 3: Criar mensagem de e-mail
+    # Etapa 2: Criar mensagem de e-mail
     try:
         relatorio = RelatorioPremium.objects.filter(email=email).order_by('-data_geracao').first()
         msg = EmailMessage(
@@ -176,16 +167,7 @@ def enviar_relatorio_fgts(email, memoria):
         _salvar_log_erro(email, str(e), relatorio)
         return False, steps
 
-    # Etapa 4: Anexar PDF
-    try:
-        msg.attach('relatorio_fgts.pdf', pdf_buffer.read(), 'application/pdf')
-        steps.append({'descricao': 'Anexar PDF ao e-mail', 'status': 'ok', 'detalhe': None})
-    except Exception as e:
-        steps.append({'descricao': 'Anexar PDF ao e-mail', 'status': 'erro', 'detalhe': str(e)})
-        _salvar_log_erro(email, str(e), relatorio)
-        return False, steps
-
-    # Etapa 5: Enviar via SMTP
+    # Etapa 3: Enviar via SMTP
     try:
         msg.send()
         steps.append({'descricao': 'Enviar e-mail via SMTP (Brevo)', 'status': 'ok', 'detalhe': None})
@@ -194,7 +176,7 @@ def enviar_relatorio_fgts(email, memoria):
         _salvar_log_erro(email, str(e), relatorio)
         return False, steps
 
-    # Etapa 6: Registrar log de auditoria
+    # Etapa 4: Registrar log de auditoria
     try:
         EmailLog.objects.create(
             email=email, status='sucesso',

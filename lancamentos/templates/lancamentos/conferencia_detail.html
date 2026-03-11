@@ -58,11 +58,11 @@
                             <div class="row">
                                 <div class="col-md-3 mb-3">
                                     <strong>Base FGTS:</strong><br>
-                                    <span class="fs-5">R$ {{ lancamento.base_fgts|floatformat:2 }}</span>
+                                    <span class="fs-5">{{ lancamento.base_fgts|floatformat:2 }}</span>
                                 </div>
                                 <div class="col-md-3 mb-3">
                                     <strong>Valor FGTS:</strong><br>
-                                    <span class="fs-5 text-primary">R$ {{ lancamento.valor_fgts|floatformat:2 }}</span>
+                                    <span class="fs-5 text-primary">{{ lancamento.valor_fgts|floatformat:2 }}</span>
                                 </div>
                                 <div class="col-md-3 mb-3">
                                     <strong>Data Pagamento:</strong><br>
@@ -110,7 +110,7 @@
                                 <div class="col-md-4 mb-3">
                                     <strong>Valor Conferido:</strong><br>
                                     {% if conferencia.valor_conferido %}
-                                    <span class="text-warning fs-5">R$ {{ conferencia.valor_conferido|floatformat:2 }}</span>
+                                    <span class="text-warning fs-5">{{ conferencia.valor_conferido|floatformat:2 }}</span>
                                     {% else %}
                                     <span class="text-muted">Igual ao calculado</span>
                                     {% endif %}

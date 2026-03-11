@@ -39,7 +39,7 @@ from lancamentos.views import (
 )
 from indices.views import IndiceListView
 from django.urls import include
-from configuracoes.views import ConfiguracaoListView
+from configuracoes.views import ConfiguracaoListView, toggle_exibir_indice
 from .views import DashboardView
 
 urlpatterns = [
@@ -74,6 +74,7 @@ urlpatterns = [
     path('indices/', IndiceListView.as_view(), name='indice-list'),
     path('coefjam/', include('coefjam.urls')),
     path('configuracoes/', ConfiguracaoListView.as_view(), name='configuracao-list'),
+    path('configuracoes/toggle-indice/', toggle_exibir_indice, name='toggle-exibir-indice'),
     path('auditoria/', include('audit_logs.urls')),
     path('monitoring/', include('monitoring.urls')),
     # Ajuda / Documentação

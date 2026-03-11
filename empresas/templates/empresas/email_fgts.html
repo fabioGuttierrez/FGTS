@@ -24,14 +24,25 @@
             <p style="margin:0 0 20px;font-size:15px;color:#333;line-height:1.6;">Olá,</p>
             <p style="margin:0 0 24px;font-size:15px;color:#333;line-height:1.6;">
               Seu cálculo de FGTS corrigido foi processado com sucesso.<br>
-              Segue em anexo o <strong>PDF profissional</strong> com memória detalhada do cálculo.
+              Confira abaixo a <strong>memória detalhada do cálculo</strong>.
             </p>
 
-            <!-- Resumo -->
+            <!-- Cabeçalho do relatório -->
+            {% if memoria.relatorio_posicao and memoria.relatorio_total %}
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
+              <tr>
+                <td style="font-size:12px;color:#005CA9;font-weight:700;text-transform:uppercase;letter-spacing:1px;">
+                  Relatório {{ memoria.relatorio_posicao }} de {{ memoria.relatorio_total }}
+                </td>
+              </tr>
+            </table>
+            {% endif %}
+
+            <!-- Tabela de memória de cálculo -->
             <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f8fb;border-radius:8px;margin-bottom:28px;">
               <tr>
                 <td style="padding:20px 24px;">
-                  <p style="margin:0 0 12px;font-size:13px;font-weight:700;color:#005CA9;text-transform:uppercase;letter-spacing:1px;">Resumo do cálculo</p>
+                  <p style="margin:0 0 12px;font-size:13px;font-weight:700;color:#005CA9;text-transform:uppercase;letter-spacing:1px;">Memória de Cálculo</p>
                   <table width="100%" cellpadding="4" cellspacing="0">
                     <tr>
                       <td style="font-size:14px;color:#555;">Competência</td>
@@ -42,12 +53,34 @@
                       <td style="font-size:14px;color:#222;font-weight:700;text-align:right;">{{ memoria.data_pagamento }}</td>
                     </tr>
                     <tr>
-                      <td style="font-size:14px;color:#555;">Correção aplicada</td>
-                      <td style="font-size:14px;color:#1a7f3c;font-weight:700;text-align:right;">R$ {{ memoria.correcao|floatformat:2 }}</td>
+                      <td colspan="2" style="padding-top:14px;padding-bottom:6px;border-top:2px solid #dde3f0;font-size:11px;color:#005CA9;font-weight:700;text-transform:uppercase;letter-spacing:1px;">
+                        Detalhes do Cálculo
+                      </td>
                     </tr>
                     <tr>
-                      <td style="font-size:15px;color:#222;font-weight:700;padding-top:8px;border-top:1px solid #dde3f0;">Total atualizado</td>
-                      <td style="font-size:15px;color:#005CA9;font-weight:700;text-align:right;padding-top:8px;border-top:1px solid #dde3f0;">R$ {{ memoria.total|floatformat:2 }}</td>
+                      <td style="font-size:14px;color:#555;">Base FGTS</td>
+                      <td style="font-size:14px;color:#222;text-align:right;">{{ memoria.base_fgts|floatformat:2 }}</td>
+                    </tr>
+                    <tr>
+                      <td style="font-size:14px;color:#555;">FGTS do mês (8%)</td>
+                      <td style="font-size:14px;color:#222;text-align:right;">{{ memoria.fgts_mes|floatformat:2 }}</td>
+                    </tr>
+                    <tr>
+                      <td style="font-size:14px;color:#555;">Correção monetária</td>
+                      <td style="font-size:14px;color:#1a7f3c;text-align:right;">{{ memoria.correcao|floatformat:2 }}</td>
+                    </tr>
+                    <tr>
+                      <td style="font-size:15px;color:#222;font-weight:700;padding-top:10px;border-top:2px solid #dde3f0;">Total atualizado</td>
+                      <td style="font-size:15px;color:#005CA9;font-weight:700;text-align:right;padding-top:10px;border-top:2px solid #dde3f0;">{{ memoria.deposito_fgts|floatformat:2 }}</td>
+                    </tr>
+                    <tr>
+                      <td colspan="2" style="padding-top:14px;padding-bottom:6px;border-top:2px solid #dde3f0;font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:1px;">
+                        Juros de Mora (JAM)
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="font-size:14px;color:#555;">JAM acumulado</td>
+                      <td style="font-size:14px;color:#222;text-align:right;">{{ memoria.jam|floatformat:2 }}</td>
                     </tr>
                   </table>
                 </td>

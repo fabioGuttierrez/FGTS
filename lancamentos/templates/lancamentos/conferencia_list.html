@@ -123,11 +123,11 @@
                                         <span class="badge bg-warning">13º</span>
                                         {% endif %}
                                     </td>
-                                    <td>R$ {{ conf.lancamento.base_fgts|floatformat:2 }}</td>
+                                    <td>{{ conf.lancamento.base_fgts|floatformat:2 }}</td>
                                     <td>
-                                        <strong>R$ {{ conf.lancamento.valor_fgts|floatformat:2 }}</strong>
+                                        <strong>{{ conf.lancamento.valor_fgts|floatformat:2 }}</strong>
                                         {% if conf.valor_conferido %}
-                                        <br><small class="text-warning">Conferido: R$ {{ conf.valor_conferido|floatformat:2 }}</small>
+                                        <br><small class="text-warning">Conferido: {{ conf.valor_conferido|floatformat:2 }}</small>
                                         {% endif %}
                                     </td>
                                     <td>
