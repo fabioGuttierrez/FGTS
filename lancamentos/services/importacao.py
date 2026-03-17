@@ -197,39 +197,51 @@ class LancamentoImportService:
         return buffer.getvalue()
     
     @staticmethod
-    def import_lancamentos_from_file(file, empresa, user):
+    def import_lancamentos_from_file(file, empresa, user, progress_callback=None):
         """
         Importa lançamentos de um arquivo XLSX para uma empresa específica
-        
+
         Args:
             file: Arquivo XLSX
             empresa: Instância de Empresa
             user: Usuário que está fazendo a importação
-            
+            progress_callback: Callable opcional (linhas_processadas: int, linhas_total: int)
+
         Returns:
             dict: Resultado da importação com estatísticas e erros
         """
-        
+
         # Nota: empresa pode ser None quando o XLSX traz a coluna EMPRESA por linha.
-        
+
         # Processar arquivo
         try:
-            wb = openpyxl.load_workbook(file, data_only=True)
+            # read_only=True faz streaming linha a linha — sem carregar o arquivo inteiro
+            # na memória. Essencial para arquivos com 10k+ linhas.
+            wb = openpyxl.load_workbook(file, data_only=True, read_only=True)
             ws = wb.active
         except openpyxl.utils.exceptions.InvalidFileException:
             raise ValueError("❌ Arquivo inválido. Por favor, envie um arquivo XLSX válido.")
         except Exception as e:
             raise ValueError(f"❌ Erro ao ler arquivo: {str(e)}. Verifique se o arquivo não está corrompido.")
-        
+
         # Validar se planilha tem dados
-        if ws.max_row < 2:
+        if not ws.max_row or ws.max_row < 2:
+            raise ValueError("❌ Arquivo vazio. O arquivo deve conter pelo menos uma linha de dados além do cabeçalho.")
+
+        # max_row vem do atributo <dimension> do XML — pode estar ausente em alguns arquivos.
+        total_linhas = max((ws.max_row or 2) - 1, 0)
+
+        # Leitura em única passagem: cabeçalho na 1ª linha, dados continuam do mesmo iterador.
+        rows_iter = ws.iter_rows(values_only=True)
+        try:
+            raw_headers = list(next(rows_iter))
+        except StopIteration:
             raise ValueError("❌ Arquivo vazio. O arquivo deve conter pelo menos uma linha de dados além do cabeçalho.")
         
-        # Validar headers
-        headers = [cell.value for cell in ws[1]]
+        # Validar headers (usa raw_headers extraído da primeira linha do iterador)
         headers_upper = [
             LancamentoImportService._canonicalize_header(LancamentoImportService._normalize_header(h))
-            for h in headers
+            for h in raw_headers
         ]
 
         has_empresa_column = 'EMPRESA' in headers_upper
@@ -291,15 +303,21 @@ class LancamentoImportService:
         }
         
         linhas_processadas = 0
-        
+
         billing_cache = {}
 
-        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        if progress_callback:
+            progress_callback(0, total_linhas)
+
+        for row_idx, row in enumerate(rows_iter, start=2):
             # Pular linhas vazias
             if not any(row):
                 continue
-            
+
             linhas_processadas += 1
+
+            if progress_callback and linhas_processadas % 200 == 0:
+                progress_callback(linhas_processadas, total_linhas)
             
             try:
                 lancamento_data = LancamentoImportService._process_row(
@@ -359,7 +377,8 @@ class LancamentoImportService:
                 "❌ Nenhuma linha de dados encontrada no arquivo. "
                 "Verifique se você preencheu o arquivo corretamente e removeu a linha de exemplo."
             )
-        
+
+        wb.close()
         return result
     
     @staticmethod

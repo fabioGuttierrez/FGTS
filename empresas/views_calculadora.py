@@ -5,7 +5,6 @@ from django.utils import timezone
 from .forms_calculadora import FGTSCalculadoraForm
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
-from indices.models import SupabaseIndice
 from indices.services.indice_service import IndiceFGTSService
 from coefjam.models import CoefJam
 from .models_relatorio import RelatorioPremium
@@ -13,15 +12,12 @@ from .utils_fgts import enviar_relatorio_fgts
 from .services_leads import register_credit_trigger
 
 def buscar_indice_fgts(competencia, data_pagamento):
-    # Busca o índice mais próximo da data_pagamento para a competência
+    # Busca o índice com filtro exato via serviço oficial (ORM + fallback REST)
     try:
-        comp_date = datetime.strptime(competencia, '%m/%Y').date()
+        comp_date = datetime.strptime(competencia, '%m/%Y').date().replace(day=1)
     except Exception:
         return None
-    indices = SupabaseIndice.objects.filter(competencia=comp_date, data_base__lte=data_pagamento).order_by('-data_base')
-    if indices.exists():
-        return indices.first().indice
-    return None
+    return IndiceFGTSService.buscar_indice(competencia=comp_date, data_pagamento=data_pagamento)
 
 
 def calcular_jam_acumulado(fgts_mes, competencia, data_pagamento):
@@ -121,7 +117,22 @@ def calculadora_fgts_view(request):
                 fgts_mes = (base_fgts * Decimal('0.08')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                 indice = buscar_indice_fgts(competencia, data_pagamento)
                 if indice is None:
-                    indice = Decimal('1.0')
+                    mensagem = (
+                        f"Índice FGTS não encontrado para a competência {competencia} "
+                        f"na data de pagamento {data_pagamento.strftime('%d/%m/%Y')}. "
+                        "Verifique se os dados estão corretos ou tente outra data de pagamento."
+                    )
+                    return render(request, 'empresas/calculadora_fgts.html', {
+                        'form': form,
+                        'resultado': None,
+                        'memoria': None,
+                        'email': email,
+                        'premium_liberado': False,
+                        'mensagem': mensagem,
+                        'steps_email': None,
+                        'hoje': timezone.now().date(),
+                        'data_maxima': IndiceFGTSService.obter_ultima_data_base(),
+                    })
                 deposito_fgts = (base_fgts * indice).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                 correcao = (deposito_fgts - fgts_mes).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                 jam, meses_jam = calcular_jam_acumulado(fgts_mes, competencia, data_pagamento)

@@ -6,6 +6,7 @@ from .views import (
     RelatorioCompetenciaView, export_relatorio_competencia_csv, export_relatorio_competencia_pdf, download_memoria_calculo,
     RelatorioRecolhimentoFuncionarioView, export_recolhimento_funcionario_pdf,
     export_recolhimento_funcionario_xlsx,
+    LancamentoImportStatusView, lancamento_import_status_json,
 )
 from .bulk_delete import LancamentoBulkDeleteView
 
@@ -15,6 +16,8 @@ urlpatterns = [
     path('<int:pk>/editar/', LancamentoUpdateView.as_view(), name='lancamento-update'),
     path('<int:pk>/excluir/', LancamentoDeleteView.as_view(), name='lancamento-delete'),
     path('importar/', LancamentoImportView.as_view(), name='lancamento-import'),
+    path('importar/<int:pk>/status/', LancamentoImportStatusView.as_view(), name='lancamento-import-status'),
+    path('importar/<int:pk>/status/json/', lancamento_import_status_json, name='lancamento-import-status-json'),
     path('download-template/', LancamentoDownloadTemplateView.as_view(), name='lancamento-download-template'),
     path('gerar/<int:funcionario_id>/', GerarLancamentosAutomaticosView.as_view(), name='lancamento-gerar-automatico'),
     path('gerar-vinculo/<int:vinculo_id>/', GerarLancamentosAutomaticosVinculoView.as_view(), name='lancamento-gerar-automatico-vinculo'),

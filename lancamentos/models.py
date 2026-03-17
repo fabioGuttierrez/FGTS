@@ -6,6 +6,7 @@ from empresas.models import Empresa
 from funcionarios.models import Funcionario
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+from django.conf import settings
 
 class Lancamento(models.Model):
 	PARCELA_CHOICES = [
@@ -253,3 +254,29 @@ class Lancamento(models.Model):
 		# Permite mais de um lançamento no mesmo mês para o mesmo CPF, desde que seja em vínculos diferentes.
 		# Mantém compatibilidade com registros legados (vinculo nulo).
 		unique_together = ('empresa', 'funcionario', 'competencia', 'parcela_13', 'vinculo')
+
+
+class ImportacaoLancamento(models.Model):
+	STATUS_CHOICES = [
+		('pending', 'Aguardando'),
+		('processing', 'Processando'),
+		('done', 'Concluído'),
+		('error', 'Erro'),
+	]
+
+	usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='importacoes_lancamento')
+	empresa = models.ForeignKey(Empresa, on_delete=models.SET_NULL, null=True, blank=True)
+	arquivo = models.FileField(upload_to='importacoes/lancamentos/')
+	nome_arquivo = models.CharField(max_length=255)
+	status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+	linhas_total = models.IntegerField(null=True, blank=True)
+	linhas_processadas = models.IntegerField(default=0)
+	criado_em = models.DateTimeField(auto_now_add=True)
+	atualizado_em = models.DateTimeField(auto_now=True)
+	resultado_json = models.JSONField(null=True, blank=True)
+	mensagem_erro = models.TextField(blank=True)
+
+	class Meta:
+		ordering = ['-criado_em']
+		verbose_name = 'Importação de Lançamentos'
+		verbose_name_plural = 'Importações de Lançamentos'

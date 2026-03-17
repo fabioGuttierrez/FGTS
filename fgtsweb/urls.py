@@ -19,6 +19,8 @@ from django.contrib import admin
 from django.urls import path, include
 from django.views.generic import TemplateView
 from django.contrib.auth import views as auth_views
+from django.conf import settings
+from django.conf.urls.static import static
 from empresas.views import EmpresaCreateView, EmpresaListView, EmpresaUpdateView
 from empresas.views_calculadora import calculadora_fgts_view
 from lancamentos.views import (
@@ -83,4 +85,4 @@ urlpatterns = [
     path('ajuda/manual/', TemplateView.as_view(template_name='ajuda/manual.html'), name='ajuda-manual'),
     path('ajuda/faq/', TemplateView.as_view(template_name='ajuda/faq.html'), name='ajuda-faq'),
     path('ajuda/glossario/', TemplateView.as_view(template_name='ajuda/glossario.html'), name='ajuda-glossario'),
-]
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

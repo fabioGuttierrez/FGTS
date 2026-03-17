@@ -1,4 +1,5 @@
 import time
+import threading
 from datetime import datetime, date
 from decimal import Decimal
 from dateutil.relativedelta import relativedelta
@@ -9,7 +10,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse_lazy
 from billing.services.features import can_use_feature, feature_block_context
 from empresas.models import Empresa
-from .models import Lancamento
+from .models import Lancamento, ImportacaoLancamento
 from .models_conferencia import ConferenciaLancamento
 from .forms import (
     RelatorioCompetenciaForm,
@@ -43,6 +44,52 @@ from django.http import HttpResponseForbidden, HttpResponse
 from django.db.models.functions import Substr
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
+
+
+def _process_importacao(importacao_id):
+    """Processa importação de lançamentos em background thread."""
+    from django.db import connection
+    importacao = None
+    try:
+        importacao = ImportacaoLancamento.objects.get(id=importacao_id)
+        importacao.status = 'processing'
+        importacao.save(update_fields=['status', 'atualizado_em'])
+
+        # Callback de progresso com throttle de 2 segundos para reduzir writes no DB.
+        last_update = [0.0]
+
+        def on_progress(linhas_processadas, linhas_total):
+            now = time.time()
+            if linhas_processadas == 0:
+                # Primeira chamada: salva o total de linhas
+                importacao.linhas_total = linhas_total
+                importacao.save(update_fields=['linhas_total', 'atualizado_em'])
+                last_update[0] = now
+            elif now - last_update[0] >= 2.0:
+                # Demais chamadas: throttle de 2s
+                importacao.linhas_processadas = linhas_processadas
+                importacao.save(update_fields=['linhas_processadas', 'atualizado_em'])
+                last_update[0] = now
+
+        with open(importacao.arquivo.path, 'rb') as f:
+            result = LancamentoImportService.import_lancamentos_from_file(
+                f, importacao.empresa, importacao.usuario, progress_callback=on_progress
+            )
+
+        importacao.status = 'done'
+        importacao.resultado_json = result
+        importacao.save(update_fields=['status', 'resultado_json', 'atualizado_em'])
+    except Exception as e:
+        try:
+            if importacao is None:
+                importacao = ImportacaoLancamento.objects.get(id=importacao_id)
+            importacao.status = 'error'
+            importacao.mensagem_erro = str(e)
+            importacao.save(update_fields=['status', 'mensagem_erro', 'atualizado_em'])
+        except Exception:
+            pass
+    finally:
+        connection.close()
 
 
 class LancamentoDeleteView(LoginRequiredMixin, EmpresaScopeMixin, View):
@@ -2510,7 +2557,12 @@ def download_memoria_calculo(request):
     )
     
     if indice_valor is None:
-        indice_valor = Decimal('1.0')
+        return HttpResponse(
+            f'Índice FGTS não encontrado para a competência {competencia_str} '
+            f'na data de pagamento {data_pagamento.strftime("%d/%m/%Y")}. '
+            'O download da memória de cálculo não pode ser gerado sem o índice correto.',
+            status=400
+        )
     
     # Ajuste plano econômico legado (multiplica e divide conforme VB6)
     valor_fgts_ajustado, fator_mult, fator_div, fator_liquido = aplicar_plano_economico_legacy(
@@ -2606,14 +2658,14 @@ class LancamentoImportView(LoginRequiredMixin, EmpresaScopeMixin, View):
         if 'file' not in request.FILES:
             messages.error(request, '❌ Nenhum arquivo foi enviado.')
             return redirect('lancamento-import')
-        
+
         file = request.FILES['file']
-        
+
         # Validar extensão
         if not file.name.endswith('.xlsx'):
             messages.error(request, '❌ Apenas arquivos .xlsx são permitidos.')
             return redirect('lancamento-import')
-        
+
         # Empresa selecionada é opcional quando o XLSX traz a coluna EMPRESA por linha.
         empresa = None
         empresa_codigo = request.POST.get('empresa')
@@ -2627,63 +2679,38 @@ class LancamentoImportView(LoginRequiredMixin, EmpresaScopeMixin, View):
             # Validar permissões (quando empresa foi selecionada)
             if not is_empresa_allowed(request.user, empresa.codigo):
                 return HttpResponseForbidden('Você não tem permissão para importar lançamentos para esta empresa.')
-        
-        # Processar importação
-        try:
-            result = LancamentoImportService.import_lancamentos_from_file(file, empresa, request.user)
-            
-            # Mensagens de sucesso
-            if result['created'] > 0:
-                messages.success(
-                    request, 
-                    f"✅ {result['created']} lançamento(s) criado(s) com sucesso!"
-                )
-            
-            if result['updated'] > 0:
-                messages.info(
-                    request, 
-                    f"ℹ️ {result['updated']} lançamento(s) atualizado(s)."
-                )
-            
-            # Mensagens de erro
-            if result['errors']:
-                for error in result['errors'][:5]:  # Mostrar apenas os 5 primeiros
-                    messages.error(
-                        request,
-                        f"❌ Linha {error['row']}: {error['error']}"
-                    )
-                
-                if len(result['errors']) > 5:
-                    messages.warning(
-                        request,
-                        f"⚠️ Mais {len(result['errors']) - 5} erro(s) encontrado(s). Verifique o arquivo."
-                    )
-            
-            # Resumo
-            if result['success'] > 0 or result['skipped'] > 0 or result['errors']:
-                messages.success(
-                    request,
-                    f"📊 Resumo: {result['success']} sucesso(s), {len(result['errors'])} erro(s), {result['skipped']} pulado(s)"
-                )
-            
-            # Se não houve nenhum sucesso, mas também não houve erros críticos
-            if result['success'] == 0 and not result['errors']:
-                messages.warning(
-                    request,
-                    "⚠️ Nenhum lançamento foi processado. Verifique se o arquivo contém dados válidos."
-                )
-            
-            return redirect('lancamento-list')
-            
-        except ValueError as e:
-            messages.error(request, f'❌ Erro de validação: {str(e)}')
-            return redirect('lancamento-import')
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Erro na importação de lançamentos: {str(e)}", exc_info=True)
-            messages.error(request, f'❌ Erro inesperado ao importar: {str(e)}. Por favor, contate o suporte se o problema persistir.')
-            return redirect('lancamento-import')
+
+        # Criar registro de importação e processar em background
+        importacao = ImportacaoLancamento.objects.create(
+            usuario=request.user,
+            empresa=empresa,
+            arquivo=file,
+            nome_arquivo=file.name,
+        )
+        threading.Thread(target=_process_importacao, args=(importacao.id,), daemon=True).start()
+        return redirect('lancamento-import-status', pk=importacao.pk)
+
+
+class LancamentoImportStatusView(LoginRequiredMixin, View):
+    """Página de acompanhamento de importação assíncrona."""
+    template_name = 'lancamentos/lancamento_import_status.html'
+
+    def get(self, request, pk):
+        importacao = get_object_or_404(ImportacaoLancamento, pk=pk, usuario=request.user)
+        return render(request, self.template_name, {'importacao': importacao})
+
+
+@login_required
+def lancamento_import_status_json(request, pk):
+    """Endpoint JSON para polling do status da importação."""
+    importacao = get_object_or_404(ImportacaoLancamento, pk=pk, usuario=request.user)
+    return JsonResponse({
+        'status': importacao.status,
+        'resultado': importacao.resultado_json,
+        'erro': importacao.mensagem_erro,
+        'linhas_total': importacao.linhas_total,
+        'linhas_processadas': importacao.linhas_processadas,
+    })
 
 
 class LegacyImportView(LoginRequiredMixin, FormView):
