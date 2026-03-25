@@ -81,6 +81,56 @@
                         </div>
                     </div>
 
+                    <!-- Opções de Cálculo -->
+                    <div class="card border border-warning-subtle bg-warning-subtle rounded-3 mb-3">
+                        <div class="card-body py-3 px-3">
+                            <h3 class="h6 fw-bold mb-3">
+                                <i class="bi bi-sliders me-1 text-warning-emphasis"></i>
+                                Opções de cálculo
+                            </h3>
+
+                            <!-- Valor FGTS -->
+                            <div class="mb-3">
+                                <p class="small fw-semibold mb-1">Valor FGTS</p>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="recalcular_fgts" id="opt_recalcular" value="recalcular" checked>
+                                    <label class="form-check-label small" for="opt_recalcular">
+                                        <strong>RECALCULAR</strong> — Forçar 8% da base
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle ms-1">Recomendado</span>
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="recalcular_fgts" id="opt_manter" value="manter">
+                                    <label class="form-check-label small" for="opt_manter">
+                                        <strong>MANTER</strong> — Usar o valor <code>VALOR_FGTS</code> exatamente como está no arquivo
+                                    </label>
+                                </div>
+                                <p class="text-muted small mt-1 mb-0">
+                                    Use "MANTER" apenas se o arquivo já contém valores calculados com alíquota personalizada (ex.: 2% aprendiz) ou ajustes manuais.
+                                </p>
+                            </div>
+
+                            <!-- JAM -->
+                            <div>
+                                <div class="form-check mb-1">
+                                    <input class="form-check-input" type="checkbox" name="aplicar_jam" id="opt_jam" onchange="toggleJamDate(this)">
+                                    <label class="form-check-label small fw-semibold" for="opt_jam">
+                                        Aplicar correção JAM / índices acumulados
+                                    </label>
+                                </div>
+                                <p class="text-muted small mb-2">
+                                    Aplica os coeficientes de juros (JAM) sobre o valor FGTS de cada competência até a data de referência.
+                                    Útil para calcular o saldo atualizado de débito em aberto.
+                                </p>
+                                <div id="jam-date-container" class="d-none">
+                                    <label for="data_referencia_jam" class="form-label small mb-1">Data de referência (para JAM)</label>
+                                    <input type="date" name="data_referencia_jam" id="data_referencia_jam" class="form-control form-control-sm" style="max-width:200px;">
+                                    <p class="text-muted small mt-1 mb-0">Deixe em branco para usar a data de hoje.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Botões -->
                     <div class="d-flex justify-content-end gap-2 pt-3 border-top">
                         <a href="{% url 'lancamento-list' %}" class="btn btn-outline-secondary btn-lg rounded-3">
@@ -127,6 +177,13 @@ function updateFileName(input) {
     const fileNameDisplay = document.getElementById('file-name');
     if (fileNameDisplay) {
         fileNameDisplay.textContent = fileName ? `Arquivo selecionado: ${fileName}` : "";
+    }
+}
+
+function toggleJamDate(checkbox) {
+    const container = document.getElementById('jam-date-container');
+    if (container) {
+        container.classList.toggle('d-none', !checkbox.checked);
     }
 }
 

@@ -146,17 +146,18 @@ class Lancamento(models.Model):
 
 		# Validação das parcelas do 13º
 		if self.parcela_13:
-			if self.parcela_13 == 1:
-				mes_esperado = 11
-				if getattr(self.empresa, 'paga_13_aniversario', False):
-					aniversario = getattr(self.funcionario, 'data_nascimento', None)
-					if aniversario:
-						mes_esperado = aniversario.month
-				if mes != mes_esperado:
-					raise ValidationError({'competencia': f"1ª parcela do 13º deve ser em {mes_esperado:02d}/{ano}."})
-			elif self.parcela_13 == 2:
-				if mes != 12:
-					raise ValidationError({'competencia': '2ª parcela do 13º deve ser em 12.'})
+			if getattr(self.empresa, 'validar_meses_parcela_13', True):
+				if self.parcela_13 == 1:
+					mes_esperado = 11
+					if getattr(self.empresa, 'paga_13_aniversario', False):
+						aniversario = getattr(self.funcionario, 'data_nascimento', None)
+						if aniversario:
+							mes_esperado = aniversario.month
+					if mes != mes_esperado:
+						raise ValidationError({'competencia': f"1ª parcela do 13º deve ser em {mes_esperado:02d}/{ano}."})
+				elif self.parcela_13 == 2:
+					if mes != 12:
+						raise ValidationError({'competencia': '2ª parcela do 13º deve ser em 12.'})
 		else:
 			# Competência normal já validada pelo intervalo do mês acima
 			pass
@@ -258,6 +259,7 @@ class Lancamento(models.Model):
 
 class ImportacaoLancamento(models.Model):
 	STATUS_CHOICES = [
+		('preview', 'Aguardando confirmação'),
 		('pending', 'Aguardando'),
 		('processing', 'Processando'),
 		('done', 'Concluído'),
@@ -274,9 +276,66 @@ class ImportacaoLancamento(models.Model):
 	criado_em = models.DateTimeField(auto_now_add=True)
 	atualizado_em = models.DateTimeField(auto_now=True)
 	resultado_json = models.JSONField(null=True, blank=True)
+	preview_resultado = models.JSONField(null=True, blank=True)
 	mensagem_erro = models.TextField(blank=True)
+
+	# Opções escolhidas pelo usuário no momento do upload
+	recalcular_fgts = models.BooleanField(
+		default=True,
+		verbose_name='Recalcular FGTS',
+		help_text='True = forçar 8% da base; False = manter o valor VALOR_FGTS do arquivo.',
+	)
+	aplicar_jam = models.BooleanField(
+		default=False,
+		verbose_name='Aplicar correção JAM',
+		help_text='Aplica juros acumulados (JAM) até a data de referência sobre o valor FGTS importado.',
+	)
+	data_referencia_jam = models.DateField(
+		null=True,
+		blank=True,
+		verbose_name='Data de referência JAM',
+		help_text='Data até a qual o JAM é calculado. Se em branco, usa a data de hoje.',
+	)
 
 	class Meta:
 		ordering = ['-criado_em']
 		verbose_name = 'Importação de Lançamentos'
 		verbose_name_plural = 'Importações de Lançamentos'
+
+
+class ImportacaoResponsabilidade(models.Model):
+	"""Registro de aceite de responsabilidade do usuário na confirmação do import."""
+
+	importacao = models.OneToOneField(
+		ImportacaoLancamento,
+		on_delete=models.CASCADE,
+		related_name='responsabilidade',
+	)
+	usuario = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		related_name='responsabilidades_importacao',
+	)
+	# Espelho das opções no momento da confirmação (imutável após criação)
+	recalcular_fgts_escolha = models.BooleanField()
+	aplicar_jam_escolha = models.BooleanField()
+	data_referencia_jam_escolha = models.DateField(null=True, blank=True)
+	# Checkbox explícito de aceite
+	aceite_responsabilidade = models.BooleanField(default=False)
+	# Texto exato exibido ao usuário (para rastreabilidade legal)
+	texto_termos = models.TextField()
+	# Contexto de rede
+	ip_address = models.GenericIPAddressField(null=True, blank=True)
+	user_agent = models.TextField(blank=True)
+	criado_em = models.DateTimeField(auto_now_add=True)
+	# Contadores preenchidos após o job de background
+	linhas_valor_do_arquivo = models.IntegerField(default=0)
+	linhas_jam_aplicado = models.IntegerField(default=0)
+
+	class Meta:
+		verbose_name = 'Responsabilidade de Importação'
+		verbose_name_plural = 'Responsabilidades de Importação'
+
+	def __str__(self):
+		return f"Responsabilidade import #{self.importacao_id} — {self.usuario}"

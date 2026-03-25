@@ -5,6 +5,7 @@ Regras:
 - Toda empresa tem 2 parcelas obrigatórias do 13º (1ª e 2ª)
 - Se empresa.paga_13_aniversario = False: 1ª parcela em 11/YYYY, 2ª em 12/YYYY
 - Se empresa.paga_13_aniversario = True: 1ª parcela no mês de aniversário do colaborador, 2ª em 12/YYYY
+- Se empresa.validar_meses_parcela_13 = False: aceita qualquer mês para as parcelas do 13º
 """
 
 from datetime import datetime
@@ -171,7 +172,11 @@ class Competencia13Service:
         # Com parcela_13, validar regras
         if parcela_13 not in [1, 2]:
             return (False, "Parcela do 13º deve ser 1 ou 2")
-        
+
+        # Se a empresa não exige validação de meses, qualquer mês é aceito
+        if not getattr(empresa, 'validar_meses_parcela_13', True):
+            return (True, "Competência do 13º válida")
+
         if parcela_13 == 1:
             # 1ª parcela
             mes_esperado = Competencia13Service.obter_mes_primeira_parcela_13(empresa, funcionario)

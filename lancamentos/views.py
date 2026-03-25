@@ -11,6 +11,7 @@ from django.urls import reverse_lazy
 from billing.services.features import can_use_feature, feature_block_context
 from empresas.models import Empresa
 from .models import Lancamento, ImportacaoLancamento
+from .models import ImportacaoResponsabilidade
 from .models_conferencia import ConferenciaLancamento
 from .forms import (
     RelatorioCompetenciaForm,
@@ -22,6 +23,8 @@ from .forms import (
     FiltroConferenciaForm,
     SefipImportForm,
     RelatorioRecolhimentoFuncionarioForm,
+    ImportacaoUploadForm,
+    ImportacaoConfirmacaoForm,
 )
 from .services.calculo import (
     calcular_fgts_atualizado,
@@ -73,12 +76,24 @@ def _process_importacao(importacao_id):
 
         with open(importacao.arquivo.path, 'rb') as f:
             result = LancamentoImportService.import_lancamentos_from_file(
-                f, importacao.empresa, importacao.usuario, progress_callback=on_progress
+                f, importacao.empresa, importacao.usuario, progress_callback=on_progress,
+                recalcular_fgts=importacao.recalcular_fgts,
+                aplicar_jam=importacao.aplicar_jam,
+                data_referencia_jam=importacao.data_referencia_jam,
             )
 
         importacao.status = 'done'
         importacao.resultado_json = result
         importacao.save(update_fields=['status', 'resultado_json', 'atualizado_em'])
+
+        # Atualizar contadores de responsabilidade
+        try:
+            resp = importacao.responsabilidade
+            resp.linhas_valor_do_arquivo = result.get('linhas_valor_do_arquivo', 0)
+            resp.linhas_jam_aplicado = result.get('linhas_jam_aplicado', 0)
+            resp.save(update_fields=['linhas_valor_do_arquivo', 'linhas_jam_aplicado'])
+        except Exception:
+            pass
     except Exception as e:
         try:
             if importacao is None:
@@ -2680,15 +2695,46 @@ class LancamentoImportView(LoginRequiredMixin, EmpresaScopeMixin, View):
             if not is_empresa_allowed(request.user, empresa.codigo):
                 return HttpResponseForbidden('Você não tem permissão para importar lançamentos para esta empresa.')
 
-        # Criar registro de importação e processar em background
+        # Ler opções de cálculo do formulário
+        recalcular_fgts = request.POST.get('recalcular_fgts', 'recalcular') != 'manter'
+        aplicar_jam = request.POST.get('aplicar_jam') in ('on', '1', 'true', 'True')
+        data_referencia_jam_raw = request.POST.get('data_referencia_jam', '').strip()
+        data_referencia_jam = None
+        if data_referencia_jam_raw:
+            try:
+                from datetime import date as _date
+                data_referencia_jam = datetime.strptime(data_referencia_jam_raw, '%Y-%m-%d').date()
+            except Exception:
+                pass
+
+        # Criar registro com status='preview' e processar amostra síncrona
         importacao = ImportacaoLancamento.objects.create(
             usuario=request.user,
             empresa=empresa,
             arquivo=file,
             nome_arquivo=file.name,
+            status='preview',
+            recalcular_fgts=recalcular_fgts,
+            aplicar_jam=aplicar_jam,
+            data_referencia_jam=data_referencia_jam,
         )
-        threading.Thread(target=_process_importacao, args=(importacao.id,), daemon=True).start()
-        return redirect('lancamento-import-status', pk=importacao.pk)
+
+        try:
+            with open(importacao.arquivo.path, 'rb') as f:
+                preview = LancamentoImportService.preview_lancamentos_from_file(
+                    f, empresa, request.user,
+                    recalcular_fgts=recalcular_fgts,
+                    aplicar_jam=aplicar_jam,
+                    data_referencia_jam=data_referencia_jam,
+                )
+            importacao.preview_resultado = preview
+            importacao.save(update_fields=['preview_resultado', 'atualizado_em'])
+        except Exception as exc:
+            importacao.delete()
+            messages.error(request, str(exc))
+            return redirect('lancamento-import')
+
+        return redirect('lancamento-import-preview', pk=importacao.pk)
 
 
 class LancamentoImportStatusView(LoginRequiredMixin, View):
@@ -2711,6 +2757,99 @@ def lancamento_import_status_json(request, pk):
         'linhas_total': importacao.linhas_total,
         'linhas_processadas': importacao.linhas_processadas,
     })
+
+
+class LancamentoImportPreviewView(LoginRequiredMixin, View):
+    """Página de pré-visualização da amostra antes de confirmar o import."""
+
+    def get(self, request, pk):
+        importacao = get_object_or_404(ImportacaoLancamento, pk=pk, usuario=request.user, status='preview')
+        confirm_form = ImportacaoConfirmacaoForm()
+        return render(request, 'lancamentos/lancamento_import_preview.html', {
+            'importacao': importacao,
+            'confirm_form': confirm_form,
+        })
+
+
+class LancamentoImportConfirmView(LoginRequiredMixin, View):
+    """Confirma o import e dispara o processamento assíncrono."""
+
+    def post(self, request, pk):
+        importacao = get_object_or_404(ImportacaoLancamento, pk=pk, usuario=request.user, status='preview')
+
+        confirm_form = ImportacaoConfirmacaoForm(request.POST)
+        if not confirm_form.is_valid():
+            messages.error(request, '❌ Você precisa aceitar a responsabilidade antes de confirmar a importação.')
+            return render(request, 'lancamentos/lancamento_import_preview.html', {
+                'importacao': importacao,
+                'confirm_form': confirm_form,
+            })
+
+        # Montar texto dos termos exibidos (rastreabilidade legal)
+        from django.utils import timezone as tz
+        opcao_fgts = 'RECALCULAR (8% da base)' if importacao.recalcular_fgts else 'MANTER valor do arquivo'
+        opcao_jam = (
+            f'APLICAR até {importacao.data_referencia_jam or "hoje"}'
+            if importacao.aplicar_jam else 'NÃO APLICAR'
+        )
+        texto_termos = (
+            f"Importação confirmada em {tz.now().strftime('%d/%m/%Y %H:%M:%S')} "
+            f"pelo usuário {request.user.username} (ID {request.user.pk}).\n"
+            f"Arquivo: {importacao.nome_arquivo}\n"
+            f"Empresa: {importacao.empresa}\n"
+            f"Opção FGTS: {opcao_fgts}\n"
+            f"Opção JAM: {opcao_jam}\n"
+            f"O usuário declarou-se responsável pela exatidão e adequação dos dados importados."
+        )
+
+        # Salvar registro de responsabilidade
+        ip = (request.META.get('HTTP_X_FORWARDED_FOR') or '').split(',')[0].strip() or request.META.get('REMOTE_ADDR')
+        ImportacaoResponsabilidade.objects.create(
+            importacao=importacao,
+            usuario=request.user,
+            recalcular_fgts_escolha=importacao.recalcular_fgts,
+            aplicar_jam_escolha=importacao.aplicar_jam,
+            data_referencia_jam_escolha=importacao.data_referencia_jam,
+            aceite_responsabilidade=True,
+            texto_termos=texto_termos,
+            ip_address=ip or None,
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
+        )
+
+        # Audit log genérico
+        try:
+            from audit_logs.models import AuditLog
+            AuditLog.objects.create(
+                user=request.user,
+                action='IMPORT',
+                module='lancamentos',
+                view_name='LancamentoImportConfirmView',
+                url_path=request.path,
+                ip_address=ip or None,
+                user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
+                method='POST',
+                status_code=302,
+                object_id=importacao.pk,
+                object_repr=f"Importação #{importacao.pk}: {importacao.nome_arquivo}",
+                description=(
+                    f"Importação confirmada. "
+                    f"recalcular_fgts={importacao.recalcular_fgts}, "
+                    f"aplicar_jam={importacao.aplicar_jam}"
+                ),
+                new_values={
+                    'recalcular_fgts': importacao.recalcular_fgts,
+                    'aplicar_jam': importacao.aplicar_jam,
+                    'data_referencia_jam': str(importacao.data_referencia_jam or ''),
+                    'aceite_responsabilidade': True,
+                },
+            )
+        except Exception:
+            pass  # audit log é não-crítico
+
+        importacao.status = 'pending'
+        importacao.save(update_fields=['status', 'atualizado_em'])
+        threading.Thread(target=_process_importacao, args=(importacao.id,), daemon=True).start()
+        return redirect('lancamento-import-status', pk=importacao.pk)
 
 
 class LegacyImportView(LoginRequiredMixin, FormView):

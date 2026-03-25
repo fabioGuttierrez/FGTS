@@ -57,6 +57,11 @@ class Empresa(models.Model):
 		verbose_name='Paga 1ª parcela do 13º no mês de aniversário?',
 		help_text='Se marcado, a 1ª parcela do 13º será paga no mês de aniversário do colaborador (ao invés de novembro). A 2ª parcela continua sendo paga em dezembro.'
 	)
+	validar_meses_parcela_13 = models.BooleanField(
+		default=True,
+		verbose_name='Validar meses das parcelas do 13º?',
+		help_text='Se marcado, a importação exige que as parcelas do 13º sejam nos meses esperados (novembro/dezembro ou aniversário/dezembro). Desmarque para empresas que pagam o 13º em meses diferentes.'
+	)
 
 	@property
 	def id(self):

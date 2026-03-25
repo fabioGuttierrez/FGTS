@@ -7,6 +7,7 @@ from .views import (
     RelatorioRecolhimentoFuncionarioView, export_recolhimento_funcionario_pdf,
     export_recolhimento_funcionario_xlsx,
     LancamentoImportStatusView, lancamento_import_status_json,
+    LancamentoImportPreviewView, LancamentoImportConfirmView,
 )
 from .bulk_delete import LancamentoBulkDeleteView
 
@@ -16,6 +17,8 @@ urlpatterns = [
     path('<int:pk>/editar/', LancamentoUpdateView.as_view(), name='lancamento-update'),
     path('<int:pk>/excluir/', LancamentoDeleteView.as_view(), name='lancamento-delete'),
     path('importar/', LancamentoImportView.as_view(), name='lancamento-import'),
+    path('importar/<int:pk>/preview/', LancamentoImportPreviewView.as_view(), name='lancamento-import-preview'),
+    path('importar/<int:pk>/confirmar/', LancamentoImportConfirmView.as_view(), name='lancamento-import-confirm'),
     path('importar/<int:pk>/status/', LancamentoImportStatusView.as_view(), name='lancamento-import-status'),
     path('importar/<int:pk>/status/json/', lancamento_import_status_json, name='lancamento-import-status-json'),
     path('download-template/', LancamentoDownloadTemplateView.as_view(), name='lancamento-download-template'),

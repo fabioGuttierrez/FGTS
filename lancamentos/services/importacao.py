@@ -7,13 +7,14 @@ import unicodedata
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from django.utils.timezone import make_aware
+from django.utils import timezone
 from django.core.exceptions import ValidationError
 from decimal import Decimal, InvalidOperation
 from lancamentos.models import Lancamento
 from empresas.models import Empresa
 from funcionarios.models import Funcionario
 from billing.models import BillingCustomer
-from fgtsweb.mixins import is_empresa_allowed
+from fgtsweb.mixins import is_empresa_allowed, get_allowed_empresa_ids
 from empresas.models_grupo import FuncionarioVinculo
 
 
@@ -83,10 +84,11 @@ class LancamentoImportService:
             raw = str(int(float(raw)))
 
         qs = Empresa.objects.filter(codigo_folha__iexact=raw)
-        if qs.count() > 1:
+        results = list(qs[:2])  # busca no máximo 2 para detectar duplicidade com 1 query
+        if len(results) > 1:
             raise ValueError(f"Codigo Folha '{raw}' duplicado. Contate o administrador.")
-        if qs.exists():
-            return qs.first()
+        if results:
+            return results[0]
 
         if raw.isdigit():
             try:
@@ -197,7 +199,165 @@ class LancamentoImportService:
         return buffer.getvalue()
     
     @staticmethod
-    def import_lancamentos_from_file(file, empresa, user, progress_callback=None):
+    def preview_lancamentos_from_file(file, empresa, user, max_rows: int = 15, *,
+                                      recalcular_fgts: bool = True,
+                                      aplicar_jam: bool = False,
+                                      data_referencia_jam=None) -> dict:
+        """
+        Lê as primeiras max_rows linhas do arquivo, valida cada uma sem salvar,
+        e retorna um dict para o usuário revisar antes de confirmar o import.
+
+        Returns:
+            dict com total_linhas_arquivo, linhas_amostradas, linhas_ok, linhas_erro e rows.
+        """
+        try:
+            wb = openpyxl.load_workbook(file, data_only=True, read_only=True)
+            ws = wb.active
+        except openpyxl.utils.exceptions.InvalidFileException:
+            raise ValueError("❌ Arquivo inválido. Por favor, envie um arquivo XLSX válido.")
+        except Exception as e:
+            raise ValueError(f"❌ Erro ao ler arquivo: {str(e)}.")
+
+        if not ws.max_row or ws.max_row < 2:
+            raise ValueError("❌ Arquivo vazio. O arquivo deve conter pelo menos uma linha de dados além do cabeçalho.")
+
+        total_linhas_arquivo = max((ws.max_row or 2) - 1, 0)
+
+        rows_iter = ws.iter_rows(values_only=True)
+        try:
+            raw_headers = list(next(rows_iter))
+        except StopIteration:
+            raise ValueError("❌ Arquivo vazio.")
+
+        headers_upper = [
+            LancamentoImportService._canonicalize_header(LancamentoImportService._normalize_header(h))
+            for h in raw_headers
+        ]
+
+        has_empresa_column = 'EMPRESA' in headers_upper
+
+        if not has_empresa_column and not empresa:
+            raise ValueError("❌ Selecione uma empresa para importar ou preencha a coluna EMPRESA no arquivo.")
+
+        missing_columns = [col for col in LancamentoImportService.REQUIRED_COLUMNS if col not in headers_upper]
+        if missing_columns:
+            raise ValueError(
+                f"❌ Colunas obrigatórias faltando: {', '.join(missing_columns)}. "
+                f"Baixe o modelo atualizado e preencha corretamente."
+            )
+
+        column_indices = {col: headers_upper.index(col) for col in LancamentoImportService.REQUIRED_COLUMNS}
+        for col in LancamentoImportService.OPTIONAL_COLUMNS:
+            if col in headers_upper:
+                column_indices[col] = headers_upper.index(col)
+
+        billing_cache = {}
+        empresa_cache = {}
+        vinculo_cache = {}
+        allowed_empresa_ids = get_allowed_empresa_ids(user)
+
+        jam_coef_cache: dict = {}
+        if aplicar_jam:
+            try:
+                from datetime import date as _date
+                from coefjam.models import CoefJam
+                for coef in CoefJam.objects.order_by('-data_pagamento'):
+                    comp_raw = str(coef.competencia).strip()
+                    try:
+                        if '/' in comp_raw:
+                            m, y = comp_raw.split('/')
+                        else:
+                            y, m = comp_raw[:7].split('-')
+                        jam_coef_cache.setdefault(_date(int(y), int(m), 1), Decimal(str(coef.valor)))
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+        def _jam_coef_lookup(comp_date):
+            return jam_coef_cache.get(comp_date) if jam_coef_cache else None
+
+        nome_idx = column_indices.get('NOME_FUNCIONARIO')
+        cpf_idx = column_indices.get('CPF_FUNCIONARIO')
+        empresa_idx = column_indices.get('EMPRESA')
+
+        rows_preview = []
+        linhas_amostradas = 0
+        linhas_ok = 0
+        linhas_erro = 0
+
+        for row_idx, row in enumerate(rows_iter, start=2):
+            if not any(row):
+                continue
+            if linhas_amostradas >= max_rows:
+                break
+
+            linhas_amostradas += 1
+
+            raw_nome = str(row[nome_idx]).strip() if nome_idx is not None and row[nome_idx] else ''
+            raw_cpf_val = row[cpf_idx] if cpf_idx is not None else ''
+            raw_cpf = ''.join(filter(str.isdigit, str(raw_cpf_val))) if raw_cpf_val else ''
+            raw_cpf_display = f"{raw_cpf[:3]}.{raw_cpf[3:6]}.{raw_cpf[6:9]}-{raw_cpf[9:]}" if len(raw_cpf) == 11 else raw_cpf
+
+            raw_empresa_val = row[empresa_idx] if empresa_idx is not None and empresa_idx < len(row) else None
+            raw_empresa_display = str(raw_empresa_val).strip() if raw_empresa_val not in [None, ''] else (empresa.codigo_folha if empresa else '')
+
+            entry = {
+                'row_idx': row_idx,
+                'raw_nome': raw_nome,
+                'raw_cpf': raw_cpf_display,
+                'raw_empresa': raw_empresa_display,
+            }
+
+            try:
+                lancamento_data = LancamentoImportService._process_row(
+                    row, column_indices, empresa, user, row_idx,
+                    billing_cache, empresa_cache, allowed_empresa_ids, vinculo_cache,
+                    recalcular_fgts=recalcular_fgts,
+                    aplicar_jam=aplicar_jam,
+                    data_referencia_jam=data_referencia_jam,
+                    jam_coef_lookup=_jam_coef_lookup,
+                )
+                vinculo = lancamento_data.get('vinculo')
+                entry.update({
+                    'status': 'ok',
+                    'funcionario_nome': vinculo.funcionario.nome if vinculo else '',
+                    'empresa_nome': lancamento_data['empresa'].nome,
+                    'competencia': lancamento_data['competencia'],
+                    'base_fgts': f"{lancamento_data['base_fgts']:.2f}",
+                    'valor_fgts': f"{lancamento_data['valor_fgts']:.2f}",
+                    'parcela_13': lancamento_data.get('parcela_13'),
+                    'jam_aplicado': lancamento_data.get('_jam_aplicado', False),
+                    'valor_fgts_modo': 'arquivo' if not recalcular_fgts else 'calculado',
+                })
+                linhas_ok += 1
+            except Exception as exc:
+                entry.update({
+                    'status': 'error',
+                    'error': str(exc),
+                })
+                linhas_erro += 1
+
+            rows_preview.append(entry)
+
+        try:
+            wb.close()
+        except Exception:
+            pass
+
+        return {
+            'total_linhas_arquivo': total_linhas_arquivo,
+            'linhas_amostradas': linhas_amostradas,
+            'linhas_ok': linhas_ok,
+            'linhas_erro': linhas_erro,
+            'rows': rows_preview,
+        }
+
+    @staticmethod
+    def import_lancamentos_from_file(file, empresa, user, progress_callback=None, *,
+                                     recalcular_fgts: bool = True,
+                                     aplicar_jam: bool = False,
+                                     data_referencia_jam=None):
         """
         Importa lançamentos de um arquivo XLSX para uma empresa específica
 
@@ -299,12 +459,46 @@ class LancamentoImportService:
             'warnings': [],
             'created': 0,
             'updated': 0,
-            'skipped': 0
+            'skipped': 0,
+            'linhas_valor_do_arquivo': 0,
+            'linhas_jam_aplicado': 0,
         }
         
         linhas_processadas = 0
 
-        billing_cache = {}
+        # Caches que persistem entre linhas para evitar queries repetidas
+        billing_cache = {}   # str(empresa.codigo) → BillingCustomer | str(erro)
+        empresa_cache = {}   # raw_value → Empresa | None
+        vinculo_cache = {}   # "c:{cpf}:{empresa_pk}" → list[FuncionarioVinculo]
+                             # "m:{matricula}:{empresa_pk}" → FuncionarioVinculo | None
+        # get_allowed_empresa_ids faz ~5 queries (user.empresa, grupo, roles…);
+        # computar uma única vez antes do loop e reutilizar em toda a importação.
+        allowed_empresa_ids = get_allowed_empresa_ids(user)  # None = superuser irrestrito
+
+        # Cache de coeficientes JAM: pré-carrega TODOS de uma vez quando aplicar_jam=True.
+        # Sem o cache, calcular_jam_ate_pagamento faz 1 query/mês/linha
+        # (ex: 74 meses × 1.000 linhas = 74.000 queries desnecessárias).
+        jam_coef_cache: dict = {}
+        if aplicar_jam:
+            try:
+                from datetime import date as _date
+                from coefjam.models import CoefJam
+                # order_by desc → setdefault mantém o registro mais recente por competência
+                for coef in CoefJam.objects.order_by('-data_pagamento'):
+                    comp_raw = str(coef.competencia).strip()
+                    try:
+                        if '/' in comp_raw:
+                            m, y = comp_raw.split('/')
+                        else:
+                            y, m = comp_raw[:7].split('-')
+                        jam_coef_cache.setdefault(_date(int(y), int(m), 1), Decimal(str(coef.valor)))
+                    except Exception:
+                        continue
+            except Exception:
+                pass  # se falhar, o JAM usa a busca normal (1 query/mês)
+
+        def _jam_coef_lookup(comp_date):
+            return jam_coef_cache.get(comp_date) if jam_coef_cache else None
 
         if progress_callback:
             progress_callback(0, total_linhas)
@@ -321,10 +515,23 @@ class LancamentoImportService:
             
             try:
                 lancamento_data = LancamentoImportService._process_row(
-                    row, column_indices, empresa, user, row_idx, billing_cache
+                    row, column_indices, empresa, user, row_idx,
+                    billing_cache, empresa_cache, allowed_empresa_ids, vinculo_cache,
+                    recalcular_fgts=recalcular_fgts,
+                    aplicar_jam=aplicar_jam,
+                    data_referencia_jam=data_referencia_jam,
+                    jam_coef_lookup=_jam_coef_lookup,
                 )
-                
+
                 if lancamento_data:
+                    # Extrair flags internas antes de criar o objeto
+                    _jam_aplicado = lancamento_data.pop('_jam_aplicado', False)
+                    desired_valor_fgts = lancamento_data['valor_fgts']
+                    computed_8pct = lancamento_data['base_fgts'] * Decimal('0.08')
+                    # Precisamos restaurar o valor do arquivo se o usuário escolheu MANTER
+                    # e o valor difere do 8% (pois Lancamento.save() sempre força 8%)
+                    needs_restore = (not recalcular_fgts) and (desired_valor_fgts != computed_8pct)
+
                     # Verificar se já existe lançamento para esta competência/parcela
                     existing_qs = Lancamento.objects.filter(
                         empresa=lancamento_data['empresa'],
@@ -337,31 +544,43 @@ class LancamentoImportService:
                     else:
                         existing_qs = existing_qs.filter(funcionario=lancamento_data['funcionario'], vinculo__isnull=True)
 
-                    existing_count = existing_qs.count()
-                    if existing_count > 1:
+                    existing_list = list(existing_qs[:2])
+                    if len(existing_list) > 1:
                         parcela_label = f" (13º {lancamento_data.get('parcela_13')}ª parcela)" if lancamento_data.get('parcela_13') else ""
                         raise ValueError(
                             f"Duplicidade detectada: já existem múltiplos lançamentos para esta competência{parcela_label}."
                         )
 
-                    existing = existing_qs.first()
-                    
+                    existing = existing_list[0] if existing_list else None
+
                     if existing:
                         # Atualizar
                         for key, value in lancamento_data.items():
-                            if key not in ['funcionario', 'vinculo']:  # Não atualizar chaves de vínculo
+                            if key not in ['funcionario', 'vinculo']:
                                 setattr(existing, key, value)
-                        existing.full_clean()
                         existing.save()
+                        if needs_restore:
+                            Lancamento.objects.filter(pk=existing.pk).update(
+                                valor_fgts=desired_valor_fgts,
+                                atualizado_em=timezone.now(),
+                            )
                         result['updated'] += 1
                     else:
                         # Criar novo
                         novo = Lancamento(**lancamento_data)
-                        novo.full_clean()
                         novo.save()
+                        if needs_restore:
+                            Lancamento.objects.filter(pk=novo.pk).update(
+                                valor_fgts=desired_valor_fgts,
+                                atualizado_em=timezone.now(),
+                            )
                         result['created'] += 1
-                    
+
                     result['success'] += 1
+                    if needs_restore:
+                        result['linhas_valor_do_arquivo'] += 1
+                    if _jam_aplicado:
+                        result['linhas_jam_aplicado'] += 1
                 else:
                     result['skipped'] += 1
                     
@@ -378,11 +597,21 @@ class LancamentoImportService:
                 "Verifique se você preencheu o arquivo corretamente e removeu a linha de exemplo."
             )
 
-        wb.close()
+        try:
+            wb.close()
+        except Exception:
+            # openpyxl pode lançar erro ao parsear metadados do AutoFilter ou
+            # outros elementos não relacionados aos dados (ex: CustomFilter inválido).
+            # O dado já foi processado; ignore erros de fechamento.
+            pass
         return result
     
     @staticmethod
-    def _process_row(row, column_indices, empresa, user, row_idx, billing_cache):
+    def _process_row(row, column_indices, empresa, user, row_idx, billing_cache, empresa_cache, allowed_empresa_ids, vinculo_cache, *,
+                     recalcular_fgts: bool = True,
+                     aplicar_jam: bool = False,
+                     data_referencia_jam=None,
+                     jam_coef_lookup=None):
         """Processa uma linha do arquivo e retorna dados do lançamento"""
 
         # Extrair MATRÍCULA (opcional)
@@ -415,17 +644,22 @@ class LancamentoImportService:
         empresa_idx = column_indices.get('EMPRESA')
         if empresa_idx is not None and row[empresa_idx] not in [None, '']:
             raw = row[empresa_idx]
-            empresa_row = LancamentoImportService._resolve_empresa_from_identifier(raw)
+            raw_key = str(raw).strip()
+            if raw_key in empresa_cache:
+                empresa_row = empresa_cache[raw_key]
+            else:
+                empresa_row = LancamentoImportService._resolve_empresa_from_identifier(raw)
+                empresa_cache[raw_key] = empresa_row
             if not empresa_row:
                 raise ValueError(f"Empresa '{raw}' não encontrada")
 
         if not empresa_row:
             raise ValueError('Empresa não informada. Selecione uma empresa ou preencha a coluna EMPRESA.')
 
-        if not is_empresa_allowed(user, empresa_row.codigo):
+        if allowed_empresa_ids is not None and empresa_row.codigo not in allowed_empresa_ids:
             raise ValueError('Você não tem permissão para importar lançamentos para a empresa informada.')
 
-        LancamentoImportService._validate_billing_for_empresa(empresa_row, billing_cache)
+        billing_customer = LancamentoImportService._validate_billing_for_empresa(empresa_row, billing_cache)
 
         # Extrair competência
         competencia_idx = column_indices.get('COMPETENCIA')
@@ -451,9 +685,8 @@ class LancamentoImportService:
         except Exception:
             raise ValueError(f"Competência inválida: '{competencia}'. Use o formato MM/YYYY (ex: 01/2026)")
 
-        # Validar limite de histórico
+        # Validar limite de histórico (usa billing_customer já obtido do cache acima)
         try:
-            billing_customer = empresa_row.billing_customer
             max_history_months = billing_customer.get_effective_max_history_months()
             if max_history_months is not None and max_history_months > 0:
                 competencia_date = datetime(ano, mes, 1).date()
@@ -480,6 +713,7 @@ class LancamentoImportService:
             competencia=competencia,
             raw_vinculo=raw_vinculo,
             raw_matricula=matricula,
+            vinculo_cache=vinculo_cache,
         )
 
         funcionario = vinculo.funcionario
@@ -500,21 +734,45 @@ class LancamentoImportService:
         if base_fgts < 0:
             raise ValueError(f"Base FGTS não pode ser negativa: {base_fgts}")
         
-        # Calcular ou extrair valor FGTS
+        # Calcular ou extrair valor FGTS conforme opção do usuário
         valor_fgts_idx = column_indices.get('VALOR_FGTS')
+        valor_fgts_arquivo = None
+
         if valor_fgts_idx is not None and row[valor_fgts_idx]:
             try:
                 valor_fgts_value = row[valor_fgts_idx]
                 if isinstance(valor_fgts_value, (int, float)):
-                    valor_fgts = Decimal(str(valor_fgts_value))
+                    valor_fgts_arquivo = Decimal(str(valor_fgts_value))
                 else:
                     valor_fgts_str = str(valor_fgts_value).strip().replace(',', '.')
-                    valor_fgts = Decimal(valor_fgts_str)
+                    valor_fgts_arquivo = Decimal(valor_fgts_str)
             except (InvalidOperation, ValueError):
-                valor_fgts = base_fgts * Decimal('0.08')
-        else:
+                pass
+
+        if recalcular_fgts or valor_fgts_arquivo is None:
+            # Opção padrão: forçar 8% da base
             valor_fgts = base_fgts * Decimal('0.08')
+        else:
+            # Usuário escolheu MANTER o valor do arquivo
+            valor_fgts = valor_fgts_arquivo
         
+        # Aplicar correção JAM se o usuário solicitou
+        _jam_aplicado = False
+        if aplicar_jam:
+            try:
+                from datetime import date as _date
+                from lancamentos.services.calculo import calcular_jam_ate_pagamento
+                mes_str, ano_str = competencia.split('/')
+                comp_date = _date(int(ano_str), int(mes_str), 1)
+                ref_date = data_referencia_jam or _date.today()
+                if ref_date > comp_date:
+                    jam_total, _, _ = calcular_jam_ate_pagamento(valor_fgts, comp_date, ref_date, coef_lookup=jam_coef_lookup)
+                    if jam_total > Decimal('0.00'):
+                        valor_fgts = (valor_fgts + jam_total).quantize(Decimal('0.01'))
+                        _jam_aplicado = True
+            except Exception:
+                pass  # JAM não bloqueia a linha — importa sem a correção
+
         # Dados do lançamento
         lancamento_data = {
             'empresa': empresa_row,
@@ -527,6 +785,7 @@ class LancamentoImportService:
             'data_pagto': None,
             'valor_pago': None,
             'parcela_13': None,
+            '_jam_aplicado': _jam_aplicado,  # flag interna, removida antes de salvar
         }
         
         # Processar campo PAGO (opcional)
@@ -584,14 +843,14 @@ class LancamentoImportService:
         return lancamento_data
 
     @staticmethod
-    def _validate_billing_for_empresa(empresa: Empresa, billing_cache: dict) -> None:
-        """Valida billing para uma empresa, com cache simples por código."""
+    def _validate_billing_for_empresa(empresa: Empresa, billing_cache: dict) -> 'BillingCustomer':
+        """Valida billing para uma empresa e retorna o BillingCustomer, com cache por código."""
         key = str(getattr(empresa, 'codigo', empresa.pk))
         cached = billing_cache.get(key)
-        if cached is True:
-            return
-        if isinstance(cached, str):
-            raise ValueError(cached)
+        if cached is not None:
+            if isinstance(cached, str):
+                raise ValueError(cached)
+            return cached  # BillingCustomer já validado
 
         try:
             billing_customer = BillingCustomer.objects.get(empresa=empresa)
@@ -619,16 +878,24 @@ class LancamentoImportService:
             billing_cache[key] = msg
             raise ValueError(msg)
 
-        billing_cache[key] = True
+        billing_cache[key] = billing_customer
+        return billing_customer
 
     @staticmethod
-    def _resolve_vinculo_for_empresa_competencia(*, cpf: str, empresa: Empresa, competencia: str, raw_vinculo, raw_matricula) -> FuncionarioVinculo:
+    def _resolve_vinculo_for_empresa_competencia(*, cpf: str, empresa: Empresa, competencia: str, raw_vinculo, raw_matricula, vinculo_cache: dict = None) -> FuncionarioVinculo:
         """Resolve qual vínculo (cadeira) usar, considerando empresa e competência.
 
         - Se a coluna VINCULO (ID) for informada, ela prevalece.
         - Caso contrário, exige exatamente 1 vínculo ativo na competência.
           Se houver mais de um, pede VINCULO para desambiguar.
+
+        vinculo_cache: dict mutable compartilhado entre rows para evitar queries repetidas
+        para o mesmo (cpf/matricula + empresa). Chaves:
+          "m:{matricula}:{empresa_pk}" → FuncionarioVinculo | None
+          "c:{cpf}:{empresa_pk}"       → list[FuncionarioVinculo]
         """
+        if vinculo_cache is None:
+            vinculo_cache = {}
 
         cpf_fmt = f"{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}" if cpf and len(cpf) == 11 else (cpf or '—')
 
@@ -669,17 +936,20 @@ class LancamentoImportService:
             if not matricula:
                 raise ValueError(f"MATRICULA inválida: '{raw_matricula}'. Informe apenas números.")
 
-            vinculos_m = FuncionarioVinculo.objects.select_related('funcionario', 'empresa').filter(
-                empresa=empresa,
-                matricula=matricula,
-            )
+            cache_key_m = f"m:{matricula}:{empresa.pk}"
+            if cache_key_m in vinculo_cache:
+                vinculo = vinculo_cache[cache_key_m]
+            else:
+                vinculo = FuncionarioVinculo.objects.select_related('funcionario', 'empresa').filter(
+                    empresa=empresa,
+                    matricula=matricula,
+                ).order_by('-data_admissao', '-id').first()
+                vinculo_cache[cache_key_m] = vinculo
 
-            if not vinculos_m.exists():
+            if not vinculo:
                 raise ValueError(
                     f"Vínculo não encontrado para a MATRÍCULA {matricula} na empresa '{empresa.nome}'."
                 )
-
-            vinculo = vinculos_m.order_by('-data_admissao', '-id').first()
 
             if cpf and getattr(vinculo.funcionario, 'cpf', None) != cpf:
                 raise ValueError(
@@ -694,19 +964,27 @@ class LancamentoImportService:
 
             return vinculo
 
-        vinculos = FuncionarioVinculo.objects.filter(
-            empresa=empresa,
-            funcionario__cpf=cpf,
-        ).select_related('funcionario').order_by('-data_admissao', '-id')
+        # Resolver por CPF — busca todos os vínculos uma única vez e cacheia
+        cache_key_c = f"c:{cpf}:{empresa.pk}"
+        if cache_key_c in vinculo_cache:
+            vinculos_list = vinculo_cache[cache_key_c]
+        else:
+            vinculos_list = list(
+                FuncionarioVinculo.objects.filter(
+                    empresa=empresa,
+                    funcionario__cpf=cpf,
+                ).select_related('funcionario').order_by('-data_admissao', '-id')
+            )
+            vinculo_cache[cache_key_c] = vinculos_list
 
-        if not vinculos.exists():
+        if not vinculos_list:
             raise ValueError(
                 f"Colaborador com CPF {cpf_fmt} não encontrado na empresa '{empresa.nome}'. "
                 f"Certifique-se de que o colaborador está cadastrado e vinculado a esta empresa antes de importar seus lançamentos."
             )
 
         ativos = []
-        for v in vinculos:
+        for v in vinculos_list:
             try:
                 if v.is_ativo_em_competencia(competencia):
                     ativos.append(v)

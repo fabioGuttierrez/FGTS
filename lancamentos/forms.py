@@ -711,3 +711,53 @@ class RelatorioRecolhimentoFuncionarioForm(forms.Form):
             if dt_inicio and dt_fim and dt_inicio > dt_fim:
                 raise ValidationError('A competência inicial não pode ser maior que a final.')
         return cleaned
+
+
+class ImportacaoUploadForm(forms.Form):
+    """Formulário de upload com opções de cálculo para o import de lançamentos."""
+
+    FGTS_OPCOES = [
+        ('recalcular', 'RECALCULAR — Forçar 8% da base (recomendado)'),
+        ('manter',     'MANTER — Usar o valor VALOR_FGTS exatamente como está no arquivo'),
+    ]
+
+    empresa = forms.IntegerField(
+        required=False,
+        widget=forms.HiddenInput(),
+    )
+
+    recalcular_fgts = forms.ChoiceField(
+        choices=FGTS_OPCOES,
+        initial='recalcular',
+        label='Valor FGTS',
+        widget=forms.RadioSelect(attrs={'class': 'form-check-input'}),
+    )
+
+    aplicar_jam = forms.BooleanField(
+        required=False,
+        label='Aplicar correção JAM/índices acumulados',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        help_text='Aplica os coeficientes JAM sobre o valor FGTS até a data de referência.',
+    )
+
+    data_referencia_jam = forms.DateField(
+        required=False,
+        label='Data de referência (para JAM)',
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control form-control-sm'}),
+        help_text='Deixe em branco para usar a data de hoje.',
+    )
+
+
+class ImportacaoConfirmacaoForm(forms.Form):
+    """Formulário de aceite de responsabilidade na etapa de confirmação do import."""
+
+    aceite_responsabilidade = forms.BooleanField(
+        required=True,
+        label=(
+            'Declaro que sou responsável pela exatidão dos dados importados, '
+            'estou ciente das opções de cálculo selecionadas e aceito as '
+            'consequências legais e trabalhistas desta importação.'
+        ),
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input', 'id': 'id_aceite_responsabilidade'}),
+        error_messages={'required': 'É obrigatório aceitar a responsabilidade antes de confirmar.'},
+    )
