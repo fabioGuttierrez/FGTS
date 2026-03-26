@@ -325,19 +325,16 @@
         
         <!-- ENTERPRISE -->
         <div class="col-lg-4">
-          <div class="plan-card p-4 {% if selected_plan.plan_type == 'ENTERPRISE' %}selected{% endif %}" 
-               onclick="selectPlan('ENTERPRISE')">
-            <input type="radio" name="plan_type" value="ENTERPRISE" 
-                   {% if selected_plan.plan_type == 'ENTERPRISE' %}checked{% endif %} 
-                   style="display:none">
-            
+          <div class="plan-card p-4"
+               onclick="window.open('https://wa.me/5544998047474?text=Ol%C3%A1%21+Tenho+interesse+no+plano+Enterprise+do+FGTS+Web.', '_blank')">
+
             <h4 class="mb-2">Enterprise</h4>
             <p class="text-muted mb-3">Sob consulta</p>
-            
+
             <div class="mb-4">
               <span class="price-large">Sob consulta</span>
             </div>
-            
+
             <ul class="feature-list">
               <li>CNPJs ilimitados</li>
               <li>Funcionários ilimitados</li>
@@ -345,11 +342,13 @@
               <li>Cálculo de FGTS + JAM</li>
               <li>Relatórios completos e API</li>
             </ul>
-            
-            <button type="button" class="btn-select-plan secondary mt-3"
-                    onclick="event.stopPropagation(); selectAndSubmit('ENTERPRISE')">
+
+            <a href="https://wa.me/5544998047474?text=Ol%C3%A1%21+Tenho+interesse+no+plano+Enterprise+do+FGTS+Web."
+               target="_blank" rel="noopener"
+               class="btn-select-plan secondary mt-3 d-block text-center text-decoration-none"
+               onclick="event.stopPropagation()">
               Falar com consultor
-            </button>
+            </a>
           </div>
         </div>
       </div>
