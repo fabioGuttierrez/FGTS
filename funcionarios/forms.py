@@ -62,6 +62,17 @@ class FuncionarioForm(forms.ModelForm):
             label='Data de Demissão',
             widget=forms.DateInput(format='%Y-%m-%d', attrs={'class': 'form-control', 'type': 'date'})
         )
+        self.fields['cargo'] = forms.CharField(
+            required=False,
+            label='Cargo',
+            widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex: Analista, Gerente...'})
+        )
+        self.fields['motivo_saida'] = forms.ChoiceField(
+            required=False,
+            label='Motivo do Desligamento',
+            choices=[('', '---------')] + list(FuncionarioVinculo.MOTIVO_SAIDA_CHOICES),
+            widget=forms.Select(attrs={'class': 'form-select'})
+        )
         # Pré-popula dados do vínculo atual ao editar
         instance = getattr(self, 'instance', None)
         if instance and getattr(instance, 'pk', None):
@@ -71,6 +82,8 @@ class FuncionarioForm(forms.ModelForm):
                 self.fields['empresa'].initial = vinculo.empresa
                 self.fields['data_admissao'].initial = vinculo.data_admissao
                 self.fields['data_demissao'].initial = vinculo.data_demissao
+                self.fields['cargo'].initial = vinculo.cargo
+                self.fields['motivo_saida'].initial = vinculo.motivo_saida or ''
                 if vinculo.salario:
                     self.fields['salario_inicial'].initial = vinculo.salario
         # Django 5+ usa dict normal, não OrderedDict; não há garantia de ordem, mas não quebra o form
@@ -126,6 +139,8 @@ class FuncionarioForm(forms.ModelForm):
         data_admissao = self.cleaned_data['data_admissao']
         data_demissao = self.cleaned_data.get('data_demissao')
         salario = self.cleaned_data.get('salario_inicial')
+        cargo = (self.cleaned_data.get('cargo') or '').strip() or None
+        motivo_saida = self.cleaned_data.get('motivo_saida') or None
         # Atualiza vínculo atual (mesma empresa) ou cria novo se necessário
         vinculo = funcionario.vinculo_atual()
         if vinculo and vinculo.empresa == empresa:
@@ -133,6 +148,8 @@ class FuncionarioForm(forms.ModelForm):
             vinculo.data_admissao = data_admissao
             vinculo.data_demissao = data_demissao
             vinculo.salario = salario or None
+            vinculo.cargo = cargo
+            vinculo.motivo_saida = motivo_saida
             vinculo.save()
         elif not funcionario.vinculos.filter(empresa=empresa, data_admissao=data_admissao).exists():
             FuncionarioVinculo.objects.create(
@@ -141,7 +158,9 @@ class FuncionarioForm(forms.ModelForm):
                 matricula=matricula or None,
                 data_admissao=data_admissao,
                 data_demissao=data_demissao,
-                salario=salario or None
+                salario=salario or None,
+                cargo=cargo,
+                motivo_saida=motivo_saida,
             )
         return funcionario
 

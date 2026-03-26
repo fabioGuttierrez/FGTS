@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-
+{% load lancamento_extras %}
 {% block title %}Lançamentos - FGTS Web{% endblock %}
 
 {% block content %}
@@ -299,7 +299,7 @@
                                 <small class="text-muted">{{ lancamento.empresa.cnpj }}</small>
                             </td>
                             <td class="py-3 px-4 text-end">
-                                <span class="fw-bold text-success">R$ {{ lancamento.base_fgts|floatformat:"2" }}</span>
+                                <span class="fw-bold text-success">R$ {{ lancamento.base_fgts|brl }}</span>
                             </td>
                             <td class="py-3 px-4">
                                 {% if lancamento.pago %}

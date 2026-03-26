@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load lancamento_extras %}
 {% block content %}
 <div class="container d-flex justify-content-center align-items-center min-vh-100" style="background: #f4f8fb;">
   <div class="w-100" style="max-width: 420px;">
@@ -58,7 +59,7 @@
     {% if memoria %}
     <div class="card shadow-sm p-4 mb-4" style="border-radius: 18px; background: #fff;">
       <h4 class="mb-3 text-primary" style="font-weight: 700;">Resultado da Correção FGTS</h4>
-      <div class="mb-2"><b>Valor da Correção:</b> <span style="font-size:1.4em;color:#1a7f3c;font-weight:700;">R$ {{ memoria.correcao|floatformat:2 }}</span></div>
+      <div class="mb-2"><b>Valor da Correção:</b> <span style="font-size:1.4em;color:#1a7f3c;font-weight:700;">R$ {{ memoria.correcao|brl }}</span></div>
       <hr>
       {% if mensagem %}
         <div class="alert {% if premium_liberado %}alert-success{% else %}alert-warning{% endif %} mt-2" role="alert" style="font-size:1.1em;">

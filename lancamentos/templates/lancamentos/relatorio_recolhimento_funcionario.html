@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load lancamento_extras %}
 
 {% block title %}Recolhimento por Funcionário{% endblock %}
 
@@ -94,19 +95,19 @@
         <div class="col-sm-4">
           <div class="card border-0 shadow-sm text-center py-3">
             <div class="text-muted small mb-1"><i class="bi bi-exclamation-circle text-warning me-1"></i>Valor a Recolher (em aberto)</div>
-            <div class="fs-5 fw-bold text-warning">{{ total_geral_recolher|floatformat:2 }}</div>
+            <div class="fs-5 fw-bold text-warning">{{ total_geral_recolher|brl }}</div>
           </div>
         </div>
         <div class="col-sm-4">
           <div class="card border-0 shadow-sm text-center py-3">
             <div class="text-muted small mb-1"><i class="bi bi-check-circle text-success me-1"></i>Total Recolhido</div>
-            <div class="fs-5 fw-bold text-success">{{ total_geral_recolhido|floatformat:2 }}</div>
+            <div class="fs-5 fw-bold text-success">{{ total_geral_recolhido|brl }}</div>
           </div>
         </div>
         <div class="col-sm-4">
           <div class="card border-0 shadow-sm text-center py-3">
             <div class="text-muted small mb-1"><i class="bi bi-sigma text-primary me-1"></i>Total Geral</div>
-            <div class="fs-5 fw-bold text-primary">{{ total_geral|floatformat:2 }}</div>
+            <div class="fs-5 fw-bold text-primary">{{ total_geral|brl }}</div>
           </div>
         </div>
       </div>
@@ -166,13 +167,13 @@
                   </td>
                   <td class="text-center font-monospace" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.pis|default:"—" }}</td>
                   <td class="text-end pe-2 {% if item.valor_a_recolher > 0 %}text-warning fw-semibold{% endif %}" style="white-space:nowrap;">
-                    {{ item.valor_a_recolher|floatformat:2 }}
+                    {{ item.valor_a_recolher|brl }}
                   </td>
                   <td class="text-end pe-2 {% if item.total_recolhido > 0 %}text-success{% endif %}" style="white-space:nowrap;">
-                    {{ item.total_recolhido|floatformat:2 }}
+                    {{ item.total_recolhido|brl }}
                   </td>
                   <td class="text-end pe-3 fw-bold" style="white-space:nowrap;">
-                    {{ item.total_geral|floatformat:2 }}
+                    {{ item.total_geral|brl }}
                   </td>
                 </tr>
                 {% endfor %}
@@ -180,9 +181,9 @@
               <tfoot>
                 <tr style="background:#D0DFF0; font-size:.84rem;">
                   <td colspan="5" class="ps-3 fw-bold text-primary">EMPRESA: Totais:</td>
-                  <td class="text-end pe-2 fw-bold text-warning">{{ emp.total_a_recolher|floatformat:2 }}</td>
-                  <td class="text-end pe-2 fw-bold text-success">{{ emp.total_recolhido|floatformat:2 }}</td>
-                  <td class="text-end pe-3 fw-bold text-primary">{{ emp.total_geral|floatformat:2 }}</td>
+                  <td class="text-end pe-2 fw-bold text-warning">{{ emp.total_a_recolher|brl }}</td>
+                  <td class="text-end pe-2 fw-bold text-success">{{ emp.total_recolhido|brl }}</td>
+                  <td class="text-end pe-3 fw-bold text-primary">{{ emp.total_geral|brl }}</td>
                 </tr>
               </tfoot>
             </table>
@@ -198,15 +199,15 @@
           <div class="row text-center">
             <div class="col-md-4">
               <div class="opacity-75 small">Valor a Recolher — Total Geral</div>
-              <div class="fs-5 fw-bold">{{ total_geral_recolher|floatformat:2 }}</div>
+              <div class="fs-5 fw-bold">{{ total_geral_recolher|brl }}</div>
             </div>
             <div class="col-md-4">
               <div class="opacity-75 small">Total Recolhido — Total Geral</div>
-              <div class="fs-5 fw-bold">{{ total_geral_recolhido|floatformat:2 }}</div>
+              <div class="fs-5 fw-bold">{{ total_geral_recolhido|brl }}</div>
             </div>
             <div class="col-md-4">
               <div class="opacity-75 small">Total Geral do Relatório</div>
-              <div class="fs-5 fw-bold">{{ total_geral|floatformat:2 }}</div>
+              <div class="fs-5 fw-bold">{{ total_geral|brl }}</div>
             </div>
           </div>
         </div>

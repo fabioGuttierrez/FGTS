@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load lancamento_extras %}
 
 {% block title %}Checkout — FGTS Web{% endblock %}
 
@@ -160,7 +161,7 @@
           <div style="padding: 15px; background: #f8f9fa; border-radius: 8px; margin-bottom: 20px;">
             <p class="mb-2">
               <span>{{ plan_name }}</span>
-              <strong style="float: right;">R$ {{ amount|floatformat:2 }}</strong>
+              <strong style="float: right;">R$ {{ amount|brl }}</strong>
             </p>
             <p class="mb-0">
               <span>Período</span>
@@ -169,7 +170,7 @@
           </div>
           
           <div class="summary-total">
-            R$ {{ amount|floatformat:2 }}<br>
+            R$ {{ amount|brl }}<br>
             <small style="font-size: 0.6em; color: #666;">por mês</small>
           </div>
           

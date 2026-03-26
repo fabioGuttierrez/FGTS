@@ -1,6 +1,22 @@
+from decimal import Decimal, InvalidOperation
+
 from django import template
 
 register = template.Library()
+
+
+@register.filter(name='brl')
+def brl(value):
+    """Formata um valor numérico no padrão brasileiro: 123.456,78"""
+    if value is None or value == '':
+        return '0,00'
+    try:
+        num = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return value
+    formatted = f"{num:,.2f}"
+    # Swap separators: 1,234.56 -> 1.234,56
+    return formatted.replace(',', 'X').replace('.', ',').replace('X', '.')
 
 @register.simple_tag
 def get_vinculo_for_competencia(vinculos, empresa, competencia):

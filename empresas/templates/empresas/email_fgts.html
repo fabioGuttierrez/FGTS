@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load lancamento_extras %}
 <html lang="pt-BR">
 <head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f4f8fb;font-family:Arial,sans-serif;">
@@ -59,19 +60,19 @@
                     </tr>
                     <tr>
                       <td style="font-size:14px;color:#555;">Base FGTS</td>
-                      <td style="font-size:14px;color:#222;text-align:right;">{{ memoria.base_fgts|floatformat:2 }}</td>
+                      <td style="font-size:14px;color:#222;text-align:right;">{{ memoria.base_fgts|brl }}</td>
                     </tr>
                     <tr>
                       <td style="font-size:14px;color:#555;">FGTS do mês (8%)</td>
-                      <td style="font-size:14px;color:#222;text-align:right;">{{ memoria.fgts_mes|floatformat:2 }}</td>
+                      <td style="font-size:14px;color:#222;text-align:right;">{{ memoria.fgts_mes|brl }}</td>
                     </tr>
                     <tr>
                       <td style="font-size:14px;color:#555;">Correção monetária</td>
-                      <td style="font-size:14px;color:#1a7f3c;text-align:right;">{{ memoria.correcao|floatformat:2 }}</td>
+                      <td style="font-size:14px;color:#1a7f3c;text-align:right;">{{ memoria.correcao|brl }}</td>
                     </tr>
                     <tr>
                       <td style="font-size:15px;color:#222;font-weight:700;padding-top:10px;border-top:2px solid #dde3f0;">Total atualizado</td>
-                      <td style="font-size:15px;color:#005CA9;font-weight:700;text-align:right;padding-top:10px;border-top:2px solid #dde3f0;">{{ memoria.deposito_fgts|floatformat:2 }}</td>
+                      <td style="font-size:15px;color:#005CA9;font-weight:700;text-align:right;padding-top:10px;border-top:2px solid #dde3f0;">{{ memoria.deposito_fgts|brl }}</td>
                     </tr>
                     <tr>
                       <td colspan="2" style="padding-top:14px;padding-bottom:6px;border-top:2px solid #dde3f0;font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:1px;">
@@ -80,7 +81,7 @@
                     </tr>
                     <tr>
                       <td style="font-size:14px;color:#555;">JAM acumulado</td>
-                      <td style="font-size:14px;color:#222;text-align:right;">{{ memoria.jam|floatformat:2 }}</td>
+                      <td style="font-size:14px;color:#222;text-align:right;">{{ memoria.jam|brl }}</td>
                     </tr>
                   </table>
                 </td>

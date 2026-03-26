@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load lancamento_extras %}
 
 {% block title %}Pré-visualização da Importação{% endblock %}
 
@@ -144,10 +145,10 @@
                                 </td>
                                 <td class="text-nowrap">{{ row.competencia|default:"—" }}</td>
                                 <td class="text-end text-nowrap">
-                                    {% if row.base_fgts %}R$ {{ row.base_fgts }}{% else %}—{% endif %}
+                                    {% if row.base_fgts %}R$ {{ row.base_fgts|brl }}{% else %}—{% endif %}
                                 </td>
                                 <td class="text-end text-nowrap">
-                                    {% if row.valor_fgts %}R$ {{ row.valor_fgts }}{% else %}—{% endif %}
+                                    {% if row.valor_fgts %}R$ {{ row.valor_fgts|brl }}{% else %}—{% endif %}
                                 </td>
                                 <td class="text-danger small">
                                     {% if row.status == 'error' %}{{ row.error }}{% endif %}

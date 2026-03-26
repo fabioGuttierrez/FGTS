@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load lancamento_extras %}
 
 {% block title %}Rejeitar Lançamento - FGTS Web{% endblock %}
 
@@ -30,10 +31,10 @@
                                     <strong>Competência:</strong> {{ lancamento.competencia }}
                                 </div>
                                 <div class="col-md-4 mb-2">
-                                    <strong>Base FGTS:</strong> R$ {{ lancamento.base_fgts|floatformat:2 }}
+                                    <strong>Base FGTS:</strong> R$ {{ lancamento.base_fgts|brl }}
                                 </div>
                                 <div class="col-md-4 mb-2">
-                                    <strong>Valor FGTS:</strong> R$ {{ lancamento.valor_fgts|floatformat:2 }}
+                                    <strong>Valor FGTS:</strong> R$ {{ lancamento.valor_fgts|brl }}
                                 </div>
                             </div>
                         </div>

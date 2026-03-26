@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load lancamento_extras %}
 
 {% block title %}Conferência de Lançamentos - FGTS Web{% endblock %}
 
@@ -123,11 +124,11 @@
                                         <span class="badge bg-warning">13º</span>
                                         {% endif %}
                                     </td>
-                                    <td>{{ conf.lancamento.base_fgts|floatformat:2 }}</td>
+                                    <td>{{ conf.lancamento.base_fgts|brl }}</td>
                                     <td>
-                                        <strong>{{ conf.lancamento.valor_fgts|floatformat:2 }}</strong>
+                                        <strong>{{ conf.lancamento.valor_fgts|brl }}</strong>
                                         {% if conf.valor_conferido %}
-                                        <br><small class="text-warning">Conferido: {{ conf.valor_conferido|floatformat:2 }}</small>
+                                        <br><small class="text-warning">Conferido: {{ conf.valor_conferido|brl }}</small>
                                         {% endif %}
                                     </td>
                                     <td>

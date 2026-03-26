@@ -814,6 +814,8 @@ class RelatorioCompetenciaView(FormView):
         ctx['relatorio_bloqueio_motivo'] = bloqueio_ctx['feature_block_reason']
         ctx['empresa_contexto'] = empresa_ctx
         ctx['exibir_indice'] = self.request.session.get('exibir_indice', False)
+        ctx['exibir_jam'] = self.request.session.get('exibir_jam', True)
+        ctx['exibir_correcao'] = self.request.session.get('exibir_correcao', True)
         return ctx
 
     def form_invalid(self, form):
@@ -1317,6 +1319,8 @@ class RelatorioCompetenciaView(FormView):
                 'kpi_lancamentos': total_lancamentos,
                 'kpi_competencias': len(competencias_list),
                 'exibir_indice': self.request.session.get('exibir_indice', False),
+                'exibir_jam': self.request.session.get('exibir_jam', True),
+                'exibir_correcao': self.request.session.get('exibir_correcao', True),
             }
             contexto.update(feature_block_context('custom_reports', user=self.request.user, empresa=empresa))
             return render(self.request, self.template_name, contexto)
@@ -1507,6 +1511,8 @@ def relatorio_por_ids(request):
         'ids_param': ','.join([str(i) for i in ids]),
         'debug_lancamentos': debug_lancamentos if debug_detalhado else None,
         'exibir_indice': request.session.get('exibir_indice', False),
+        'exibir_jam': request.session.get('exibir_jam', True),
+        'exibir_correcao': request.session.get('exibir_correcao', True),
     }
     return render(request, 'lancamentos/relatorio_competencia.html', contexto)
 
@@ -1844,6 +1850,8 @@ def export_relatorio_competencia_pdf(request):
     matricula = (request.GET.get('matricula') or '').strip()
     data_pagamento_str = request.GET.get('data_pagamento')
     exibir_indice = request.session.get('exibir_indice', False)
+    exibir_jam = request.session.get('exibir_jam', True)
+    exibir_correcao = request.session.get('exibir_correcao', True)
     agrupamento = request.GET.get('agrupamento', 'competencia')
     ids_str = request.GET.get('ids', '').strip()
 
@@ -2081,7 +2089,12 @@ def export_relatorio_competencia_pdf(request):
 
             # JAM é um assunto distinto da correção/depósito FGTS.
             # No PDF, exibimos o JAM separado e não o somamos ao depósito.
-            pdf_header = ["Comp.", "13º", "Base FGTS", "Valor FGTS", "Correção", "JAM", "Total"]
+            pdf_header = ["Comp.", "13º", "Base FGTS", "Valor FGTS"]
+            if exibir_correcao:
+                pdf_header.append("Correção")
+            if exibir_jam:
+                pdf_header.append("JAM")
+            pdf_header.append("Total")
             if exibir_indice:
                 pdf_header.append("Índice CEF")
             table_data = [pdf_header]
@@ -2121,15 +2134,22 @@ def export_relatorio_competencia_pdf(request):
                     col_13,
                     _format_money(l.base_fgts),
                     _format_money(valor_fgts),
-                    _format_money(valor_correcao),
-                    _format_money(valor_jam),
-                    _format_money(valor_total),
                 ]
+                if exibir_correcao:
+                    row.append(_format_money(valor_correcao))
+                if exibir_jam:
+                    row.append(_format_money(valor_jam))
+                row.append(_format_money(valor_total))
                 if exibir_indice:
                     row.append(_format_indice(indice) if indice != '' else '')
                 table_data.append(row)
 
-            col_widths_pdf = [18*mm, 16*mm, 27*mm, 23*mm, 22*mm, 18*mm, 22*mm]
+            col_widths_pdf = [18*mm, 16*mm, 27*mm, 23*mm]
+            if exibir_correcao:
+                col_widths_pdf.append(22*mm)
+            if exibir_jam:
+                col_widths_pdf.append(18*mm)
+            col_widths_pdf.append(22*mm)
             if exibir_indice:
                 col_widths_pdf.append(30*mm)
             table = Table(
@@ -2149,8 +2169,7 @@ def export_relatorio_competencia_pdf(request):
             )
             story.append(table)
 
-            box_table = Table(
-                [
+            box_rows = [
                     [
                         Paragraph("DATA DO CÁLCULO", normal_style),
                         Paragraph(f"{data_pagamento.strftime('%d/%m/%Y')}", normal_style),
@@ -2158,49 +2177,52 @@ def export_relatorio_competencia_pdf(request):
                         Paragraph("Total do F.G.T.S. Mensal", normal_style),
                         Paragraph(_format_money(total_fgts), normal_style),
                     ],
-                    [
+                ]
+            if exibir_correcao:
+                box_rows.append([
                         "",
                         "",
                         "",
                         Paragraph("Total Depósito (sem JAM)", normal_style),
                         Paragraph(_format_money(total_deposito_sem_jam), normal_style),
-                    ],
-                    [
+                ])
+            if exibir_jam:
+                box_rows.append([
                         "",
                         "",
                         "",
                         Paragraph("Total JAM (juros)", normal_style),
                         Paragraph(_format_money(total_jam), normal_style),
-                    ],
-                    [
+                ])
+            box_rows.append([
                         "",
                         "",
                         "",
                         Paragraph("Valor da Multa Rescisória", normal_style),
                         Paragraph(_format_money(Decimal('0.00')), normal_style),
-                    ],
-                    [
+                    ])
+            box_rows.append([
                         "",
                         "",
                         "",
                         Paragraph("TOTAL A RECOLHER", styles['Heading4']),
                         Paragraph(_format_money(total_recolher), styles['Heading4']),
-                    ],
-                ],
+                    ])
+            box_table = Table(
+                box_rows,
                 colWidths=[35*mm, 30*mm, 10*mm, 55*mm, 30*mm],
                 hAlign='LEFT',
             )
-            box_table.setStyle(
-                TableStyle([
+            num_box_rows = len(box_rows)
+            box_style = [
                     ('GRID', (0, 0), (-1, -1), 0.75, colors.black),
                     ('SPAN', (0, 0), (1, 0)),
-                    ('SPAN', (0, 1), (1, 1)),
-                    ('SPAN', (0, 2), (1, 2)),
-                    ('SPAN', (0, 3), (1, 3)),
                     ('ALIGN', (4, 0), (4, -1), 'RIGHT'),
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ])
-            )
+            ]
+            for i in range(1, num_box_rows):
+                box_style.append(('SPAN', (0, i), (1, i)))
+            box_table.setStyle(TableStyle(box_style))
             story.append(Spacer(1, 6))
             story.append(box_table)
 

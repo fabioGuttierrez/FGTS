@@ -9,9 +9,9 @@ class GrupoEmpresaAdmin(admin.ModelAdmin):
 
 @admin.register(FuncionarioVinculo)
 class FuncionarioVinculoAdmin(admin.ModelAdmin):
-    list_display = ("funcionario", "empresa", "data_admissao", "data_demissao", "motivo_saida")
-    search_fields = ("funcionario__nome", "empresa__nome")
-    list_filter = ("empresa", "motivo_saida")
+    list_display = ("funcionario", "empresa", "cargo", "matricula", "data_admissao", "data_demissao", "status", "motivo_saida")
+    search_fields = ("funcionario__nome", "empresa__nome", "cargo", "matricula")
+    list_filter = ("empresa", "status", "motivo_saida")
 
 @admin.register(TransferenciaFuncionario)
 class TransferenciaFuncionarioAdmin(admin.ModelAdmin):

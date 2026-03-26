@@ -25,3 +25,21 @@ def toggle_exibir_indice(request):
     request.session['exibir_indice'] = not current
     next_url = request.META.get('HTTP_REFERER') or '/'
     return redirect(next_url)
+
+
+@login_required
+def toggle_exibir_jam(request):
+    """Alterna a exibição da coluna JAM nos relatórios (salvo na sessão do usuário)."""
+    current = request.session.get('exibir_jam', True)
+    request.session['exibir_jam'] = not current
+    next_url = request.META.get('HTTP_REFERER') or '/'
+    return redirect(next_url)
+
+
+@login_required
+def toggle_exibir_correcao(request):
+    """Alterna a exibição da coluna Correção nos relatórios (salvo na sessão do usuário)."""
+    current = request.session.get('exibir_correcao', True)
+    request.session['exibir_correcao'] = not current
+    next_url = request.META.get('HTTP_REFERER') or '/'
+    return redirect(next_url)

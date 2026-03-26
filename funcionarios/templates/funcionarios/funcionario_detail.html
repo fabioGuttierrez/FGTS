@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load lancamento_extras %}
 {% block title %}Detalhes do Funcionário{% endblock %}
 {% block content %}
 <div class="container py-4">
@@ -38,7 +39,7 @@
         <td>{{ vinculo.data_admissao|date:'d/m/Y' }}</td>
         <td>{{ vinculo.data_demissao|date:'d/m/Y' }}</td>
         <td>{{ vinculo.cargo|default:'—' }}</td>
-        <td>{% if vinculo.salario %}R$ {{ vinculo.salario|floatformat:2 }}{% else %}—{% endif %}</td>
+        <td>{% if vinculo.salario %}R$ {{ vinculo.salario|brl }}{% else %}—{% endif %}</td>
         <td>{{ vinculo.get_motivo_saida_display|default:'—' }}</td>
       </tr>
       {% empty %}
