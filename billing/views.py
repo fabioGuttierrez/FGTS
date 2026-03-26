@@ -232,12 +232,15 @@ def checkout_empresa(request, empresa_id):
 
         # Cria cliente no Asaas se ainda não existir (com proteção contra race condition)
         if not billing_customer.asaas_customer_id:
+            import re as _re
+            cnpj_digits = _re.sub(r'\D', '', empresa.cnpj or '')
+            fone_digits = _re.sub(r'\D', '', getattr(empresa, 'fone_contato', '') or '')
             customer_payload = {
                 'name': empresa.nome,
-                'cpfCnpj': empresa.cnpj or '',
+                'cpfCnpj': cnpj_digits,
                 'email': billing_customer.email_cobranca,
-                'phone': empresa.fone_contato,
-                'mobilePhone': empresa.fone_contato,
+                'phone': fone_digits,
+                'mobilePhone': fone_digits,
                 'externalReference': str(empresa.pk),
             }
             created_customer = client.create_customer(customer_payload)

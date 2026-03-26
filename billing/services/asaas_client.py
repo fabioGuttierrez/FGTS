@@ -16,7 +16,7 @@ class AsaasClient:
         sandbox_flag = (os.getenv('ASAAS_SANDBOX', '').lower() == 'true')
         env = os.getenv('ASAAS_ENV') or ('sandbox' if sandbox_flag else 'production')
         self.env = env
-        self.base_url = 'https://sandbox.asaas.com/api/v3' if env == 'sandbox' else 'https://api.asaas.com/v3'
+        self.base_url = 'https://sandbox.asaas.com/api/v3' if env == 'sandbox' else 'https://www.asaas.com/api/v3'
 
         # Prioriza chave explícita; se sandbox, tenta chave sandbox
         self.api_key = os.getenv('ASAAS_API_KEY')
