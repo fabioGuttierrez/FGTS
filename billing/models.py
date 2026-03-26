@@ -130,6 +130,16 @@ class BillingCustomer(models.Model):
     asaas_customer_id = models.CharField(max_length=100, blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
 
+    # Preço especial negociado (ex.: Enterprise sob consulta)
+    override_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Valor mensal especial (R$)',
+        help_text='Se informado, substitui o preço do plano para esta empresa na hora da cobrança.'
+    )
+
     # Limites especiais (excecoes por empresa)
     override_max_employees = models.IntegerField(
         null=True,

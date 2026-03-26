@@ -192,6 +192,10 @@ def _resolve_plan_choice(
         request.session.pop('selected_plan_type', None)
         request.session.pop('selected_plan_price', None)
 
+    # Valor negociado individualmente tem prioridade máxima sobre qualquer outro
+    if billing_customer.override_price is not None:
+        amount = billing_customer.override_price
+
     return plan_obj, amount, periodicity, plan_name
 
 

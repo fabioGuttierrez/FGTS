@@ -35,7 +35,7 @@ class PlanAdmin(admin.ModelAdmin):
 
 @admin.register(BillingCustomer)
 class BillingCustomerAdmin(admin.ModelAdmin):
-    list_display = ('empresa', 'plan', 'active_employees', 'status', 'created_at', 'override_max_employees', 'override_max_companies', 'override_max_history_months')
+    list_display = ('empresa', 'plan', 'override_price', 'active_employees', 'status', 'created_at', 'override_max_employees', 'override_max_companies', 'override_max_history_months')
     list_filter = ('plan', 'status')
     search_fields = ('empresa__nome', 'asaas_customer_id')
     readonly_fields = ('created_at', 'updated_at')
@@ -44,7 +44,8 @@ class BillingCustomerAdmin(admin.ModelAdmin):
             'fields': ('empresa', 'plan', 'active_employees')
         }),
         ('Cobrança', {
-            'fields': ('email_cobranca', 'status', 'asaas_customer_id')
+            'fields': ('email_cobranca', 'status', 'asaas_customer_id', 'override_price'),
+            'description': 'Se "Valor mensal especial" estiver preenchido, ele prevalece sobre o preço do plano.',
         }),
         ('Exceções de Limite', {
             'fields': ('override_max_employees', 'override_max_companies', 'override_max_history_months')
