@@ -124,9 +124,27 @@
           
           <form method="post" id="checkoutForm">
             {% csrf_token %}
-            
+
+            <div class="mb-4">
+              <label class="fw-bold mb-2 d-block">Forma de Pagamento</label>
+              <div class="d-flex gap-2 flex-wrap">
+                <label class="btn btn-outline-primary active" id="label-boleto">
+                  <input type="radio" name="billing_type" value="BOLETO" checked class="d-none" onclick="selectBillingType(this)">
+                  Boleto
+                </label>
+                <label class="btn btn-outline-primary" id="label-pix">
+                  <input type="radio" name="billing_type" value="PIX" class="d-none" onclick="selectBillingType(this)">
+                  PIX
+                </label>
+                <label class="btn btn-outline-primary" id="label-credit_card">
+                  <input type="radio" name="billing_type" value="CREDIT_CARD" class="d-none" onclick="selectBillingType(this)">
+                  Cartão de Crédito
+                </label>
+              </div>
+            </div>
+
             <button type="submit" class="btn-submit">
-              💳 Continuar para Pagamento
+              Continuar para Pagamento
             </button>
             <a href="{% url 'empresa-list' %}" class="btn btn-cancel">
               ← Cancelar
@@ -165,12 +183,17 @@
 </section>
 
 <script>
+function selectBillingType(radio) {
+  document.querySelectorAll('[name="billing_type"]').forEach(function(r) {
+    r.closest('label').classList.remove('active');
+  });
+  radio.closest('label').classList.add('active');
+}
 document.getElementById('checkoutForm').addEventListener('submit', function(e) {
   // Adicionar loading visual
   const btn = this.querySelector('button[type="submit"]');
-  const originalText = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '⏳ Processando...';
+  btn.textContent = 'Processando...';
 });
 </script>
 

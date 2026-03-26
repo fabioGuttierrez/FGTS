@@ -33,7 +33,9 @@ def _resolve_empresa(user=None, empresa: Optional[Empresa] = None) -> Optional[E
 def _trial_valid(bc: BillingCustomer) -> bool:
     if not bc.trial_active:
         return False
-    if bc.trial_expires and date.today() > bc.trial_expires:
+    if not bc.trial_expires:
+        return False  # Sem data de expiração = trial inválido
+    if date.today() > bc.trial_expires:
         return False
     return True
 

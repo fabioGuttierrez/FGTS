@@ -134,7 +134,7 @@
       </div>
       
       {% if erro %}
-        <div class="alert alert-warning mt-3">{{ erro|safe }}</div>
+        <div class="alert alert-warning mt-3">{{ erro }}</div>
       {% endif %}
       
       <!-- Bloco de avisos -->
@@ -231,8 +231,8 @@
                   <td class="no-break">{{ item.calc.valor_jam }}</td>
                   <td class="no-break"><strong>{{ item.calc.valor_deposito_fgts }}</strong></td>
                   <td>
-                    <a href="{% url 'relatorio-memoria-calculo' %}?empresa={{ empresa.pk }}&funcionario={{ item.lancamento.funcionario.pk }}{% if item.lancamento.vinculo %}&vinculo={{ item.lancamento.vinculo.pk }}{% endif %}&competencia={{ item.competencia }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}" 
-                       class="btn btn-sm btn-info" 
+                    <a href="{% url 'relatorio-memoria-calculo' %}?empresa={{ empresa.pk }}&funcionario={{ item.lancamento.funcionario.pk }}{% if item.lancamento.vinculo %}&vinculo={{ item.lancamento.vinculo.pk }}{% endif %}&competencia={{ item.competencia }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}{% if item.lancamento.parcela_13 %}&parcela_13={{ item.lancamento.parcela_13 }}{% endif %}"
+                       class="btn btn-sm btn-info"
                        title="Baixar Memória de Cálculo">
                       <i class="bi bi-calculator"></i>
                     </a>
@@ -315,8 +315,8 @@
                 <td class="no-break">{{ item.calc.valor_jam }}</td>
                 <td class="no-break"><strong>{{ item.calc.valor_deposito_fgts }}</strong></td>
                 <td>
-                  <a href="{% url 'relatorio-memoria-calculo' %}?empresa={{ empresa.pk }}&funcionario={{ item.lancamento.funcionario.pk }}{% if item.lancamento.vinculo %}&vinculo={{ item.lancamento.vinculo.pk }}{% endif %}&competencia={{ item.competencia }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}" 
-                     class="btn btn-sm btn-info" 
+                  <a href="{% url 'relatorio-memoria-calculo' %}?empresa={{ empresa.pk }}&funcionario={{ item.lancamento.funcionario.pk }}{% if item.lancamento.vinculo %}&vinculo={{ item.lancamento.vinculo.pk }}{% endif %}&competencia={{ item.competencia }}&data_pagamento={{ data_pagamento|date:'Y-m-d' }}{% if item.lancamento.parcela_13 %}&parcela_13={{ item.lancamento.parcela_13 }}{% endif %}"
+                     class="btn btn-sm btn-info"
                      title="Baixar Memória de Cálculo">
                     <i class="bi bi-calculator"></i> Memória
                   </a>

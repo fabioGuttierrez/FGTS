@@ -195,7 +195,10 @@ class Lancamento(models.Model):
 			if self.vinculo_id:
 				filtro = {'vinculo_id': self.vinculo_id}
 
-			lancamentos_posteriores = Lancamento.objects.filter(**filtro).order_by('competencia')
+			lancamentos_posteriores = Lancamento.objects.filter(
+			**filtro,
+			parcela_13__isnull=True,  # Não propagar para parcelas de 13° salário
+		).order_by('competencia')
 			
 			# Filtrar apenas os meses posteriores ao atual
 			for lancamento in lancamentos_posteriores:
@@ -255,6 +258,12 @@ class Lancamento(models.Model):
 		# Permite mais de um lançamento no mesmo mês para o mesmo CPF, desde que seja em vínculos diferentes.
 		# Mantém compatibilidade com registros legados (vinculo nulo).
 		unique_together = ('empresa', 'funcionario', 'competencia', 'parcela_13', 'vinculo')
+		indexes = [
+			models.Index(fields=['empresa', 'competencia'], name='idx_lanc_empresa_comp'),
+			models.Index(fields=['funcionario', 'competencia'], name='idx_lanc_func_comp'),
+			models.Index(fields=['vinculo', 'competencia', 'parcela_13'], name='idx_lanc_vinc_comp_p13'),
+			models.Index(fields=['empresa', 'competencia', 'pago'], name='idx_lanc_emp_comp_pago'),
+		]
 
 
 class ImportacaoLancamento(models.Model):

@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 import os
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -29,13 +30,15 @@ load_dotenv(BASE_DIR / '.env', override=False)
 SECRET_KEY = (
     os.getenv('DJANGO_SECRET_KEY')
     or os.getenv('SECRET_KEY')
-    or 'django-insecure-2s9w&-meat$6vn_p5bd-5d!x(jcr+ikflqc5l!g5xl$vo@vdx$'
+    or None
 )
+if not SECRET_KEY:
+    raise ImproperlyConfigured('SECRET_KEY ou DJANGO_SECRET_KEY deve ser definida nas variáveis de ambiente.')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = (os.getenv('DJANGO_DEBUG') or os.getenv('DEBUG') or 'True') == 'True'
+DEBUG = (os.getenv('DJANGO_DEBUG') or os.getenv('DEBUG') or 'False') == 'True'
 
-ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '*').split(',')
+ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', 'fgts.bildee.com.br,localhost,127.0.0.1').split(',')
 
 # URL pública do sistema (usada em links enviados por email quando não há request).
 # Ex.: https://fgts.bildee.com.br
@@ -44,7 +47,6 @@ SITE_URL = (os.getenv('SITE_URL') or '').strip().rstrip('/')
 # CSRF trusted origins for HTTPS
 CSRF_TRUSTED_ORIGINS = [
     'https://fgts.bildee.com.br',
-    'http://fgts.bildee.com.br',
     'http://localhost:8000',
     'http://127.0.0.1:8000',
 ]
@@ -220,10 +222,24 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STORAGES = {
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# Security settings para produção
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000  # 1 ano
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
 
 # Email Configuration (Brevo/Sendinblue)
 # https://docs.djangoproject.com/en/6.0/topics/email/

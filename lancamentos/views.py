@@ -197,7 +197,7 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         from django.db.models.functions import Substr, Cast, TruncMonth
         import datetime
 
-        qs = super().get_queryset().select_related('empresa', 'funcionario', 'vinculo')
+        qs = super().get_queryset().select_related('empresa', 'funcionario', 'vinculo').prefetch_related('funcionario__vinculos')
         qs = qs.annotate(
             ano_comp=Case(
                 When(
@@ -959,6 +959,7 @@ class RelatorioCompetenciaView(FormView):
             .filter(filtro_comp)
             .filter(parcela_13=parcela_13, pago=False)
             .select_related('funcionario', 'vinculo')
+            .prefetch_related('funcionario__vinculos')
             .order_by('funcionario_id', 'vinculo_id'))
         if funcionario:
             lancs_qs = lancs_qs.filter(funcionario=funcionario)
@@ -1328,6 +1329,7 @@ class RelatorioCompetenciaView(FormView):
                 **feature_block_context('custom_reports', user=self.request.user, empresa=form.cleaned_data.get('empresa')),
             })
 
+@login_required
 def relatorio_por_ids(request):
     from django.http import HttpResponse
     from django.shortcuts import render
@@ -1348,7 +1350,7 @@ def relatorio_por_ids(request):
         return HttpResponse('Nenhum lançamento selecionado.', status=400)
 
     # Buscar lançamentos pelos IDs e apenas não pagos
-    lancamentos = Lancamento.objects.filter(id__in=ids, pago=False).select_related('empresa', 'funcionario', 'vinculo')
+    lancamentos = Lancamento.objects.filter(id__in=ids, pago=False).select_related('empresa', 'funcionario', 'vinculo').prefetch_related('funcionario__vinculos')
     if not lancamentos.exists():
         return HttpResponse('Nenhum lançamento encontrado.', status=404)
 
@@ -1508,6 +1510,7 @@ def relatorio_por_ids(request):
     }
     return render(request, 'lancamentos/relatorio_competencia.html', contexto)
 
+@login_required
 def export_relatorio_competencia_csv(request):
     from django.http import HttpResponse
     from collections import defaultdict
@@ -1809,6 +1812,7 @@ def export_relatorio_competencia_csv(request):
     writer.writerow(['Totais', '', '', '', '', '', totais['valor_fgts'], '', '', totais['valor_corrigido'], totais['total']])
     return resp
 
+@login_required
 def export_relatorio_competencia_pdf(request):
     # Função utilitária para converter competência em date
     def competencia_str_to_date(competencia):
@@ -2530,6 +2534,7 @@ def sefip_export_view(request):
     return render(request, 'lancamentos/sefip_export.html', {'form': form})
 
 
+@login_required
 def download_memoria_calculo(request):
     """Gera e baixa a memória de cálculo em formato .txt"""
     from django.http import HttpResponse
@@ -2539,20 +2544,30 @@ def download_memoria_calculo(request):
     vinculo_id = request.GET.get('vinculo')
     competencia_str = request.GET.get('competencia')
     data_pagamento_str = request.GET.get('data_pagamento')
-    
+    parcela_13_str = request.GET.get('parcela_13')
+
     if not all([empresa_id, funcionario_id, competencia_str, data_pagamento_str]):
         return HttpResponse('Parâmetros incompletos', status=400)
-    
+
     empresa = Empresa.objects.get(pk=empresa_id)
+
+    # Verificação multi-tenant: usuário só acessa empresas permitidas
+    if not is_empresa_allowed(request.user, empresa.codigo):
+        return HttpResponse('Acesso negado a esta empresa.', status=403)
+
     funcionario = Funcionario.objects.get(pk=funcionario_id)
     data_pagamento = datetime.strptime(data_pagamento_str, '%Y-%m-%d').date()
     competencia_date = datetime.strptime(competencia_str, '%m/%Y').date().replace(day=1)
-    
+
+    # Parsear parcela_13 (None = competência normal, 1 = 13° 1ª, 2 = 13° 2ª)
+    parcela_13 = int(parcela_13_str) if parcela_13_str and parcela_13_str.isdigit() else None
+
     # Busca o lançamento (vínculo-first para evitar ambiguidade)
     base_qs = Lancamento.objects.filter(
         empresa=empresa,
         funcionario=funcionario,
-        competencia=competencia_str
+        competencia=competencia_str,
+        parcela_13=parcela_13
     )
     if vinculo_id:
         base_qs = base_qs.filter(vinculo_id=vinculo_id)
@@ -2592,11 +2607,22 @@ def download_memoria_calculo(request):
         data_pagamento=data_pagamento,
     )
 
-    # Calcula depósito correto e correção (Depósito - FGTS do mês)
-    base_fgts = lancamento.base_fgts or valor_fgts_ajustado
-    valor_deposito_fgts = (base_fgts * indice_valor).quantize(Decimal('0.01'))
-    valor_corrigido = (valor_deposito_fgts - valor_fgts_ajustado).quantize(Decimal('0.01'))
-    total = (valor_deposito_fgts + valor_jam).quantize(Decimal('0.01'))
+    # Usar a mesma função do relatório para garantir valores idênticos
+    calc = calcular_fgts_atualizado(
+        valor_fgts=valor_fgts_ajustado,
+        competencia=competencia_date,
+        pagamento=data_pagamento,
+        indice=indice_valor,
+        jam_coef=None,
+        valor_jam_override=valor_jam,
+        aplicar_plano_economico=False,
+        fator_plano_info=(fator_mult, fator_div, fator_liquido),
+        valor_fgts_base=lancamento.base_fgts,
+    )
+
+    valor_deposito_fgts = calc['valor_deposito_fgts']
+    valor_corrigido = calc['valor_corrigido']
+    total = calc['total']
     
     # Formata data de admissão para competência
     data_admissao_mes = funcionario.data_admissao.strftime('%m/%Y')

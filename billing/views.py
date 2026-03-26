@@ -1,3 +1,5 @@
+import json
+import os
 from datetime import timedelta
 from decimal import Decimal
 from typing import Optional
@@ -6,7 +8,9 @@ import logging
 import requests
 from requests import RequestException
 from django.contrib import messages
-from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect, JsonResponse
+from django.contrib.auth.decorators import login_required
+from django.db import IntegrityError
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -29,44 +33,66 @@ PLAN_PRICE_OVERRIDE = {
     'ENTERPRISE': Decimal('0.00'),       # Sob consulta
 }
 
+# Mapeamento de status Asaas (UPPERCASE) -> status local (lowercase)
+ASAAS_PAYMENT_STATUS_MAP = {
+    'PENDING': 'pending',
+    'RECEIVED': 'confirmed',
+    'CONFIRMED': 'confirmed',
+    'RECEIVED_IN_CASH': 'confirmed',
+    'OVERDUE': 'overdue',
+    'REFUNDED': 'canceled',
+    'REFUND_REQUESTED': 'canceled',
+    'CHARGEBACK_REQUESTED': 'canceled',
+    'CHARGEBACK_DISPUTE': 'canceled',
+    'AWAITING_CHARGEBACK_REVERSAL': 'canceled',
+    'DUNNING_REQUESTED': 'overdue',
+    'DUNNING_RECEIVED': 'confirmed',
+    'AWAITING_RISK_ANALYSIS': 'pending',
+}
+
+# Status Asaas que indicam pagamento confirmado
+ASAAS_CONFIRMED_STATUSES = {'RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH', 'DUNNING_RECEIVED', 'CONFIRMED_OVERDUE'}
+ASAAS_OVERDUE_STATUSES = {'OVERDUE', 'DUNNING_REQUESTED'}
+ASAAS_CANCELED_STATUSES = {'CANCELLED', 'REFUNDED', 'REFUND_REQUESTED', 'CHARGEBACK_REQUESTED', 'CHARGEBACK_DISPUTE'}
+
 
 class CheckoutPlanoView(TemplateView):
     """Página de checkout pública - sem login obrigatório"""
     template_name = 'billing/checkout_plano.html'
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         plan_type = self.kwargs.get('plan_type')
-        
+
         # Buscar plano selecionado (se houver)
         if plan_type:
             try:
                 context['selected_plan'] = Plan.objects.get(plan_type=plan_type, active=True)
             except Plan.DoesNotExist:
                 context['selected_plan'] = None
-        
+
         # Listar todos os planos
         context['all_plans'] = Plan.objects.filter(active=True).order_by('plan_type')
-        
+
         return context
-    
+
     def post(self, request, *args, **kwargs):
         """Processa seleção e redireciona"""
         plan_type = request.POST.get('plan_type')
-        
+
         try:
             plan = Plan.objects.get(plan_type=plan_type, active=True)
         except Plan.DoesNotExist:
             messages.error(request, 'Plano inválido')
             return redirect('billing:checkout-plano')
-        
+
         # Aplicar override de preço conforme tabela pública
         plan_price = PLAN_PRICE_OVERRIDE.get(plan.plan_type, plan.price_monthly)
-        
+
         # Salvar na sessão
         request.session['selected_plan_type'] = plan_type
         request.session['selected_plan_price'] = str(plan_price)
-        
+
         # Se logado, ir direto para criar empresa
         if request.user.is_authenticated:
             empresa = getattr(request.user, 'empresa', None)
@@ -75,7 +101,7 @@ class CheckoutPlanoView(TemplateView):
             if empresa:
                 return redirect('billing:billing-checkout-empresa', empresa.pk)
             return redirect('empresa-create')
-        
+
         # Se não logado, ir para registro/login (com next setado)
         messages.info(request, f'Você selecionou o plano {plan.get_plan_type_display()}. Crie uma conta para continuar.')
         return redirect('register')
@@ -169,13 +195,14 @@ def _resolve_plan_choice(
     return plan_obj, amount, periodicity, plan_name
 
 
+@login_required
 def checkout_empresa(request, empresa_id):
     empresa = get_object_or_404(Empresa, pk=empresa_id)
 
     # Escopo multi-tenant: usuário precisa ter permissão para esta empresa
     if not is_empresa_allowed(request.user, empresa.codigo):
         return HttpResponseBadRequest('Empresa não permitida para este usuário.')
-    
+
     # Se GET, mostrar página de confirmação
     if request.method == 'GET':
         billing_customer = _ensure_billing_customer(empresa, email_fallback=_first_email(empresa))
@@ -193,7 +220,7 @@ def checkout_empresa(request, empresa_id):
             'periodicity': periodicity,
         }
         return render(request, 'billing/checkout_empresa.html', context)
-    
+
     # Se POST, processar pagamento
     if request.method != 'POST':
         return HttpResponseBadRequest('Método não suportado.')
@@ -203,7 +230,7 @@ def checkout_empresa(request, empresa_id):
     try:
         client = AsaasClient()
 
-        # Cria cliente no Asaas se ainda não existir
+        # Cria cliente no Asaas se ainda não existir (com proteção contra race condition)
         if not billing_customer.asaas_customer_id:
             customer_payload = {
                 'name': empresa.nome,
@@ -214,9 +241,20 @@ def checkout_empresa(request, empresa_id):
                 'externalReference': str(empresa.pk),
             }
             created_customer = client.create_customer(customer_payload)
-            billing_customer.asaas_customer_id = created_customer.get('id')
-            billing_customer.status = 'pending'
-            billing_customer.save(update_fields=['asaas_customer_id', 'status'])
+            asaas_cid = created_customer.get('id')
+
+            # Proteção contra race condition: usa update com filtro
+            updated = BillingCustomer.objects.filter(
+                pk=billing_customer.pk,
+                asaas_customer_id__isnull=True,
+            ).update(asaas_customer_id=asaas_cid, status='pending')
+
+            if not updated:
+                # Outro request já criou o customer -- recarrega do banco
+                billing_customer.refresh_from_db()
+            else:
+                billing_customer.asaas_customer_id = asaas_cid
+                billing_customer.status = 'pending'
 
         # Determinar plano e valor
         plan_obj, amount, periodicity, plan_name = _resolve_plan_choice(
@@ -226,14 +264,20 @@ def checkout_empresa(request, empresa_id):
             clear_session=True,
         )
 
-        # Cria assinatura padrão e primeiro pagamento
+        # Forma de pagamento escolhida pelo usuário (default: BOLETO)
+        billing_type = request.POST.get('billing_type', 'BOLETO')
+        if billing_type not in ('BOLETO', 'CREDIT_CARD', 'PIX'):
+            billing_type = 'BOLETO'
+
+        # Cria assinatura (o Asaas gera automaticamente o primeiro pagamento)
         due_date = timezone.now().date() + timedelta(days=3)
         subscription_payload = {
             'customer': billing_customer.asaas_customer_id,
-            'billingType': 'BOLETO',
+            'billingType': billing_type,
             'value': float(amount),
             'cycle': periodicity,
             'description': plan_name,
+            'nextDueDate': due_date.isoformat(),
         }
         subscription_resp = client.create_subscription(subscription_payload)
         subscription = Subscription.objects.create(
@@ -246,30 +290,35 @@ def checkout_empresa(request, empresa_id):
             next_due_date=due_date,
         )
 
-        payment_payload = {
-            'customer': billing_customer.asaas_customer_id,
-            'billingType': 'BOLETO',
-            'value': float(amount),
-            'dueDate': due_date.isoformat(),
-            'description': '1a mensalidade FGTS Web',
-            'subscription': subscription_resp.get('id'),
-        }
-        payment_resp = client.create_payment(payment_payload)
+        # Buscar o primeiro pagamento gerado automaticamente pela subscription
+        first_payment_url = subscription_resp.get('invoiceUrl') or subscription_resp.get('bankSlipUrl') or ''
+        first_payment_id = None
 
-        Payment.objects.create(
-            subscription=subscription,
-            asaas_payment_id=payment_resp.get('id'),
-            amount=amount,
-            due_date=due_date,
-            status=payment_resp.get('status', 'pending'),
-            invoice_url=payment_resp.get('invoiceUrl') or payment_resp.get('bankSlipUrl'),
-        )
+        # A API do Asaas retorna invoiceUrl na subscription; buscar payments se necessário
+        try:
+            payments_resp = client.list_payments(subscription_resp.get('id'))
+            payments_data = payments_resp.get('data', [])
+            if payments_data:
+                first_payment = payments_data[0]
+                first_payment_id = first_payment.get('id')
+                first_payment_url = first_payment.get('invoiceUrl') or first_payment.get('bankSlipUrl') or first_payment_url
+        except Exception:
+            logger.warning('Não foi possível buscar payments da subscription %s', subscription_resp.get('id'))
 
-        redirect_url = payment_resp.get('invoiceUrl') or payment_resp.get('bankSlipUrl')
-        if redirect_url:
-            return HttpResponseRedirect(redirect_url)
+        if first_payment_id:
+            Payment.objects.create(
+                subscription=subscription,
+                asaas_payment_id=first_payment_id,
+                amount=amount,
+                due_date=due_date,
+                status='pending',
+                invoice_url=first_payment_url,
+            )
 
-        return JsonResponse({'subscriptionId': subscription_resp.get('id'), 'paymentId': payment_resp.get('id')})
+        if first_payment_url:
+            return HttpResponseRedirect(first_payment_url)
+
+        return JsonResponse({'subscriptionId': subscription_resp.get('id')})
 
     except RequestException as exc:
         status = exc.response.status_code if getattr(exc, 'response', None) is not None else '?'
@@ -288,21 +337,30 @@ def checkout_empresa(request, empresa_id):
         return HttpResponseRedirect(request.path)
 
 
+def _verify_webhook_token(request) -> bool:
+    """Verifica token do webhook Asaas via header ou query param."""
+    expected = os.getenv('ASAAS_WEBHOOK_TOKEN', '').strip()
+    if not expected:
+        logger.error('ASAAS_WEBHOOK_TOKEN não configurado -- webhook rejeitado por segurança!')
+        return False
+    token = request.headers.get('asaas-access-token', '') or request.GET.get('token', '')
+    return token == expected
+
+
 @csrf_exempt
 def asaas_webhook(request):
     if request.method != 'POST':
         return HttpResponseBadRequest('Método não suportado')
 
+    # Verificar autenticação do webhook
+    if not _verify_webhook_token(request):
+        logger.warning('Webhook Asaas recebido com token inválido de %s', request.META.get('REMOTE_ADDR'))
+        return HttpResponseForbidden('Token inválido')
+
     try:
-        data = request.json if hasattr(request, 'json') else None
+        data = json.loads(request.body.decode('utf-8'))
     except Exception:
-        data = None
-    if data is None:
-        import json
-        try:
-            data = json.loads(request.body.decode('utf-8'))
-        except Exception:
-            return HttpResponseBadRequest('JSON inválido')
+        return HttpResponseBadRequest('JSON inválido')
 
     event = data.get('event') if isinstance(data, dict) else None
     payment_data = data.get('payment') if isinstance(data, dict) else None
@@ -311,7 +369,7 @@ def asaas_webhook(request):
         return HttpResponseBadRequest('Payload incompleto')
 
     asaas_payment_id = payment_data.get('id')
-    status = payment_data.get('status')
+    asaas_status = payment_data.get('status')  # Status em UPPERCASE do Asaas
     paid_at = payment_data.get('paymentDate')
 
     try:
@@ -319,8 +377,13 @@ def asaas_webhook(request):
     except Payment.DoesNotExist:
         return HttpResponse('Pagamento não encontrado', status=200)
 
-    # Atualiza status do pagamento e assinatura
-    payment.status = status if status in dict(Payment.STATUS_CHOICES) else payment.status
+    # Mapear status Asaas (UPPERCASE) -> status local (lowercase)
+    local_status = ASAAS_PAYMENT_STATUS_MAP.get(asaas_status)
+    if local_status:
+        payment.status = local_status
+    else:
+        logger.warning('Status Asaas desconhecido: %s (payment %s)', asaas_status, asaas_payment_id)
+
     if paid_at:
         try:
             payment.pay_date = timezone.datetime.fromisoformat(paid_at).date()
@@ -328,17 +391,19 @@ def asaas_webhook(request):
             pass
     payment.save()
 
+    # Atualizar status da subscription
     subscription = payment.subscription
-    if status in ['RECEIVED', 'CONFIRMED', 'CONFIRMED_OVERDUE']:
+    if asaas_status in ASAAS_CONFIRMED_STATUSES:
         subscription.status = 'active'
         subscription.save(update_fields=['status'])
-    elif status in ['OVERDUE']:
+    elif asaas_status in ASAAS_OVERDUE_STATUSES:
         subscription.status = 'overdue'
         subscription.save(update_fields=['status'])
-    elif status in ['CANCELLED', 'REFUNDED']:
+    elif asaas_status in ASAAS_CANCELED_STATUSES:
         subscription.status = 'canceled'
         subscription.save(update_fields=['status'])
 
+    # Atualizar status do billing customer
     billing_customer = subscription.customer
     if subscription.status == 'active':
         billing_customer.status = 'active'
@@ -361,7 +426,7 @@ class FeedbackCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
     model = Feedback
     form_class = FeedbackForm
     template_name = 'billing/feedback_form.html'
-    
+
     def form_valid(self, form):
         # Descobrir a empresa do usuário (multi-tenant seguro)
         # 1) empresa principal do usuário
@@ -384,11 +449,11 @@ class FeedbackCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
             return redirect('dashboard')
 
         form.instance.empresa = empresa
-        
+
         response = super().form_valid(form)
-        messages.success(self.request, '✅ Feedback enviado com sucesso! Obrigado pelas sugestões.')
+        messages.success(self.request, 'Feedback enviado com sucesso! Obrigado pelas sugestões.')
         return response
-    
+
     def get_success_url(self):
         return reverse('dashboard')
 
@@ -399,7 +464,7 @@ class FeedbackListView(LoginRequiredMixin, ListView):
     template_name = 'billing/feedback_list.html'
     context_object_name = 'feedbacks'
     paginate_by = 20
-    
+
     def get_queryset(self):
         if self.request.user.is_staff:
             return Feedback.objects.all()
