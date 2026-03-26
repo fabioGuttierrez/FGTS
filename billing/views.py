@@ -245,6 +245,9 @@ def checkout_empresa(request, empresa_id):
             }
             created_customer = client.create_customer(customer_payload)
             asaas_cid = created_customer.get('id')
+            if not asaas_cid:
+                logger.error('Asaas não retornou ID de cliente. Resposta: %s', created_customer)
+                raise ValueError('Asaas não retornou ID de cliente. Verifique os dados da empresa.')
 
             # Proteção contra race condition: usa update com filtro
             updated = BillingCustomer.objects.filter(
@@ -266,6 +269,11 @@ def checkout_empresa(request, empresa_id):
             persist_choice=True,
             clear_session=True,
         )
+
+        # Plano Enterprise (valor 0) não passa pelo checkout automático
+        if amount <= 0:
+            messages.info(request, 'O plano Enterprise é sob consulta. Entre em contato para contratar.')
+            return HttpResponseRedirect(request.path)
 
         # Forma de pagamento escolhida pelo usuário (default: BOLETO)
         billing_type = request.POST.get('billing_type', 'BOLETO')
@@ -325,14 +333,23 @@ def checkout_empresa(request, empresa_id):
 
     except RequestException as exc:
         status = exc.response.status_code if getattr(exc, 'response', None) is not None else '?'
-        detail = ''
+        detail = {}
         if getattr(exc, 'response', None) is not None:
             try:
                 detail = exc.response.json()
             except Exception:
                 detail = exc.response.text
-        messages.error(request, f'Erro ao integrar com Asaas ({status}): {detail}')
-        logger.exception('Erro na integração Asaas durante checkout_empresa')
+
+        # Detecta customer inválido (ID antigo/ambiente errado) e limpa para nova tentativa
+        errors = detail.get('errors', []) if isinstance(detail, dict) else []
+        if any(e.get('code') == 'invalid_customer' for e in errors):
+            BillingCustomer.objects.filter(pk=billing_customer.pk).update(asaas_customer_id=None)
+            logger.warning('invalid_customer detectado para empresa %s — asaas_customer_id limpo.', empresa_id)
+            messages.error(request, 'Dados de cobrança desatualizados. Por favor, tente novamente.')
+        else:
+            messages.error(request, f'Erro ao integrar com Asaas ({status}): {detail}')
+            logger.exception('Erro na integração Asaas durante checkout_empresa')
+
         return HttpResponseRedirect(request.path)
     except Exception:
         logger.exception('Erro inesperado no checkout_empresa')
