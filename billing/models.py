@@ -160,6 +160,17 @@ class BillingCustomer(models.Model):
         help_text='Se informado, substitui o limite de histórico do plano para esta empresa.'
     )
     
+    # Indica que esta empresa é gerenciada por um BPO (não tem assinatura própria)
+    gerenciada_por_bpo = models.ForeignKey(
+        'ContaBPO',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='billing_customers',
+        verbose_name='Gerenciada por BPO',
+        help_text='Se preenchido, a cobrança desta empresa é responsabilidade do escritório BPO vinculado'
+    )
+
     # Trial de 7 dias
     trial_active = models.BooleanField(default=True, verbose_name='Trial Ativo')
     trial_expires = models.DateField(null=True, blank=True, verbose_name='Trial Expira em')
@@ -345,3 +356,7 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"{self.subscription.customer.empresa.nome} - {self.amount} ({self.get_status_display()})"
+
+
+# Importar models BPO para que o Django os descubra dentro do app billing
+from .models_bpo import PlanoBPO, ContaBPO, EmpresaBPO, FaturaBPO, calcular_rateio  # noqa: E402, F401

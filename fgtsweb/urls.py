@@ -90,4 +90,10 @@ urlpatterns = [
     path('ajuda/manual/', TemplateView.as_view(template_name='ajuda/manual.html'), name='ajuda-manual'),
     path('ajuda/faq/', TemplateView.as_view(template_name='ajuda/faq.html'), name='ajuda-faq'),
     path('ajuda/glossario/', TemplateView.as_view(template_name='ajuda/glossario.html'), name='ajuda-glossario'),
+    path('ajuda/bpo/', TemplateView.as_view(template_name='ajuda/bpo_guia.html'), name='ajuda-bpo'),
+    # Documentos legais
+    path('termos/', TemplateView.as_view(template_name='legal/termos.html'), name='legal-termos'),
+    path('privacidade/', TemplateView.as_view(template_name='legal/privacidade.html'), name='legal-privacidade'),
+    path('cookies/', TemplateView.as_view(template_name='legal/cookies.html'), name='legal-cookies'),
+    path('dpa/', TemplateView.as_view(template_name='legal/dpa.html'), name='legal-dpa'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

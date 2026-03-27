@@ -114,6 +114,7 @@
         <div class="nav-section">Ferramentas</div>
         <a href="#calculadora">Calculadora FGTS</a>
         <a href="#indices">Índices JAM</a>
+        <a href="#bpo">Escritórios BPO</a>
       </div>
     </div>
 
@@ -428,6 +429,39 @@
         <div class="warn-box">
           <i class="bi bi-exclamation-triangle me-1"></i> Se um lançamento de competência recente mostrar correção zerada, verifique se o índice daquele mês já foi cadastrado na tabela.
         </div>
+      </section>
+
+      <!-- ===================== BPO ===================== -->
+      <section id="bpo" class="doc-section mb-5">
+        <h2><i class="bi bi-buildings me-2"></i>Escritórios BPO</h2>
+
+        <p>
+          O módulo BPO (Bureau de Processamento de Folha) permite que escritórios de folha gerenciem múltiplas empresas clientes em um único painel, com uma única assinatura.
+        </p>
+        <p>
+          A cobrança é feita por <strong>CNPJ ativo/mês</strong>. Ao adicionar uma empresa no meio do ciclo, o sistema calcula automaticamente o <strong>rateio proporcional</strong> aos dias restantes.
+        </p>
+        <div class="tip-box">
+          <i class="bi bi-buildings me-1"></i>
+          Para o guia completo do módulo BPO — incluindo exemplos de rateio, configuração de acesso do cliente e perguntas frequentes — consulte o
+          <a href="{% url 'ajuda-bpo' %}"><strong>Guia para Escritórios BPO</strong></a>.
+        </div>
+
+        <h3>Acesso do cliente</h3>
+        <p>
+          Por padrão, apenas o operador do escritório acessa as empresas gerenciadas. O BPO pode ativar o acesso empresa por empresa, permitindo que o cliente veja seus próprios dados.
+          Isso é controlado pelo campo <em>Permitir acesso do cliente</em> no painel BPO.
+        </p>
+
+        <h3>URLs do módulo BPO</h3>
+        <table class="table table-sm table-bordered field-table" style="font-size: 0.87rem;">
+          <thead style="background: #f0f5ff;"><tr><th>URL</th><th>Função</th></tr></thead>
+          <tbody>
+            <tr><td><code>/billing/bpo/</code></td><td>Painel de gestão BPO</td></tr>
+            <tr><td><code>/billing/bpo/planos/</code></td><td>Seleção de plano BPO</td></tr>
+            <tr><td><code>/billing/bpo/empresas/adicionar/</code></td><td>Adicionar empresa cliente</td></tr>
+          </tbody>
+        </table>
       </section>
 
       <!-- Navegação final -->

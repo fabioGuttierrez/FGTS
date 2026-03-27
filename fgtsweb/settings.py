@@ -108,6 +108,7 @@ TEMPLATES = [
                 'billing.context_processors.current_pricing',
                 'empresas.context_processors.is_admin_empresa',
                 'empresas.context_processors.sefip_feature',
+                'billing.context_processors.conta_bpo_context',
             ],
         },
     },

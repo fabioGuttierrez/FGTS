@@ -20,6 +20,7 @@ from django.views.generic import TemplateView
 from empresas.models import Empresa
 from fgtsweb.mixins import is_empresa_allowed
 from .models import BillingCustomer, Subscription, Payment, PricingPlan, Plan
+from .models_bpo import FaturaBPO, ContaBPO
 from .services.asaas_client import AsaasClient
 
 logger = logging.getLogger(__name__)
@@ -376,6 +377,30 @@ def checkout_empresa(request, empresa_id):
         return HttpResponseRedirect(request.path)
 
 
+def _handle_bpo_webhook(asaas_payment_id, asaas_status):
+    """Atualiza FaturaBPO e ContaBPO a partir de um evento de pagamento Asaas."""
+    fatura = FaturaBPO.objects.select_related('conta_bpo').filter(
+        asaas_payment_id=asaas_payment_id
+    ).first()
+    if not fatura:
+        return HttpResponse('Pagamento não encontrado', status=200)
+
+    local_status = ASAAS_PAYMENT_STATUS_MAP.get(asaas_status, fatura.status)
+    fatura.status = local_status
+    fatura.save(update_fields=['status', 'atualizado_em'])
+
+    conta_bpo = fatura.conta_bpo
+    if asaas_status in ASAAS_CONFIRMED_STATUSES:
+        if conta_bpo.status != 'active':
+            conta_bpo.status = 'active'
+            conta_bpo.save(update_fields=['status', 'atualizado_em'])
+    elif asaas_status in ASAAS_CANCELED_STATUSES:
+        conta_bpo.status = 'suspended'
+        conta_bpo.save(update_fields=['status', 'atualizado_em'])
+
+    return HttpResponse('OK')
+
+
 def _verify_webhook_token(request) -> bool:
     """Verifica token do webhook Asaas via header ou query param."""
     expected = os.getenv('ASAAS_WEBHOOK_TOKEN', '').strip()
@@ -414,7 +439,7 @@ def asaas_webhook(request):
     try:
         payment = Payment.objects.select_related('subscription__customer').get(asaas_payment_id=asaas_payment_id)
     except Payment.DoesNotExist:
-        return HttpResponse('Pagamento não encontrado', status=200)
+        return _handle_bpo_webhook(asaas_payment_id, asaas_status)
 
     # Mapear status Asaas (UPPERCASE) -> status local (lowercase)
     local_status = ASAAS_PAYMENT_STATUS_MAP.get(asaas_status)
