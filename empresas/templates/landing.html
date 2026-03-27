@@ -1,6 +1,70 @@
 {% extends 'base.html' %}
 
-{% block title %}FGTS Web — Gestão de FGTS em Atraso{% endblock %}
+{% block title %}FGTS Web — Gestão de FGTS em Atraso para Contadores e RH{% endblock %}
+
+{% block seo %}
+<meta name="description" content="Sistema online para cálculo e gestão de FGTS em atraso. Importação de SEFIP, índices atualizados, relatórios e muito mais. Ideal para escritórios contábeis e RH.">
+<meta name="keywords" content="FGTS em atraso, cálculo FGTS, sistema FGTS online, SEFIP web, gestão FGTS, calcular FGTS atrasado, software FGTS contador">
+<meta name="robots" content="index, follow">
+<meta name="author" content="FGTS Web">
+{% endblock %}
+
+{% block canonical %}
+<link rel="canonical" href="https://fgts.bildee.com.br/">
+{% endblock %}
+
+{% block og_title %}FGTS Web — Gestão de FGTS em Atraso para Contadores e RH{% endblock %}
+{% block og_description %}Sistema online para cálculo e gestão de FGTS em atraso. Importação de SEFIP, índices atualizados e relatórios completos.{% endblock %}
+{% block og_url %}https://fgts.bildee.com.br/{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://fgts.bildee.com.br/#website",
+      "url": "https://fgts.bildee.com.br/",
+      "name": "FGTS Web",
+      "description": "Sistema online para gestão de FGTS em atraso",
+      "inLanguage": "pt-BR"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://fgts.bildee.com.br/#app",
+      "name": "FGTS Web",
+      "url": "https://fgts.bildee.com.br/",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "Web",
+      "description": "Sistema SaaS para cálculo e gestão de FGTS em atraso. Importação de SEFIP, índices atualizados (TR, JAM, SELIC), relatórios de recolhimento e exportação de arquivos.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "BRL",
+        "description": "Trial gratuito disponível"
+      },
+      "featureList": [
+        "Cálculo de FGTS em atraso com índices oficiais",
+        "Importação de arquivos SEFIP",
+        "Relatórios de competência por funcionário",
+        "Gestão multi-empresa",
+        "Exportação de relatórios em PDF e CSV",
+        "Conferência e auditoria de lançamentos"
+      ],
+      "inLanguage": "pt-BR"
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://fgts.bildee.com.br/#organization",
+      "name": "FGTS Web",
+      "url": "https://fgts.bildee.com.br/",
+      "sameAs": []
+    }
+  ]
+}
+</script>
+{% endblock %}
 
 {% block extra_css %}
 <style>
