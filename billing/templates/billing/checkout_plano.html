@@ -325,6 +325,34 @@
         
         <!-- ENTERPRISE -->
         <div class="col-lg-4">
+          {% if enterprise_override_price %}
+          {# Valor negociado configurado: segue para checkout normal #}
+          <div class="plan-card p-4" onclick="selectAndSubmit('ENTERPRISE')">
+            <input type="radio" name="plan_type" value="ENTERPRISE" style="display:none">
+
+            <h4 class="mb-2">Enterprise</h4>
+            <p class="text-muted mb-3">Plano negociado</p>
+
+            <div class="mb-4">
+              <span class="price-large">R$ {{ enterprise_override_price }}</span>
+              <span class="text-muted"> /mês</span>
+            </div>
+
+            <ul class="feature-list">
+              <li>CNPJs ilimitados</li>
+              <li>Funcionários ilimitados</li>
+              <li>Histórico completo</li>
+              <li>Cálculo de FGTS + JAM</li>
+              <li>Relatórios completos e API</li>
+            </ul>
+
+            <button type="button" class="btn-select-plan primary mt-3"
+                    onclick="event.stopPropagation(); selectAndSubmit('ENTERPRISE')">
+              Assinar Enterprise
+            </button>
+          </div>
+          {% else %}
+          {# Sem valor configurado: redireciona para WhatsApp #}
           <div class="plan-card p-4"
                onclick="window.open('https://wa.me/5544998047474?text=Ol%C3%A1%21+Tenho+interesse+no+plano+Enterprise+do+FGTS+Web.', '_blank')">
 
@@ -350,6 +378,7 @@
               Falar com consultor
             </a>
           </div>
+          {% endif %}
         </div>
       </div>
       

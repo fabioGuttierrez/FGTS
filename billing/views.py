@@ -74,6 +74,21 @@ class CheckoutPlanoView(TemplateView):
         # Listar todos os planos
         context['all_plans'] = Plan.objects.filter(active=True).order_by('plan_type')
 
+        # Se o usuário está logado e tem override_price > 0, o Enterprise pode ir para o checkout
+        user = self.request.user
+        if user.is_authenticated:
+            empresa = getattr(user, 'empresa', None)
+            if not empresa and hasattr(user, 'empresas_permitidas'):
+                empresa = user.empresas_permitidas.first()
+            if empresa:
+                try:
+                    bc = empresa.billing_customer
+                    if bc.override_price and bc.override_price > 0:
+                        context['enterprise_override_price'] = bc.override_price
+                        context['enterprise_empresa_id'] = empresa.pk
+                except Exception:
+                    pass
+
         return context
 
     def post(self, request, *args, **kwargs):
