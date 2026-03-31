@@ -19,6 +19,11 @@
                         <i class="bi bi-file-earmark-spreadsheet me-2"></i>Importar em Lote
                     </button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="atualizacao-tab" data-bs-toggle="tab" data-bs-target="#atualizacao" type="button" role="tab" aria-controls="atualizacao" aria-selected="false">
+                        <i class="bi bi-pencil-square me-2"></i>Atualizar Vínculos em Lote
+                    </button>
+                </li>
             </ul>
 
             <!-- Conteúdo das abas -->
@@ -371,6 +376,128 @@
                                 <i class="bi bi-lightbulb-fill text-warning me-2"></i>
                                 <strong>Dica:</strong> Você pode importar até 1000 funcionários por vez. Se tiver mais, divida em múltiplos arquivos.
                             </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+                <!-- TAB 3: Atualizar Vínculos em Lote -->
+                <div class="tab-pane fade" id="atualizacao" role="tabpanel" aria-labelledby="atualizacao-tab">
+                    <div class="card border-0 shadow-lg">
+                        <!-- Header -->
+                        <div class="card-header text-white py-4 border-0" style="background: linear-gradient(135deg, #764ba2 0%, #4b2d7f 100%);">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-pencil-square fs-4 me-3"></i>
+                                <div>
+                                    <h4 class="mb-0 fw-bold">Atualizar Vínculos em Lote</h4>
+                                    <small class="opacity-75">Atualize cargo, motivo de saída, data de demissão e mais — via XLSX</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Body -->
+                        <div class="card-body p-5">
+                            <div id="update-alert" style="display: none;"></div>
+
+                            <!-- Passo 1: Download -->
+                            <div class="mb-5">
+                                <h6 class="text-uppercase fw-bold text-muted mb-3">
+                                    <i class="bi bi-download me-2"></i>1º Passo: Baixar Modelo
+                                </h6>
+                                <p class="text-muted mb-3">Baixe o modelo XLSX com as colunas corretas. Preencha com as informações a atualizar.</p>
+                                <a href="{% url 'vinculo-download-update-template' %}" class="btn btn-outline-primary btn-lg rounded-3">
+                                    <i class="bi bi-download me-2"></i> Baixar Modelo XLSX
+                                </a>
+                            </div>
+
+                            <hr class="my-5 opacity-20">
+
+                            <!-- Passo 2: Instruções -->
+                            <div class="mb-5">
+                                <h6 class="text-uppercase fw-bold text-muted mb-3">
+                                    <i class="bi bi-pencil-square me-2"></i>2º Passo: Preenchimento
+                                </h6>
+                                <div class="alert alert-info border-0">
+                                    <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2"></i>Como funciona:</h6>
+                                    <ul class="mb-3">
+                                        <li><strong>EMPRESA</strong> — código folha da empresa (obrigatório)</li>
+                                        <li><strong>MATRICULA</strong> — identifica o vínculo (preferencial)</li>
+                                        <li><strong>CPF</strong> — usado como fallback quando não há matrícula</li>
+                                        <li><strong>Campos em branco são ignorados</strong> — preencha apenas o que deseja atualizar</li>
+                                    </ul>
+                                    <p class="mb-2 fw-bold">Campos atualizáveis:</p>
+                                    <div class="row g-2">
+                                        <div class="col-md-6">
+                                            <ul class="mb-0">
+                                                <li><strong>CARGO</strong> — texto livre</li>
+                                                <li><strong>MOTIVO_SAIDA</strong> — ver valores abaixo</li>
+                                                <li><strong>DATA_DEMISSAO</strong> — YYYY-MM-DD</li>
+                                            </ul>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <ul class="mb-0">
+                                                <li><strong>SALARIO</strong> — ex: 3500.00</li>
+                                                <li><strong>OBSERVACOES</strong> — texto livre</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3 p-2 bg-white rounded border">
+                                        <small class="fw-bold text-muted d-block mb-1">Valores válidos para MOTIVO_SAIDA:</small>
+                                        <code class="small">transferencia &nbsp;|&nbsp; pedido_demissao &nbsp;|&nbsp; demissao_sem_justa_causa &nbsp;|&nbsp; demissao_justa_causa &nbsp;|&nbsp; outro</code>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr class="my-5 opacity-20">
+
+                            <!-- Passo 3: Upload -->
+                            <div class="mb-5">
+                                <h6 class="text-uppercase fw-bold text-muted mb-3">
+                                    <i class="bi bi-cloud-upload me-2"></i>3º Passo: Enviar Arquivo
+                                </h6>
+                                <form id="update-form" method="post" enctype="multipart/form-data">
+                                    {% csrf_token %}
+                                    <div class="mb-3">
+                                        <label for="update-file" class="form-label fw-bold">Selecione o arquivo XLSX</label>
+                                        <div class="input-group input-group-lg">
+                                            <input type="file" id="update-file" name="import_file" class="form-control" accept=".xlsx" required>
+                                            <button type="submit" class="btn btn-primary" id="update-btn" style="background: linear-gradient(135deg, #764ba2 0%, #4b2d7f 100%); border-color: #764ba2;">
+                                                <i class="bi bi-upload me-2"></i>Atualizar
+                                            </button>
+                                        </div>
+                                        <small class="form-text text-muted d-block mt-2">Apenas arquivos .XLSX são permitidos</small>
+                                    </div>
+                                </form>
+
+                                <!-- Progresso -->
+                                <div id="update-progress" style="display: none;" class="mb-3">
+                                    <div class="d-flex align-items-center">
+                                        <div class="spinner-border spinner-border-sm me-2" style="color: #764ba2;" role="status">
+                                            <span class="visually-hidden">Processando...</span>
+                                        </div>
+                                        <span>Processando arquivo...</span>
+                                    </div>
+                                </div>
+
+                                <!-- Resultados -->
+                                <div id="update-result" style="display: none;" class="mt-4">
+                                    <div class="alert alert-dismissible fade show" id="update-result-alert" role="alert">
+                                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                        <h5 class="mb-3" id="update-result-title"></h5>
+                                        <div id="update-result-stats" class="mb-3"></div>
+                                        <div id="update-result-errors"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Footer -->
+                        <div class="card-footer bg-light border-top py-4">
+                            <div class="d-flex gap-3 justify-content-end">
+                                <a href="{% url 'funcionario-list' %}" class="btn btn-outline-secondary btn-lg rounded-3">
+                                    <i class="bi bi-arrow-left me-2"></i> Voltar para Lista
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -745,6 +872,87 @@
             }
             
             resultErrors.innerHTML = errorHtml;
+        }
+        // ── Aba Atualizar Vínculos em Lote ──────────────────────────────────────
+        const updateForm = document.getElementById('update-form');
+        const updateBtn = document.getElementById('update-btn');
+        const updateProgress = document.getElementById('update-progress');
+        const updateResult = document.getElementById('update-result');
+        const updateAlert = document.getElementById('update-alert');
+
+        if (updateForm) {
+            updateForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const file = document.getElementById('update-file').files[0];
+                if (!file) {
+                    updateAlert.style.display = 'block';
+                    updateAlert.className = 'alert alert-danger alert-dismissible fade show border-0';
+                    updateAlert.innerHTML = '<button type="button" class="btn-close" data-bs-dismiss="alert"></button><i class="bi bi-exclamation-triangle me-2"></i>Por favor, selecione um arquivo.';
+                    return;
+                }
+                updateProgress.style.display = 'block';
+                updateResult.style.display = 'none';
+                updateBtn.disabled = true;
+
+                const formData = new FormData();
+                formData.append('import_file', file);
+                formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+                try {
+                    const response = await fetch('{% url "vinculo-bulk-update" %}', { method: 'POST', body: formData });
+                    updateProgress.style.display = 'none';
+                    if (!response.ok) {
+                        const err = await response.json().catch(() => ({ error: 'Erro desconhecido no servidor' }));
+                        throw new Error(err.error || `Erro HTTP ${response.status}`);
+                    }
+                    const data = await response.json();
+                    showUpdateResult(data);
+                } catch (error) {
+                    updateProgress.style.display = 'none';
+                    updateAlert.style.display = 'block';
+                    updateAlert.className = 'alert alert-danger alert-dismissible fade show border-0';
+                    updateAlert.innerHTML = `<button type="button" class="btn-close" data-bs-dismiss="alert"></button><h6 class="mb-2"><i class="bi bi-exclamation-triangle-fill me-2"></i>Erro</h6><p class="mb-0">${error.message}</p>`;
+                } finally {
+                    updateBtn.disabled = false;
+                }
+            });
+        }
+
+        function showUpdateResult(data) {
+            updateResult.style.display = 'block';
+            const resultAlert = document.getElementById('update-result-alert');
+            const resultTitle = document.getElementById('update-result-title');
+            const resultStats = document.getElementById('update-result-stats');
+            const resultErrors = document.getElementById('update-result-errors');
+
+            resultAlert.className = data.success
+                ? 'alert alert-success alert-dismissible fade show border-0'
+                : 'alert alert-warning alert-dismissible fade show border-0';
+            resultTitle.innerHTML = (data.success ? '<i class="bi bi-check-circle me-2"></i>' : '<i class="bi bi-exclamation-triangle me-2"></i>') + data.message;
+            resultStats.innerHTML = `
+                <div class="row">
+                    <div class="col-md-4"><strong>Total de linhas:</strong> ${data.total}</div>
+                    <div class="col-md-4"><strong><span class="text-success">✓ Atualizados:</span></strong> ${data.success_count}</div>
+                    <div class="col-md-4"><strong><span class="text-danger">✗ Erros:</span></strong> ${data.error_count}</div>
+                </div>`;
+            if (data.errors && data.errors.length > 0) {
+                resultErrors.innerHTML = '<h6 class="mt-3 mb-2">Detalhes dos erros:</h6><ul class="mb-0">'
+                    + data.errors.map(e => '<li class="text-danger">' + e + '</li>').join('')
+                    + '</ul>';
+            } else {
+                resultErrors.innerHTML = '';
+            }
+        }
+
+        // Abre aba correta via query string ?tab=atualizacao
+        const urlParams = new URLSearchParams(window.location.search);
+        const tabParam = urlParams.get('tab');
+        if (tabParam) {
+            const tabBtn = document.getElementById(tabParam + '-tab');
+            if (tabBtn) {
+                const bsTab = new bootstrap.Tab(tabBtn);
+                bsTab.show();
+            }
         }
     });
 </script>

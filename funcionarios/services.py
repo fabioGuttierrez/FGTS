@@ -391,3 +391,210 @@ class FuncionarioImportService:
             
         except Exception as e:
             raise Exception(f"Erro ao processar arquivo: {str(e)}")
+
+
+class VinculoUpdateService:
+    """Serviço para atualização em lote de vínculos existentes via XLSX."""
+
+    MOTIVOS_VALIDOS = {
+        'transferencia', 'pedido_demissao',
+        'demissao_sem_justa_causa', 'demissao_justa_causa', 'outro',
+    }
+
+    UPDATE_COLUMNS = [
+        'EMPRESA', 'MATRICULA', 'CPF',
+        'CARGO', 'MOTIVO_SAIDA', 'DATA_DEMISSAO', 'SALARIO', 'OBSERVACOES',
+    ]
+
+    @staticmethod
+    def generate_template_update_xlsx():
+        """Gera XLSX modelo para atualização em lote de vínculos."""
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Atualizar Vínculos"
+
+        header_fill = PatternFill(start_color="764ba2", end_color="764ba2", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        example_fill = PatternFill(start_color="F3E8FF", end_color="F3E8FF", fill_type="solid")
+        border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin'),
+        )
+
+        for col_idx, col_name in enumerate(VinculoUpdateService.UPDATE_COLUMNS, 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.value = col_name
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            cell.border = border
+
+        example = [
+            "CF001ABC",        # EMPRESA
+            "1001",            # MATRICULA
+            "",                # CPF (só se não tiver matrícula)
+            "Analista FGTS",   # CARGO
+            "pedido_demissao", # MOTIVO_SAIDA
+            "2024-12-31",      # DATA_DEMISSAO
+            "4500.00",         # SALARIO
+            "Desligamento voluntário",  # OBSERVACOES
+        ]
+        for col_idx, value in enumerate(example, 1):
+            cell = ws.cell(row=2, column=col_idx)
+            cell.value = value
+            cell.fill = example_fill
+            cell.border = border
+
+        info_row = 4
+        ws.merge_cells(f'A{info_row}:H{info_row}')
+        info_cell = ws[f'A{info_row}']
+        info_cell.value = "⚠️ INSTRUÇÕES DE PREENCHIMENTO"
+        info_cell.font = Font(bold=True, size=10, color="764ba2")
+
+        instructions = [
+            "• EMPRESA (obrigatório): código folha da empresa (ex: CF001ABC)",
+            "• MATRICULA ou CPF (pelo menos um obrigatório): identifica o vínculo a atualizar",
+            "• Campos em branco são IGNORADOS — apenas campos preenchidos serão atualizados",
+            "• MOTIVO_SAIDA valores válidos: transferencia | pedido_demissao | demissao_sem_justa_causa | demissao_justa_causa | outro",
+            "• DATA_DEMISSAO formato: YYYY-MM-DD (ex: 2024-12-31) ou DD/MM/YYYY",
+            "• SALARIO formato: número com ponto decimal (ex: 4500.00)",
+            "• Apague a linha de exemplo antes de importar seus dados",
+        ]
+        for idx, text in enumerate(instructions, 1):
+            r = info_row + idx
+            ws.merge_cells(f'A{r}:H{r}')
+            c = ws[f'A{r}']
+            c.value = text
+            c.font = Font(size=9)
+            c.alignment = Alignment(wrap_text=True, vertical='top')
+
+        col_widths = [14, 14, 16, 20, 28, 16, 12, 30]
+        for i, w in enumerate(col_widths, 1):
+            ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
+        ws.row_dimensions[1].height = 30
+
+        return wb
+
+    @staticmethod
+    def update_vinculos_from_file(file, user):
+        """
+        Atualiza vínculos existentes a partir de um arquivo XLSX.
+
+        Identifica cada vínculo por (empresa + matricula) ou fallback (empresa + cpf).
+        Atualiza apenas os campos não vazios: cargo, motivo_saida, data_demissao,
+        salario, observacoes.
+
+        Returns:
+            dict com keys: total, success, errors (list[str])
+        """
+        try:
+            wb = openpyxl.load_workbook(file)
+            ws = wb.active
+        except Exception as e:
+            raise Exception(f"Erro ao abrir arquivo: {e}")
+
+        # Mapeia cabeçalhos
+        headers = {}
+        for col_idx, cell in enumerate(ws[1], 1):
+            if cell.value:
+                headers[str(cell.value).strip().upper()] = col_idx
+
+        if 'EMPRESA' not in headers:
+            raise ValueError("Coluna 'EMPRESA' não encontrada no arquivo.")
+        if 'MATRICULA' not in headers and 'CPF' not in headers:
+            raise ValueError("O arquivo precisa ter a coluna 'MATRICULA' ou 'CPF'.")
+
+        result = {'total': 0, 'success': 0, 'errors': []}
+
+        for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
+            result['total'] += 1
+
+            def cell(col):
+                idx = headers.get(col)
+                if idx is None:
+                    return None
+                v = row[idx - 1]
+                return str(v).strip() if v is not None else None
+
+            try:
+                # 1. Resolve empresa
+                empresa_raw = cell('EMPRESA')
+                if not empresa_raw:
+                    raise ValueError("Coluna EMPRESA está vazia.")
+
+                empresa = FuncionarioImportService._resolve_empresa_from_identifier(empresa_raw)
+                if not isinstance(empresa, Empresa):
+                    raise ValueError(f"Empresa '{empresa_raw}' não encontrada.")
+
+                if not is_empresa_allowed(user, empresa.codigo):
+                    raise ValueError(f"Sem permissão para a empresa '{empresa.nome}'.")
+
+                # 2. Localiza vínculo por matrícula ou CPF
+                matricula = cell('MATRICULA')
+                cpf_raw = cell('CPF')
+                vinculo = None
+
+                if matricula:
+                    vinculo = FuncionarioVinculo.objects.filter(
+                        empresa=empresa, matricula=matricula
+                    ).order_by('-data_admissao').first()
+
+                if vinculo is None and cpf_raw:
+                    cpf_digits = ''.join(c for c in cpf_raw if c.isdigit())
+                    vinculo = FuncionarioVinculo.objects.filter(
+                        empresa=empresa,
+                        funcionario__cpf__icontains=cpf_digits,
+                    ).order_by('-data_admissao').first()
+
+                if vinculo is None:
+                    chave = matricula or cpf_raw or '(sem chave)'
+                    raise ValueError(f"Vínculo não encontrado para '{chave}' na empresa '{empresa.nome}'.")
+
+                # 3. Atualiza apenas campos fornecidos
+                campos_atualizados = []
+
+                cargo = cell('CARGO')
+                if cargo:
+                    vinculo.cargo = cargo
+                    campos_atualizados.append('cargo')
+
+                motivo = cell('MOTIVO_SAIDA')
+                if motivo:
+                    motivo_lower = motivo.lower().strip()
+                    if motivo_lower not in VinculoUpdateService.MOTIVOS_VALIDOS:
+                        raise ValueError(
+                            f"MOTIVO_SAIDA inválido: '{motivo}'. "
+                            f"Valores aceitos: {', '.join(sorted(VinculoUpdateService.MOTIVOS_VALIDOS))}"
+                        )
+                    vinculo.motivo_saida = motivo_lower
+                    campos_atualizados.append('motivo_saida')
+
+                data_demissao_raw = cell('DATA_DEMISSAO')
+                if data_demissao_raw:
+                    vinculo.data_demissao = FuncionarioImportService.parse_date(data_demissao_raw)
+                    campos_atualizados.append('data_demissao')
+
+                salario_raw = cell('SALARIO')
+                if salario_raw:
+                    from decimal import Decimal, InvalidOperation
+                    try:
+                        vinculo.salario = Decimal(salario_raw.replace(',', '.'))
+                    except InvalidOperation:
+                        raise ValueError(f"SALARIO inválido: '{salario_raw}'. Use formato numérico (ex: 3500.00).")
+                    campos_atualizados.append('salario')
+
+                observacoes = cell('OBSERVACOES')
+                if observacoes:
+                    vinculo.observacoes = observacoes
+                    campos_atualizados.append('observacoes')
+
+                if not campos_atualizados:
+                    raise ValueError("Nenhum campo para atualizar nesta linha.")
+
+                vinculo.save()
+                result['success'] += 1
+
+            except Exception as e:
+                result['errors'].append(f"Linha {row_idx}: {e}")
+
+        return result

@@ -15,7 +15,7 @@ from fgtsweb.mixins import EmpresaScopeMixin, get_allowed_empresa_ids, is_empres
 from .models import Funcionario
 from .forms import FuncionarioForm, FuncionarioVinculoForm
 from .forms_transferencia import TransferenciaFuncionarioForm
-from .services import FuncionarioImportService
+from .services import FuncionarioImportService, VinculoUpdateService
 from empresas.models import Empresa
 from billing.models import BillingCustomer
 from io import BytesIO
@@ -367,6 +367,58 @@ class FuncionarioUploadImportView(LoginRequiredMixin, EmpresaScopeMixin, View):
             logger = logging.getLogger(__name__)
             logger.error(f"Erro na importação: {str(e)}", exc_info=True)
             return JsonResponse({'success': False, 'error': f'Erro ao processar arquivo: {str(e)}'}, status=400)
+
+
+class VinculoUploadUpdateView(LoginRequiredMixin, EmpresaScopeMixin, View):
+    """Recebe XLSX e atualiza vínculos existentes em lote."""
+
+    def post(self, request):
+        if 'import_file' not in request.FILES:
+            return JsonResponse({'success': False, 'error': 'Nenhum arquivo foi enviado.'}, status=400)
+
+        file = request.FILES['import_file']
+        if not file.name.endswith('.xlsx'):
+            return JsonResponse({'success': False, 'error': 'Por favor, envie um arquivo XLSX.'}, status=400)
+
+        try:
+            result = VinculoUpdateService.update_vinculos_from_file(file=file, user=request.user)
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+        response_data = {
+            'success': result['success'] > 0,
+            'total': result['total'],
+            'success_count': result['success'],
+            'error_count': len(result['errors']),
+            'errors': result['errors'],
+            'message': f"✅ {result['success']} vínculo(s) atualizado(s) com sucesso!",
+        }
+        if result['errors']:
+            response_data['message'] += f" ⚠️ {len(result['errors'])} erro(s) encontrado(s)."
+        return JsonResponse(response_data)
+
+
+class VinculoDownloadUpdateTemplateView(LoginRequiredMixin, View):
+    """Download do modelo XLSX para atualização de vínculos."""
+
+    def get(self, request):
+        try:
+            from datetime import datetime as _dt
+            wb = VinculoUpdateService.generate_template_update_xlsx()
+            output = BytesIO()
+            wb.save(output)
+            output.seek(0)
+            response = HttpResponse(
+                output.getvalue(),
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            )
+            response['Content-Disposition'] = (
+                f'attachment; filename="modelo_atualizacao_vinculos_{_dt.now().strftime("%d_%m_%Y")}.xlsx"'
+            )
+            return response
+        except Exception as e:
+            messages.error(request, f'Erro ao gerar modelo: {e}')
+            return redirect('funcionario-list')
 
 
 class FuncionarioDetailView(LoginRequiredMixin, EmpresaScopeMixin, DetailView):
