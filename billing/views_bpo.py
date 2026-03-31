@@ -388,6 +388,44 @@ def bpo_toggle_acesso(request, empresa_bpo_id):
     return redirect('billing:bpo-dashboard')
 
 
+# ─── Reativar Empresa ─────────────────────────────────────────────────────────
+
+@login_required
+@_requer_bpo
+def bpo_reativar_empresa(request, empresa_bpo_id):
+    """Reativa uma empresa gerenciada que estava suspensa."""
+    if request.method != 'POST':
+        return redirect('billing:bpo-dashboard')
+
+    conta_bpo = request.conta_bpo
+    empresa_bpo = get_object_or_404(EmpresaBPO, pk=empresa_bpo_id, conta_bpo=conta_bpo, status='suspended')
+
+    with transaction.atomic():
+        empresa_bpo.status = 'active'
+        empresa_bpo.data_suspensao = None
+        empresa_bpo.save(update_fields=['status', 'data_suspensao', 'atualizado_em'])
+
+        # Reativa o BillingCustomer
+        try:
+            bc = empresa_bpo.empresa.billing_customer
+            bc.status = 'active'
+            bc.save(update_fields=['status', 'updated_at'])
+        except Exception:
+            pass
+
+        # Readiciona às empresas_permitidas do usuário BPO
+        request.user.empresas_permitidas.add(empresa_bpo.empresa)
+        if not request.user.is_multi_empresa:
+            request.user.is_multi_empresa = True
+            request.user.save(update_fields=['is_multi_empresa'])
+
+    messages.success(
+        request,
+        format_html('Empresa <strong>{}</strong> reativada com sucesso.', empresa_bpo.empresa.nome),
+    )
+    return redirect('billing:bpo-dashboard')
+
+
 # ─── API de preview de rateio (AJAX) ─────────────────────────────────────────
 
 @login_required

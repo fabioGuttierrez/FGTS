@@ -51,6 +51,18 @@ def get_allowed_empresa_ids(user) -> Optional[list]:
             # If relation not ready yet, ignore
             pass
 
+    # Se a empresa do usuário for um escritório BPO, libera todas as empresas gerenciadas.
+    try:
+        from billing.models_bpo import ContaBPO
+        conta_bpo = ContaBPO.objects.filter(empresa_bpo_id=user_empresa.codigo).first() if user_empresa else None
+        if conta_bpo:
+            bpo_empresa_ids = conta_bpo.empresas_gerenciadas.filter(
+                status='active'
+            ).values_list('empresa_id', flat=True)
+            allowed.update(bpo_empresa_ids)
+    except Exception:
+        pass
+
     # Se for ADMIN em alguma empresa permitida, libera todo o grupo economico dessa empresa.
     try:
         from usuarios.models import EmpresaUsuarioRole

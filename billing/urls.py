@@ -2,7 +2,7 @@ from django.urls import path
 from .views import CheckoutPlanoView, checkout_empresa, asaas_webhook, FeedbackCreateView, FeedbackListView
 from .views_bpo import (
     bpo_planos, bpo_ativar, bpo_checkout, bpo_dashboard, bpo_adicionar_empresa,
-    bpo_remover_empresa, bpo_toggle_acesso, bpo_preview_rateio,
+    bpo_remover_empresa, bpo_reativar_empresa, bpo_toggle_acesso, bpo_preview_rateio,
 )
 
 app_name = 'billing'
@@ -30,6 +30,7 @@ urlpatterns = [
     path('bpo/checkout/', bpo_checkout, name='bpo-checkout'),
     path('bpo/empresas/adicionar/', bpo_adicionar_empresa, name='bpo-adicionar-empresa'),
     path('bpo/empresas/<int:empresa_bpo_id>/remover/', bpo_remover_empresa, name='bpo-remover-empresa'),
+    path('bpo/empresas/<int:empresa_bpo_id>/reativar/', bpo_reativar_empresa, name='bpo-reativar-empresa'),
     path('bpo/empresas/<int:empresa_bpo_id>/acesso/', bpo_toggle_acesso, name='bpo-toggle-acesso'),
     path('bpo/api/preview-rateio/', bpo_preview_rateio, name='bpo-preview-rateio'),
 ]

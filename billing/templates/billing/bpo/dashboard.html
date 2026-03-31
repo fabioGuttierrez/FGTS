@@ -134,6 +134,14 @@
                       <i class="bi bi-pause-circle"></i>
                     </button>
                   </form>
+                  {% elif eb.status == 'suspended' %}
+                  <form method="post" action="{% url 'billing:bpo-reativar-empresa' eb.pk %}"
+                        onsubmit="return confirm('Reativar a empresa {{ eb.empresa.nome }}? Ela voltará a ser cobrada no próximo ciclo.')">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-success" style="border-radius:6px; font-size:0.78rem;" title="Reativar empresa">
+                      <i class="bi bi-play-circle"></i>
+                    </button>
+                  </form>
                   {% endif %}
                 </div>
               </td>
