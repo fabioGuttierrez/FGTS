@@ -92,12 +92,6 @@ class LancamentoForm(forms.ModelForm):
         else:
             self.fields['vinculo'].queryset = FuncionarioVinculo.objects.select_related('funcionario', 'empresa').all().order_by('empresa__nome', 'funcionario__nome', 'data_admissao')
 
-        # Aplicar restrições de data de pagamento (min = hoje, max = última data disponível)
-        hoje = timezone.now().date()
-        data_maxima = IndiceFGTSService.obter_ultima_data_base()
-        self.fields['data_pagto'].widget.attrs['min'] = hoje.strftime('%Y-%m-%d')
-        if data_maxima:
-            self.fields['data_pagto'].widget.attrs['max'] = data_maxima.strftime('%Y-%m-%d')
 
     def clean(self):
         cleaned_data = super().clean()
@@ -152,15 +146,7 @@ class LancamentoForm(forms.ModelForm):
         return cleaned_data
 
     def clean_data_pagto(self):
-        data_pagto = self.cleaned_data.get('data_pagto')
-        if data_pagto:
-            hoje = timezone.now().date()
-            if data_pagto < hoje:
-                raise ValidationError('A data de pagamento não pode ser anterior a hoje.')
-            data_maxima = IndiceFGTSService.obter_ultima_data_base()
-            if data_maxima and data_pagto > data_maxima:
-                raise ValidationError(f'Data máxima disponível: {data_maxima.strftime("%d/%m/%Y")}. Para datas posteriores, atualize os índices ou contrate o plano pago.')
-        return data_pagto
+        return self.cleaned_data.get('data_pagto')
 
     def save(self, commit=True):
         """Sobrescrever save para calcular valor_fgts automaticamente"""
