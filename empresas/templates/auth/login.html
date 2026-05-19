@@ -131,10 +131,26 @@
     text-align: center;
   }
   
-  .btn-register:hover {
-    background: #e0e0e0;
-    border-color: #005CA9;
+  .password-wrapper {
+    position: relative;
   }
+  .password-wrapper input {
+    padding-right: 42px !important;
+  }
+  .toggle-pw {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #95a5a6;
+    padding: 0;
+    line-height: 1;
+    font-size: 1rem;
+  }
+  .toggle-pw:hover { color: #005CA9; }
 </style>
 {% endblock %}
 
@@ -161,7 +177,12 @@
       
       <div class="form-group">
         <label for="{{ form.password.id_for_label }}">Senha</label>
-        {{ form.password }}
+        <div class="password-wrapper">
+          {{ form.password }}
+          <button type="button" class="toggle-pw" onclick="togglePw('{{ form.password.id_for_label }}', this)" tabindex="-1" aria-label="Mostrar/ocultar senha">
+            <i class="bi bi-eye"></i>
+          </button>
+        </div>
       </div>
       
       <button type="submit" class="btn-login">Entrar</button>
@@ -180,4 +201,18 @@
 </div>
 
 {% endblock %}
+
+<script>
+function togglePw(fieldId, btn) {
+  var input = document.getElementById(fieldId);
+  var icon = btn.querySelector('i');
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.className = 'bi bi-eye-slash';
+  } else {
+    input.type = 'password';
+    icon.className = 'bi bi-eye';
+  }
+}
+</script>
 

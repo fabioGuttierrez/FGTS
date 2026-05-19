@@ -151,10 +151,27 @@
     font-size: 0.9rem;
   }
   
-  .register-back a:hover {
-    text-decoration: underline;
+  .password-wrapper {
+    position: relative;
   }
-  
+  .password-wrapper input {
+    padding-right: 42px !important;
+  }
+  .toggle-pw {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #95a5a6;
+    padding: 0;
+    line-height: 1;
+    font-size: 1rem;
+  }
+  .toggle-pw:hover { color: #005CA9; }
+
   .info-box {
     background: #e8f4f8;
     border-left: 4px solid #3498db;
@@ -164,7 +181,7 @@
     font-size: 0.9rem;
     color: #2c3e50;
   }
-  
+
   .info-box strong {
     display: block;
     margin-bottom: 4px;
@@ -257,7 +274,12 @@
       <!-- Senha -->
       <div class="form-group {% if form.password1.errors %}error{% endif %}">
         {{ form.password1.label_tag }}
-        {{ form.password1 }}
+        <div class="password-wrapper">
+          {{ form.password1 }}
+          <button type="button" class="toggle-pw" onclick="togglePw('{{ form.password1.id_for_label }}', this)" tabindex="-1" aria-label="Mostrar/ocultar senha">
+            <i class="bi bi-eye"></i>
+          </button>
+        </div>
         {% if form.password1.errors %}
           <div class="errorlist">
             {% for error in form.password1.errors %}
@@ -267,11 +289,16 @@
         {% endif %}
         <small>{{ form.password1.help_text|safe }}</small>
       </div>
-      
+
       <!-- Confirmar Senha -->
       <div class="form-group {% if form.password2.errors %}error{% endif %}">
         {{ form.password2.label_tag }}
-        {{ form.password2 }}
+        <div class="password-wrapper">
+          {{ form.password2 }}
+          <button type="button" class="toggle-pw" onclick="togglePw('{{ form.password2.id_for_label }}', this)" tabindex="-1" aria-label="Mostrar/ocultar senha">
+            <i class="bi bi-eye"></i>
+          </button>
+        </div>
         {% if form.password2.errors %}
           <div class="errorlist">
             {% for error in form.password2.errors %}
@@ -291,3 +318,17 @@
 </div>
 
 {% endblock %}
+
+<script>
+function togglePw(fieldId, btn) {
+  var input = document.getElementById(fieldId);
+  var icon = btn.querySelector('i');
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.className = 'bi bi-eye-slash';
+  } else {
+    input.type = 'password';
+    icon.className = 'bi bi-eye';
+  }
+}
+</script>
