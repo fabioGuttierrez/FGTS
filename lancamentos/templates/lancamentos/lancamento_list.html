@@ -134,27 +134,6 @@
                         <i class="bi bi-funnel me-2"></i>Filtros e Ordenação
                     </h6>
                     <form method="get" class="row g-3" id="filtrosLancamentoForm">
-                        <div class="col-md-2">
-                            <label for="competencia" class="form-label small fw-bold">Competência</label>
-                            <input type="text" class="form-control form-control-sm" id="competencia" name="competencia" 
-                                   placeholder="MM/YYYY" value="{{ competencia_filtro }}" maxlength="7">
-                        </div>
-                        <div class="col-md-3">
-                            <label for="funcionario" class="form-label small fw-bold">Funcionário</label>
-                            <select class="form-select form-select-sm" id="funcionario" name="funcionario">
-                                <option value="">-- Todos --</option>
-                                {% for f in funcionarios %}
-                                    <option value="{{ f.id }}" {% if f.id|stringformat:"s" == funcionario_filtro %}selected{% endif %}>
-                                        {{ f.nome }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label for="matricula" class="form-label small fw-bold">Matrícula</label>
-                            <input type="text" class="form-control form-control-sm" id="matricula" name="matricula"
-                                   placeholder="Ex: 10293" value="{{ matricula_filtro }}">
-                        </div>
                         <div class="col-md-3">
                             <label for="empresa" class="form-label small fw-bold">Empresa</label>
                             <select class="form-select form-select-sm" id="empresa" name="empresa">
@@ -165,6 +144,26 @@
                                     </option>
                                 {% endfor %}
                             </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="matricula" class="form-label small fw-bold">Matrícula</label>
+                            <input type="text" class="form-control form-control-sm" id="matricula" name="matricula"
+                                   placeholder="Ex: 10293" value="{{ matricula_filtro }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="funcionario_display" class="form-label small fw-bold">Funcionário</label>
+                            <div class="autocomplete-wrapper position-relative">
+                                <input type="text" class="form-control form-control-sm" id="funcionario_display"
+                                       placeholder="Selecione uma empresa primeiro" autocomplete="off" disabled>
+                                <input type="hidden" id="funcionario" name="funcionario" value="{{ funcionario_filtro }}">
+                                <div id="funcionario_dropdown" class="autocomplete-dropdown list-group position-absolute d-none"
+                                     style="z-index:1050;max-height:220px;overflow-y:auto;width:100%;top:100%;left:0;"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="competencia" class="form-label small fw-bold">Competência</label>
+                            <input type="text" class="form-control form-control-sm" id="competencia" name="competencia"
+                                   placeholder="MM/YYYY" value="{{ competencia_filtro }}" maxlength="7">
                         </div>
                         <div class="col-md-2">
                             <label for="ano" class="form-label small fw-bold">Ano</label>
@@ -331,18 +330,6 @@
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </form>
-                                    {% if lancamento.is_ultima_competencia %}
-                                    {% if lancamento.vinculo %}
-                                    <form method="post" action="{% url 'lancamento-gerar-automatico-vinculo' lancamento.vinculo.id %}" style="display: inline;" onsubmit="return confirm('Gerar lançamentos automáticos para o vínculo (matrícula {{ lancamento.vinculo.matricula|default:lancamento.vinculo.id }}) de {{ lancamento.funcionario.nome }}?')">
-                                    {% else %}
-                                    <form method="post" action="{% url 'lancamento-gerar-automatico' lancamento.funcionario.id %}" style="display: inline;" onsubmit="return confirm('Gerar lançamentos automáticos para {{ lancamento.funcionario.nome }}?')">
-                                    {% endif %}
-                                        {% csrf_token %}
-                                        <button type="submit" class="btn btn-outline-success btn-sm" title="Gerar lançamentos automáticos até hoje" data-bs-toggle="tooltip">
-                                            <i class="bi bi-magic"></i>
-                                        </button>
-                                    </form>
-                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -625,42 +612,87 @@
         }
     });
 
-    // Filtro em cascata: empresa → funcionário
+    // Autocomplete de funcionário com cascata empresa → funcionário
     (function () {
-        var JSON_URL = '{% url "funcionarios-json" %}';
-        var empresaEl = document.getElementById('empresa');
-        var funcEl    = document.getElementById('funcionario');
-        if (!empresaEl || !funcEl) return;
+        var AUTOCOMPLETE_URL = '{% url "funcionarios-autocomplete" %}';
+        var empresaEl   = document.getElementById('empresa');
+        var displayEl   = document.getElementById('funcionario_display');
+        var hiddenEl    = document.getElementById('funcionario');
+        var dropdownEl  = document.getElementById('funcionario_dropdown');
+        if (!empresaEl || !displayEl || !hiddenEl || !dropdownEl) return;
 
-        var initialFuncId = '{{ funcionario_filtro|default:"" }}';
+        var debounceTimer = null;
 
-        function popularFuncionarios(empresaId, manter) {
-            if (!empresaId) {
-                funcEl.innerHTML = '<option value="">-- Todos --</option>';
-                return;
-            }
-            fetch(JSON_URL + '?empresa_id=' + encodeURIComponent(empresaId))
-                .then(function (r) { return r.json(); })
-                .then(function (lista) {
-                    funcEl.innerHTML = '<option value="">-- Todos --</option>';
-                    lista.forEach(function (f) {
-                        var opt = document.createElement('option');
-                        opt.value = f.id;
-                        opt.textContent = f.nome;
-                        if (String(f.id) === String(manter)) opt.selected = true;
-                        funcEl.appendChild(opt);
+        function setPlaceholder() {
+            displayEl.placeholder = empresaEl.value ? 'Digite para buscar...' : 'Selecione uma empresa ou busque em todas';
+            displayEl.disabled = false;
+        }
+
+        function hideDropdown() {
+            dropdownEl.classList.add('d-none');
+            dropdownEl.innerHTML = '';
+        }
+
+        function showResults(results) {
+            dropdownEl.innerHTML = '';
+            if (!results || !results.length) {
+                var empty = document.createElement('div');
+                empty.className = 'list-group-item text-muted small py-2 px-3';
+                empty.textContent = 'Nenhum funcionário encontrado';
+                dropdownEl.appendChild(empty);
+            } else {
+                results.forEach(function (r) {
+                    var item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'list-group-item list-group-item-action small py-2';
+                    item.textContent = r.label;
+                    item.addEventListener('mousedown', function (e) {
+                        e.preventDefault();
+                        displayEl.value = r.label;
+                        hiddenEl.value = r.id;
+                        hideDropdown();
                     });
+                    dropdownEl.appendChild(item);
+                });
+            }
+            dropdownEl.classList.remove('d-none');
+        }
+
+        function fetchSuggestions(q) {
+            var url = AUTOCOMPLETE_URL + '?q=' + encodeURIComponent(q);
+            if (empresaEl.value) url += '&empresa_id=' + encodeURIComponent(empresaEl.value);
+            fetch(url)
+                .then(function (r) {
+                    if (!r.ok) { showResults([]); return null; }
+                    return r.json();
+                })
+                .then(function (data) { if (data !== null) showResults(data); })
+                .catch(function (err) {
+                    console.error('[Autocomplete] Erro:', err);
+                    showResults([]);
                 });
         }
 
-        empresaEl.addEventListener('change', function () {
-            popularFuncionarios(this.value, '');
+        displayEl.addEventListener('input', function () {
+            var q = this.value.trim();
+            hiddenEl.value = '';
+            clearTimeout(debounceTimer);
+            if (q.length < 2) { hideDropdown(); return; }
+            debounceTimer = setTimeout(function () { fetchSuggestions(q); }, 150);
         });
 
-        // Ao carregar página com empresa já selecionada (via URL), refiltra e restaura seleção
-        if (empresaEl.value) {
-            popularFuncionarios(empresaEl.value, initialFuncId);
-        }
+        displayEl.addEventListener('blur', function () {
+            setTimeout(hideDropdown, 300);
+        });
+
+        empresaEl.addEventListener('change', function () {
+            displayEl.value = '';
+            hiddenEl.value = '';
+            hideDropdown();
+            setPlaceholder();
+        });
+
+        setPlaceholder();
     })();
 </script>
 

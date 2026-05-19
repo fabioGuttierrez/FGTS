@@ -9,6 +9,7 @@ urlpatterns = [
     path('baixar-modelo/', views.FuncionarioDownloadTemplateView.as_view(), name='funcionario-download-template'),
     path('importar/', views.FuncionarioUploadImportView.as_view(), name='funcionario-import'),
     path('json/', views.funcionarios_json, name='funcionarios-json'),
+    path('autocomplete/', views.funcionarios_autocomplete, name='funcionarios-autocomplete'),
     path('vinculos/json/', views.vinculos_json, name='vinculos-json'),
     path('<int:pk>/', views.FuncionarioDetailView.as_view(), name='funcionario-detail'),
     path('vinculos/atualizar/', views.VinculoUploadUpdateView.as_view(), name='vinculo-bulk-update'),

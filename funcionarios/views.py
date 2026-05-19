@@ -176,6 +176,7 @@ class FuncionarioListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         context['filtro_empresa'] = self.request.GET.get('empresa', '')
         context['filtro_status'] = self.request.GET.get('status', '')
         context['filtro_busca'] = self.request.GET.get('q', '')
+        context['filtro_ordenar'] = self.request.GET.get('ordenar', '')
         # Permissões de recursos para botões de ação
         from empresas.models_feature import empresa_tem_recurso
         empresa = None
@@ -585,6 +586,73 @@ def funcionarios_json(request):
         .order_by('nome')
         .values('id', 'nome')
     )
+    return JsonResponse(data, safe=False)
+
+
+def funcionarios_autocomplete(request):
+    """Autocomplete de funcionário por texto, com empresa_id opcional.
+    Retorna [{id, label}] — label inclui nomes de empresa quando há múltiplos vínculos.
+    """
+    if not request.user.is_authenticated:
+        return JsonResponse([], safe=False)
+
+    q = request.GET.get('q', '').strip()
+    empresa_id = request.GET.get('empresa_id', '').strip()
+
+    if len(q) < 2:
+        return JsonResponse([], safe=False)
+
+    allowed_ids = get_allowed_empresa_ids(request.user)
+
+    if empresa_id:
+        try:
+            empresa_id = int(empresa_id)
+        except ValueError:
+            return JsonResponse([], safe=False)
+
+        if allowed_ids is not None:
+            if empresa_id not in allowed_ids:
+                return JsonResponse([], safe=False)
+
+        qs = (
+            FuncionarioVinculo.objects
+            .filter(empresa_id=empresa_id, funcionario__nome__icontains=q)
+            .select_related('funcionario')
+            .order_by('funcionario__nome')[:30]
+        )
+        vistos = set()
+        data = []
+        for v in qs:
+            fid = v.funcionario_id
+            if fid not in vistos:
+                vistos.add(fid)
+                data.append({'id': fid, 'label': v.funcionario.nome})
+    else:
+        from collections import defaultdict
+        qs = (
+            FuncionarioVinculo.objects
+            .filter(funcionario__nome__icontains=q)
+            .select_related('funcionario', 'empresa')
+            .order_by('funcionario__nome')
+        )
+        if allowed_ids is not None:
+            qs = qs.filter(empresa__codigo__in=allowed_ids)
+
+        func_map = defaultdict(lambda: {'nome': '', 'empresas': []})
+        for v in qs[:100]:
+            func_map[v.funcionario_id]['nome'] = v.funcionario.nome
+            if v.empresa.nome not in func_map[v.funcionario_id]['empresas']:
+                func_map[v.funcionario_id]['empresas'].append(v.empresa.nome)
+
+        data = []
+        for fid, info in func_map.items():
+            empresas_label = ' / '.join(info['empresas'])
+            label = '{} ({})'.format(info['nome'], empresas_label)
+            data.append({'id': fid, 'label': label})
+
+        data.sort(key=lambda x: x['label'])
+        data = data[:30]
+
     return JsonResponse(data, safe=False)
 
 

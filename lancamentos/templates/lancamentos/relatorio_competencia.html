@@ -79,13 +79,19 @@
           {{ form.empresa }}
         </div>
         <div class="col-12 col-lg-4">
-          <label class="form-label">Funcionário (opcional)</label>
-          {{ form.funcionario }}
-        </div>
-        <div class="col-12 col-lg-4">
           <label class="form-label">Matrícula (opcional)</label>
           {{ form.matricula }}
           <div class="form-text text-muted">{{ form.matricula.help_text }}</div>
+        </div>
+        <div class="col-12 col-lg-4">
+          <label class="form-label">Funcionário (opcional)</label>
+          <div class="autocomplete-wrapper position-relative">
+            <input type="text" id="funcionario_display_rel" class="form-control"
+                   placeholder="Selecione uma empresa primeiro" autocomplete="off" disabled>
+            {{ form.funcionario }}
+            <div id="funcionario_dropdown_rel" class="autocomplete-dropdown list-group position-absolute d-none"
+                 style="z-index:1050;max-height:220px;overflow-y:auto;width:100%;top:100%;left:0;"></div>
+          </div>
         </div>
 
         <div class="col-12 col-lg-3">
@@ -400,6 +406,81 @@ document.addEventListener('DOMContentLoaded', function() {
   if (empresaEl.value) {
     popularFuncionarios(empresaEl.value);
   }
+})();
+</script>
+
+<script>
+// Autocomplete empresa → funcionário (relatorio_competencia)
+(function () {
+  var AUTOCOMPLETE_URL = '{% url "funcionarios-autocomplete" %}';
+  var empresaEl  = document.getElementById('id_empresa');
+  var funcEl     = document.getElementById('id_funcionario');
+  var displayEl  = document.getElementById('funcionario_display_rel');
+  var dropEl     = document.getElementById('funcionario_dropdown_rel');
+  if (!empresaEl || !funcEl || !displayEl || !dropEl) return;
+
+  // Ocultar o select original — o hidden value será submetido junto
+  funcEl.style.display = 'none';
+
+  var debounce = null;
+
+  function setPlaceholder() {
+    displayEl.placeholder = empresaEl.value ? 'Digite para buscar...' : 'Selecione uma empresa primeiro';
+    displayEl.disabled = !empresaEl.value && empresaEl.options.length > 1;
+  }
+
+  function hide() { dropEl.classList.add('d-none'); dropEl.innerHTML = ''; }
+
+  function show(results) {
+    dropEl.innerHTML = '';
+    if (!results || !results.length) {
+      var el = document.createElement('div');
+      el.className = 'list-group-item text-muted small py-2 px-3';
+      el.textContent = 'Nenhum funcionário encontrado';
+      dropEl.appendChild(el);
+    } else {
+      results.forEach(function (r) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'list-group-item list-group-item-action small py-2';
+        btn.textContent = r.label;
+        btn.addEventListener('mousedown', function (e) {
+          e.preventDefault();
+          displayEl.value = r.label;
+          funcEl.value = r.id;
+          hide();
+        });
+        dropEl.appendChild(btn);
+      });
+    }
+    dropEl.classList.remove('d-none');
+  }
+
+  displayEl.addEventListener('input', function () {
+    funcEl.value = '';
+    var q = this.value.trim();
+    clearTimeout(debounce);
+    if (q.length < 2) { hide(); return; }
+    debounce = setTimeout(function () {
+      var url = AUTOCOMPLETE_URL + '?q=' + encodeURIComponent(q);
+      if (empresaEl.value) url += '&empresa_id=' + encodeURIComponent(empresaEl.value);
+      fetch(url)
+        .then(function (r) { if (!r.ok) { show([]); return null; } return r.json(); })
+        .then(function (d) { if (d !== null) show(d); })
+        .catch(function (err) { console.error('[Autocomplete]', err); show([]); });
+    }, 150);
+  });
+
+  displayEl.addEventListener('blur', function () { setTimeout(hide, 300); });
+
+  empresaEl.addEventListener('change', function () {
+    displayEl.value = '';
+    funcEl.value = '';
+    hide();
+    setPlaceholder();
+  });
+
+  setPlaceholder();
 })();
 </script>
 {% endblock %}

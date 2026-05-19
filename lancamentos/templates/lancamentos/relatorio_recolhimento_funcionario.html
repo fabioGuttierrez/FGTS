@@ -46,6 +46,20 @@
           {% endif %}
         </div>
 
+        <div class="col-12 col-md-4 col-lg-3">
+          <label class="form-label fw-semibold">Funcionário</label>
+          <div class="autocomplete-wrapper position-relative">
+            <input type="text" id="funcionario_display_rec" class="form-control"
+                   placeholder="Selecione uma empresa primeiro" autocomplete="off" disabled>
+            {{ form.funcionario }}
+            <div id="funcionario_dropdown_rec" class="autocomplete-dropdown list-group position-absolute d-none"
+                 style="z-index:1050;max-height:220px;overflow-y:auto;width:100%;top:100%;left:0;"></div>
+          </div>
+          {% if form.funcionario.errors %}
+            <div class="text-danger small">{{ form.funcionario.errors.0 }}</div>
+          {% endif %}
+        </div>
+
         <div class="col-12 col-md-4 col-lg-2">
           <label class="form-label fw-semibold">Competência Inicial <span class="text-danger">*</span></label>
           {{ form.competencia_inicio }}
@@ -59,14 +73,6 @@
           {{ form.competencia_fim }}
           {% if form.competencia_fim.errors %}
             <div class="text-danger small">{{ form.competencia_fim.errors.0 }}</div>
-          {% endif %}
-        </div>
-
-        <div class="col-12 col-md-4 col-lg-3">
-          <label class="form-label fw-semibold">Funcionário</label>
-          {{ form.funcionario }}
-          {% if form.funcionario.errors %}
-            <div class="text-danger small">{{ form.funcionario.errors.0 }}</div>
           {% endif %}
         </div>
 
@@ -231,6 +237,77 @@ document.getElementById('form-relatorio').addEventListener('submit', function() 
   document.getElementById('btn-gerar').disabled = true;
   document.getElementById('btn-gerar').innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processando...';
 });
+
+// Autocomplete empresa → funcionário (recolhimento)
+(function () {
+  var AUTOCOMPLETE_URL = '{% url "funcionarios-autocomplete" %}';
+  var empresaEl = document.getElementById('id_empresa');
+  var funcEl    = document.getElementById('id_funcionario');
+  var displayEl = document.getElementById('funcionario_display_rec');
+  var dropEl    = document.getElementById('funcionario_dropdown_rec');
+  if (!empresaEl || !funcEl || !displayEl || !dropEl) return;
+
+  funcEl.style.display = 'none';
+  var debounce = null;
+
+  function setPlaceholder() {
+    displayEl.placeholder = empresaEl.value ? 'Digite para buscar...' : 'Selecione uma empresa primeiro';
+    displayEl.disabled = !empresaEl.value;
+  }
+
+  function hide() { dropEl.classList.add('d-none'); dropEl.innerHTML = ''; }
+
+  function show(results) {
+    dropEl.innerHTML = '';
+    if (!results || !results.length) {
+      var el = document.createElement('div');
+      el.className = 'list-group-item text-muted small';
+      el.textContent = 'Nenhum funcionário encontrado';
+      dropEl.appendChild(el);
+    } else {
+      results.forEach(function (r) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'list-group-item list-group-item-action small py-2';
+        btn.textContent = r.label;
+        btn.addEventListener('mousedown', function (e) {
+          e.preventDefault();
+          displayEl.value = r.label;
+          funcEl.value = r.id;
+          hide();
+        });
+        dropEl.appendChild(btn);
+      });
+    }
+    dropEl.classList.remove('d-none');
+  }
+
+  displayEl.addEventListener('input', function () {
+    funcEl.value = '';
+    var q = this.value.trim();
+    clearTimeout(debounce);
+    if (q.length < 2) { hide(); return; }
+    debounce = setTimeout(function () {
+      var url = AUTOCOMPLETE_URL + '?q=' + encodeURIComponent(q);
+      if (empresaEl.value) url += '&empresa_id=' + encodeURIComponent(empresaEl.value);
+      fetch(url)
+        .then(function (r) { if (!r.ok) { show([]); return null; } return r.json(); })
+        .then(function (d) { if (d !== null) show(d); })
+        .catch(function (err) { console.error('[Autocomplete]', err); show([]); });
+    }, 150);
+  });
+
+  displayEl.addEventListener('blur', function () { setTimeout(hide, 300); });
+
+  empresaEl.addEventListener('change', function () {
+    displayEl.value = '';
+    funcEl.value = '';
+    hide();
+    setPlaceholder();
+  });
+
+  setPlaceholder();
+})();
 </script>
 
 {% endblock %}

@@ -1,9 +1,9 @@
 from django.urls import path
 from .views import (
     LancamentoListView, LancamentoCreateView, LancamentoUpdateView, LancamentoDeleteView,
-    LancamentoImportView, LancamentoDownloadTemplateView, GerarLancamentosAutomaticosView,
-    GerarLancamentosAutomaticosVinculoView, relatorio_por_ids, lancamento_ids,
-    RelatorioCompetenciaView, export_relatorio_competencia_csv, export_relatorio_competencia_pdf, download_memoria_calculo,
+    LancamentoImportView, LancamentoDownloadTemplateView,
+    RelatorioCompetenciaView, relatorio_por_ids, lancamento_ids,
+    export_relatorio_competencia_csv, export_relatorio_competencia_pdf, download_memoria_calculo,
     RelatorioRecolhimentoFuncionarioView, export_recolhimento_funcionario_pdf,
     export_recolhimento_funcionario_xlsx,
     LancamentoImportStatusView, lancamento_import_status_json,
@@ -22,8 +22,6 @@ urlpatterns = [
     path('importar/<int:pk>/status/', LancamentoImportStatusView.as_view(), name='lancamento-import-status'),
     path('importar/<int:pk>/status/json/', lancamento_import_status_json, name='lancamento-import-status-json'),
     path('download-template/', LancamentoDownloadTemplateView.as_view(), name='lancamento-download-template'),
-    path('gerar/<int:funcionario_id>/', GerarLancamentosAutomaticosView.as_view(), name='lancamento-gerar-automatico'),
-    path('gerar-vinculo/<int:vinculo_id>/', GerarLancamentosAutomaticosVinculoView.as_view(), name='lancamento-gerar-automatico-vinculo'),
     path('ids/', lancamento_ids, name='lancamento-ids'),
     path('relatorio/', RelatorioCompetenciaView.as_view(), name='relatorio-competencia'),
     path('relatorio/por-ids/', relatorio_por_ids, name='relatorio-por-ids'),
