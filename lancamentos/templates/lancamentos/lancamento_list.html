@@ -344,10 +344,10 @@
                 <ul class="pagination justify-content-center">
                     {% if page_obj.has_previous %}
                         <li class="page-item">
-                            <a class="page-link" href="?page=1">Primeira</a>
+                            <a class="page-link" href="?{% if empresa_filtro %}empresa={{ empresa_filtro }}&{% endif %}{% if funcionario_filtro %}funcionario={{ funcionario_filtro }}&{% endif %}{% if matricula_filtro %}matricula={{ matricula_filtro }}&{% endif %}{% if competencia_filtro %}competencia={{ competencia_filtro }}&{% endif %}{% if ano_filtro %}ano={{ ano_filtro }}&{% endif %}{% if status_pagto_filtro %}status_pagto={{ status_pagto_filtro }}&{% endif %}{% if ordem_filtro %}ordem={{ ordem_filtro }}&{% endif %}page=1">Primeira</a>
                         </li>
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Anterior</a>
+                            <a class="page-link" href="?{% if empresa_filtro %}empresa={{ empresa_filtro }}&{% endif %}{% if funcionario_filtro %}funcionario={{ funcionario_filtro }}&{% endif %}{% if matricula_filtro %}matricula={{ matricula_filtro }}&{% endif %}{% if competencia_filtro %}competencia={{ competencia_filtro }}&{% endif %}{% if ano_filtro %}ano={{ ano_filtro }}&{% endif %}{% if status_pagto_filtro %}status_pagto={{ status_pagto_filtro }}&{% endif %}{% if ordem_filtro %}ordem={{ ordem_filtro }}&{% endif %}page={{ page_obj.previous_page_number }}">Anterior</a>
                         </li>
                     {% endif %}
 
@@ -359,10 +359,10 @@
 
                     {% if page_obj.has_next %}
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.next_page_number }}">Próxima</a>
+                            <a class="page-link" href="?{% if empresa_filtro %}empresa={{ empresa_filtro }}&{% endif %}{% if funcionario_filtro %}funcionario={{ funcionario_filtro }}&{% endif %}{% if matricula_filtro %}matricula={{ matricula_filtro }}&{% endif %}{% if competencia_filtro %}competencia={{ competencia_filtro }}&{% endif %}{% if ano_filtro %}ano={{ ano_filtro }}&{% endif %}{% if status_pagto_filtro %}status_pagto={{ status_pagto_filtro }}&{% endif %}{% if ordem_filtro %}ordem={{ ordem_filtro }}&{% endif %}page={{ page_obj.next_page_number }}">Próxima</a>
                         </li>
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">Última</a>
+                            <a class="page-link" href="?{% if empresa_filtro %}empresa={{ empresa_filtro }}&{% endif %}{% if funcionario_filtro %}funcionario={{ funcionario_filtro }}&{% endif %}{% if matricula_filtro %}matricula={{ matricula_filtro }}&{% endif %}{% if competencia_filtro %}competencia={{ competencia_filtro }}&{% endif %}{% if ano_filtro %}ano={{ ano_filtro }}&{% endif %}{% if status_pagto_filtro %}status_pagto={{ status_pagto_filtro }}&{% endif %}{% if ordem_filtro %}ordem={{ ordem_filtro }}&{% endif %}page={{ page_obj.paginator.num_pages }}">Última</a>
                         </li>
                     {% endif %}
                 </ul>
