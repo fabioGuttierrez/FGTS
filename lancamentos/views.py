@@ -457,6 +457,14 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         context['relatorio_bloqueio_motivo'] = bloqueio_ctx['feature_block_reason']
         context['empresa_contexto'] = empresa_contexto
 
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            context['pode_importar_re_sefip'] = True
+            context['pode_importar_extrato_cef'] = True
+        else:
+            context['pode_importar_re_sefip'] = empresa_tem_recurso(empresa_contexto, 'importar_re_sefip')
+            context['pode_importar_extrato_cef'] = empresa_tem_recurso(empresa_contexto, 'importar_extrato_cef')
+
         # Buscar a data da última atualização da tabela indices_fgts (SupabaseIndice)
         try:
             from indices.models import SupabaseIndice
