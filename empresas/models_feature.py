@@ -23,6 +23,8 @@ class EmpresaFeature(models.Model):
         ("excluir_lancamento", "Excluir Lançamento"),
         ("exportar_lancamentos", "Exportar Lançamentos"),
         ("gerar_sefip", "Gerar SEFIP.RE"),
+        ("importar_re_sefip", "Importar RE / SEFIP"),
+        ("importar_extrato_cef", "Importar Extrato Analítico CEF"),
         # Adicione outros recursos conforme necessário
     ]
     empresa = models.OneToOneField('empresas.Empresa', on_delete=models.CASCADE, related_name="features")
@@ -38,7 +40,8 @@ class EmpresaFeature(models.Model):
     excluir_lancamento = models.BooleanField(default=False)
     exportar_lancamentos = models.BooleanField(default=False)
     gerar_sefip = models.BooleanField(default=False)
-    # ...
+    importar_re_sefip = models.BooleanField(default=False)
+    importar_extrato_cef = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Permissões de recursos para {self.empresa.nome}"

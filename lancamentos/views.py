@@ -223,7 +223,7 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         matricula = self.request.GET.get('matricula', '').strip()
         vinculo_id = self.request.GET.get('vinculo', '').strip()
         ano = self.request.GET.get('ano', '').strip()
-        status_pagto = self.request.GET.get('status_pagto', '').strip()
+        fonte_confirmacao = self.request.GET.get('fonte_confirmacao', '').strip()
 
         # Usar sempre MM/YYYY (string) para busca
         if competencia:
@@ -241,8 +241,12 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         if matricula:
             qs = qs.filter(vinculo__matricula__icontains=matricula)
 
-        if status_pagto in ['pago', 'nao_pago']:
-            qs = qs.filter(pago=(status_pagto == 'pago'))
+        if fonte_confirmacao == 'nao_pago':
+            qs = qs.filter(pago=False)
+        elif fonte_confirmacao == 'manual':
+            qs = qs.filter(pago=True, fonte_confirmacao_pagamento='manual')
+        elif fonte_confirmacao == 'extrato_analitico':
+            qs = qs.filter(pago=True, fonte_confirmacao_pagamento='extrato_analitico')
 
         if ano:
             qs = qs.filter(ano_comp=ano)
@@ -382,7 +386,6 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         competencia = self.request.GET.get('competencia', '').strip()
         funcionario_id = self.request.GET.get('funcionario', '').strip()
         empresa_id = self.request.GET.get('empresa', '').strip()
-        status_pagto = self.request.GET.get('status_pagto', '').strip()
         # Não aplicar filtro de competência para o filtro de ano, para garantir que todos os anos presentes sejam exibidos
 
         def extract_ano(comp):
@@ -414,8 +417,6 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
             base_qs = base_qs.filter(funcionario_id=funcionario_id)
         if empresa_id:
             base_qs = base_qs.filter(empresa_id=empresa_id)
-        if status_pagto in ['pago', 'nao_pago']:
-            base_qs = base_qs.filter(pago=(status_pagto == 'pago'))
 
         competencias = base_qs.values_list('competencia', flat=True).distinct()
         anos_validos = set()
@@ -432,7 +433,7 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         context['matricula_filtro'] = self.request.GET.get('matricula', '')
         context['vinculo_filtro'] = self.request.GET.get('vinculo', '')
         context['ano_filtro'] = self.request.GET.get('ano', '')
-        context['status_pagto_filtro'] = self.request.GET.get('status_pagto', '')
+        context['fonte_confirmacao_filtro'] = self.request.GET.get('fonte_confirmacao', '')
         context['ordem_filtro'] = self.request.GET.get('ordem', '-competencia')
 
         # Empresa de referência para validar plano/trial (filtro, usuário ou única empresa permitida)

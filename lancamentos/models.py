@@ -39,10 +39,23 @@ class Lancamento(models.Model):
 	desconto_inss = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, default=Decimal('0.00'), help_text="Desconto de INSS")
 	desconto_ir = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, default=Decimal('0.00'), help_text="Desconto de IR")
 	desconto_sindical = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, default=Decimal('0.00'), help_text="Contribuição sindical")
+	FONTE_CONFIRMACAO_CHOICES = [
+		('manual', 'Manual (não verificado)'),
+		('extrato_analitico', 'Extrato Analítico CEF (confirmado)'),
+	]
 	pago = models.BooleanField(default=False, help_text="FGTS foi pago?")
 	data_pagto = models.DateField(null=True, blank=True, verbose_name="Data de Pagamento", help_text="Data em que o FGTS foi efetivamente pago")
 	valor_pago = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Valor Pago")
 	pago_em = models.DateTimeField(null=True, blank=True, verbose_name="Marcado como pago em", help_text="Data/hora em que foi registrado como pago no sistema")
+	fonte_confirmacao_pagamento = models.CharField(
+		max_length=20,
+		choices=FONTE_CONFIRMACAO_CHOICES,
+		null=True,
+		blank=True,
+		db_index=True,
+		verbose_name="Fonte de Confirmação",
+		help_text="Como o pagamento foi confirmado: manualmente pelo usuário ou via Extrato Analítico da CEF.",
+	)
 	criado_em = models.DateTimeField(auto_now_add=True)
 	atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -88,6 +101,11 @@ class Lancamento(models.Model):
 			self.pago_em = timezone.now()
 		elif not self.pago:
 			self.pago_em = None
+			self.fonte_confirmacao_pagamento = None
+
+		# Marcação manual: preserva fonte CEF, define 'manual' se ainda sem fonte
+		if self.pago and not self.fonte_confirmacao_pagamento:
+			self.fonte_confirmacao_pagamento = 'manual'
 		
 		# Salvar o lançamento atual
 		super().save(*args, **kwargs)
@@ -348,3 +366,74 @@ class ImportacaoResponsabilidade(models.Model):
 
 	def __str__(self):
 		return f"Responsabilidade import #{self.importacao_id} — {self.usuario}"
+
+
+class ImportacaoRE(models.Model):
+	"""Rastreia cada importação de arquivo SEFIP.RE ou PDF do relatório SEFIP."""
+
+	TIPO_FONTE_CHOICES = [
+		('re_texto', 'Arquivo .RE (texto)'),
+		('pdf', 'PDF visual SEFIP'),
+	]
+	STATUS_CHOICES = [
+		('preview', 'Aguardando confirmação'),
+		('pending', 'Aguardando'),
+		('processing', 'Processando'),
+		('done', 'Concluído'),
+		('error', 'Erro'),
+	]
+
+	usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='importacoes_re')
+	empresa = models.ForeignKey(Empresa, on_delete=models.SET_NULL, null=True, blank=True)
+	arquivo = models.FileField(upload_to='importacoes/re/')
+	nome_arquivo = models.CharField(max_length=255)
+	tipo_fonte = models.CharField(max_length=20, choices=TIPO_FONTE_CHOICES)
+	status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+	linhas_total = models.IntegerField(null=True, blank=True)
+	linhas_processadas = models.IntegerField(default=0)
+	resultado_json = models.JSONField(null=True, blank=True)
+	preview_resultado = models.JSONField(null=True, blank=True)
+	mensagem_erro = models.TextField(blank=True)
+	criado_em = models.DateTimeField(auto_now_add=True)
+	atualizado_em = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		ordering = ['-criado_em']
+		verbose_name = 'Importação RE/SEFIP'
+		verbose_name_plural = 'Importações RE/SEFIP'
+
+	def __str__(self):
+		return f"ImportacaoRE #{self.pk} — {self.nome_arquivo}"
+
+
+class ImportacaoExtratoAnalitico(models.Model):
+	"""Rastreia cada importação de Extrato Analítico da CEF para confirmação de pagamentos."""
+
+	STATUS_CHOICES = [
+		('preview', 'Aguardando confirmação'),
+		('pending', 'Aguardando'),
+		('processing', 'Processando'),
+		('done', 'Concluído'),
+		('error', 'Erro'),
+	]
+
+	usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='importacoes_extrato')
+	empresa = models.ForeignKey(Empresa, on_delete=models.SET_NULL, null=True, blank=True)
+	arquivo = models.FileField(upload_to='importacoes/extrato_analitico/')
+	nome_arquivo = models.CharField(max_length=255)
+	status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+	linhas_total = models.IntegerField(null=True, blank=True)
+	linhas_processadas = models.IntegerField(default=0)
+	resultado_json = models.JSONField(null=True, blank=True)
+	preview_resultado = models.JSONField(null=True, blank=True)
+	mensagem_erro = models.TextField(blank=True)
+	criado_em = models.DateTimeField(auto_now_add=True)
+	atualizado_em = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		ordering = ['-criado_em']
+		verbose_name = 'Importação Extrato Analítico'
+		verbose_name_plural = 'Importações Extrato Analítico'
+
+	def __str__(self):
+		return f"ImportacaoExtrato #{self.pk} — {self.nome_arquivo}"

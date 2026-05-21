@@ -9,6 +9,12 @@ from .views import (
     LancamentoImportStatusView, lancamento_import_status_json,
     LancamentoImportPreviewView, LancamentoImportConfirmView,
 )
+from .views_re_extrato import (
+    REImportView, REImportPreviewView, REImportConfirmView,
+    REImportStatusView, re_import_status_json,
+    ExtratoImportView, ExtratoImportPreviewView, ExtratoImportConfirmView,
+    ExtratoImportStatusView, extrato_import_status_json,
+)
 from .bulk_delete import LancamentoBulkDeleteView
 
 urlpatterns = [
@@ -32,4 +38,18 @@ urlpatterns = [
     path('relatorio/recolhimento-funcionario/pdf', export_recolhimento_funcionario_pdf, name='recolhimento-funcionario-pdf'),
     path('relatorio/recolhimento-funcionario/xlsx', export_recolhimento_funcionario_xlsx, name='recolhimento-funcionario-xlsx'),
     path('bulk-delete/', LancamentoBulkDeleteView.as_view(), name='lancamento-bulk-delete'),
+
+    # Importador RE / SEFIP
+    path('importar-re/', REImportView.as_view(), name='re-import'),
+    path('importar-re/<int:pk>/preview/', REImportPreviewView.as_view(), name='re-import-preview'),
+    path('importar-re/<int:pk>/confirmar/', REImportConfirmView.as_view(), name='re-import-confirm'),
+    path('importar-re/<int:pk>/status/', REImportStatusView.as_view(), name='re-import-status'),
+    path('importar-re/<int:pk>/status/json/', re_import_status_json, name='re-import-status-json'),
+
+    # Importador Extrato Analítico CEF
+    path('importar-extrato/', ExtratoImportView.as_view(), name='extrato-import'),
+    path('importar-extrato/<int:pk>/preview/', ExtratoImportPreviewView.as_view(), name='extrato-import-preview'),
+    path('importar-extrato/<int:pk>/confirmar/', ExtratoImportConfirmView.as_view(), name='extrato-import-confirm'),
+    path('importar-extrato/<int:pk>/status/', ExtratoImportStatusView.as_view(), name='extrato-import-status'),
+    path('importar-extrato/<int:pk>/status/json/', extrato_import_status_json, name='extrato-import-status-json'),
 ]
