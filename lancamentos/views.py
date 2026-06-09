@@ -457,13 +457,8 @@ class LancamentoListView(LoginRequiredMixin, EmpresaScopeMixin, ListView):
         context['relatorio_bloqueio_motivo'] = bloqueio_ctx['feature_block_reason']
         context['empresa_contexto'] = empresa_contexto
 
-        user = self.request.user
-        if user.is_staff or user.is_superuser:
-            context['pode_importar_re_sefip'] = True
-            context['pode_importar_extrato_cef'] = True
-        else:
-            context['pode_importar_re_sefip'] = empresa_tem_recurso(empresa_contexto, 'importar_re_sefip')
-            context['pode_importar_extrato_cef'] = empresa_tem_recurso(empresa_contexto, 'importar_extrato_cef')
+        context['pode_importar_re_sefip'] = False
+        context['pode_importar_extrato_cef'] = False
 
         # Buscar a data da última atualização da tabela indices_fgts (SupabaseIndice)
         try:
@@ -687,8 +682,13 @@ class RelatorioCompetenciaView(FormView):
                 return None, None, 'Competência inválida. Use MM/YYYY.', jam_state, []
 
             tabela = int(IndiceFGTSService.determinar_tabela(competencia_date))
-            qs_indices = SupabaseIndice.objects.filter(competencia=competencia_date, tabela=tabela)
-            datas_base = list(qs_indices.values_list('data_base', flat=True))
+            from django.core.cache import cache as _cache
+            _range_key = f'indice_fgts_range_{competencia_date.strftime("%Y%m")}_{tabela}'
+            datas_base = _cache.get(_range_key)
+            if datas_base is None:
+                qs_indices = SupabaseIndice.objects.filter(competencia=competencia_date, tabela=tabela)
+                datas_base = list(qs_indices.values_list('data_base', flat=True))
+                _cache.set(_range_key, datas_base, timeout=86400)
             if not datas_base:
                 return None, None, f'Nenhum índice cadastrado para competência {competencia_norm} (tabela {tabela}).', jam_state, []
             data_base_min = min(datas_base)
@@ -804,10 +804,16 @@ class RelatorioCompetenciaView(FormView):
             avisos.append(aviso)
             return [], {k: Decimal('0') for k in ['valor_corrigido', 'valor_jam', 'total']}, None, jam_state, avisos
 
-        juros_tipo = get_config_str('JUROS_TIPO', 'MENSAL')
-        juros_mensal = get_config_numeric('JUROS_MENSAL_PERCENT', Decimal('0.5'))
-        juros_diario = get_config_numeric('JUROS_DIARIO_PERCENT', Decimal('0.033'))
-        multa_percent = get_config_numeric('MULTA_PERCENT', Decimal('10.0'))
+        if config_juros:
+            juros_tipo = config_juros['juros_tipo']
+            juros_mensal = config_juros['juros_mensal']
+            juros_diario = config_juros['juros_diario']
+            multa_percent = config_juros['multa_percent']
+        else:
+            juros_tipo = get_config_str('JUROS_TIPO', 'MENSAL')
+            juros_mensal = get_config_numeric('JUROS_MENSAL_PERCENT', Decimal('0.5'))
+            juros_diario = get_config_numeric('JUROS_DIARIO_PERCENT', Decimal('0.033'))
+            multa_percent = get_config_numeric('MULTA_PERCENT', Decimal('10.0'))
 
         resultados = []
         totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'valor_deposito_fgts', 'total']}
@@ -1002,7 +1008,16 @@ class RelatorioCompetenciaView(FormView):
             competencias_list.sort(key=lambda x: (_parse_comp(x['competencia']) or date(1900, 1, 1), x.get('parcela_13') or 0))
 
             # Limitar quantidade para evitar timeouts
-            # Limite removido para teste de performance
+            if len(competencias_list) > self.MAX_COMPETENCIAS:
+                return render(self.request, self.template_name, {
+                    'form': form,
+                    'erro_limite': {
+                        'tipo': 'competencias',
+                        'total': len(competencias_list),
+                        'limite': self.MAX_COMPETENCIAS,
+                    },
+                    **feature_block_context('custom_reports', user=self.request.user, empresa=empresa),
+                })
 
             if not competencias_list:
                 erro_msg = 'Nenhuma competência válida encontrada.'
@@ -1016,10 +1031,70 @@ class RelatorioCompetenciaView(FormView):
             jam_state = {}
             total_lancamentos = 0
             competencias_com_erro = []
+
+            # COUNT rápido para evitar processar volumes que causam timeout
+            LIMITE_LANCAMENTOS = 2000
+            filtro_count = dict(
+                empresa=empresa,
+                pago=False,
+                competencia__in=[c['competencia'] for c in competencias_list],
+            )
+            if funcionario:
+                filtro_count['funcionario'] = funcionario
+            total_estimado = Lancamento.objects.filter(**filtro_count).count()
+
+            LIMITE_SYNC_LANCAMENTOS = 1000
+            LIMITE_SYNC_COMPETENCIAS = 6
+            usar_async = (
+                total_estimado > LIMITE_SYNC_LANCAMENTOS
+                or len(competencias_list) > LIMITE_SYNC_COMPETENCIAS
+            )
+
+            if not usar_async and total_estimado > LIMITE_LANCAMENTOS:
+                return render(self.request, self.template_name, {
+                    'form': form,
+                    'erro_limite': {
+                        'tipo': 'lancamentos',
+                        'total': total_estimado,
+                        'limite': LIMITE_LANCAMENTOS,
+                    },
+                    **feature_block_context('custom_reports', user=self.request.user, empresa=empresa),
+                })
+
+            if usar_async:
+                from .models_relatorio import RelatorioTask
+                from .services.relatorio_service import processar_relatorio
+                task = RelatorioTask.objects.create(
+                    usuario=self.request.user,
+                    empresa=empresa,
+                    parametros_json={
+                        'empresa_id': empresa.pk,
+                        'funcionario_id': funcionario.pk if funcionario else None,
+                        'matricula': matricula or '',
+                        'competencias_list': competencias_list,
+                        'agrupamento': agrupamento,
+                        'data_pagamento': data_pagamento.isoformat(),
+                        'competencias_display': [format_comp_display(c['competencia'], c.get('parcela_13')) for c in competencias_list],
+                        'competencias_param': [f"{c['competencia']}|{c.get('parcela_13') or ''}" for c in competencias_list],
+                        'competencia_primeira': competencias_list[0]['competencia'] if competencias_list else '',
+                    },
+                    total_lancamentos=total_estimado,
+                )
+                threading.Thread(target=processar_relatorio, args=(task.id,), daemon=True).start()
+                return redirect('relatorio-task-status', pk=task.pk)
+
+            # Carregar configurações uma vez para todos os _compute_for
+            config_juros = {
+                'juros_tipo': get_config_str('JUROS_TIPO', 'MENSAL'),
+                'juros_mensal': get_config_numeric('JUROS_MENSAL_PERCENT', Decimal('0.5')),
+                'juros_diario': get_config_numeric('JUROS_DIARIO_PERCENT', Decimal('0.033')),
+                'multa_percent': get_config_numeric('MULTA_PERCENT', Decimal('10.0')),
+            }
+
             for comp_data in competencias_list:
                 comp = comp_data['competencia']
                 parc = comp_data.get('parcela_13')
-                res, tot, err, jam_state, avisos = self._compute_for(empresa, comp, parc, data_pagamento, funcionario, matricula or None, jam_state)
+                res, tot, err, jam_state, avisos = self._compute_for(empresa, comp, parc, data_pagamento, funcionario, matricula or None, jam_state, config_juros=config_juros)
                 # Se houver erro (ex: índice ausente), registrar aviso e seguir para próxima competência
                 if err:
                     comp_display = f"{comp} (13º {parc})" if parc else comp
@@ -1121,8 +1196,8 @@ def relatorio_por_ids(request):
 
     debug_detalhado = request.GET.get('debug', '') == '1'
     debug_lancamentos = []
-    ids_str = request.GET.get('ids', '')
-    agrupamento = request.GET.get('agrupamento', 'competencia')
+    ids_str = request.POST.get('ids', '') or request.GET.get('ids', '')
+    agrupamento = request.POST.get('agrupamento', '') or request.GET.get('agrupamento', 'competencia')
     if not ids_str:
         return HttpResponse('Nenhum lançamento selecionado.', status=400)
     try:
@@ -1131,6 +1206,16 @@ def relatorio_por_ids(request):
         return HttpResponse('IDs inválidos.', status=400)
     if not ids:
         return HttpResponse('Nenhum lançamento selecionado.', status=400)
+
+    LIMITE_IDS = 5000
+    if len(ids) > LIMITE_IDS:
+        return render(request, 'lancamentos/relatorio_competencia.html', {
+            'erro_limite': {
+                'tipo': 'ids',
+                'total': len(ids),
+                'limite': LIMITE_IDS,
+            },
+        })
 
     # Buscar lançamentos pelos IDs e apenas não pagos
     lancamentos = Lancamento.objects.filter(id__in=ids, pago=False).select_related('empresa', 'funcionario', 'vinculo').prefetch_related('funcionario__vinculos')
@@ -1227,7 +1312,19 @@ def relatorio_por_ids(request):
         key = (lanc.empresa_id, comp_norm, lanc.parcela_13 or 0)
         grupos[key].append(lanc)
 
+    import time as _time
+    TIMEOUT_IDS_SEGUNDOS = 50
+    inicio_ids = _time.time()
+
     for (empresa_id, comp_norm, parcela_13), _lancs in grupos.items():
+        if _time.time() - inicio_ids > TIMEOUT_IDS_SEGUNDOS:
+            aviso_timeout = (
+                f'⏱️ Processamento interrompido após {TIMEOUT_IDS_SEGUNDOS}s para evitar timeout. '
+                f'Foram calculadas {len(resultados)} entradas de {len(ids_set)} selecionadas. '
+                'Para ver todos os dados, filtre por funcionário específico ou use exportação CSV/PDF.'
+            )
+            avisos_total.append(aviso_timeout)
+            break
         empresa_grupo = _lancs[0].empresa
         res, _tot, err, jam_state, avisos = view._compute_for(
             empresa_grupo,
@@ -2586,6 +2683,67 @@ def lancamento_import_status_json(request, pk):
     })
 
 
+class RelatorioTaskStatusView(LoginRequiredMixin, View):
+    """Página de acompanhamento de relatório assíncrono."""
+    template_name = 'lancamentos/relatorio_task_status.html'
+
+    def get(self, request, pk):
+        from .models_relatorio import RelatorioTask
+        task = get_object_or_404(RelatorioTask, pk=pk, usuario=request.user)
+        return render(request, self.template_name, {'task': task})
+
+
+@login_required
+def relatorio_task_status_json(request, pk):
+    """Endpoint JSON para polling do status do relatório assíncrono."""
+    from .models_relatorio import RelatorioTask
+    task = get_object_or_404(RelatorioTask, pk=pk, usuario=request.user)
+    return JsonResponse({
+        'status': task.status,
+        'erro': task.mensagem_erro,
+        'total_lancamentos': task.total_lancamentos,
+    })
+
+
+class RelatorioTaskResultadoView(LoginRequiredMixin, View):
+    """Exibe o relatório calculado em background, renderizado a partir de resultado_json."""
+    template_name = 'lancamentos/relatorio_competencia.html'
+
+    def get(self, request, pk):
+        from .models_relatorio import RelatorioTask
+        from .services.relatorio_service import deserializar_resultado
+        from billing.services.features import feature_block_context
+        task = get_object_or_404(RelatorioTask, pk=pk, usuario=request.user)
+        if task.status != 'done':
+            return redirect('relatorio-task-status', pk=pk)
+        contexto = deserializar_resultado(task.resultado_json)
+        empresa = contexto.get('empresa')
+        contexto.update(feature_block_context('custom_reports', user=request.user, empresa=empresa))
+        contexto['exibir_indice'] = request.session.get('exibir_indice', False)
+        contexto['exibir_jam'] = request.session.get('exibir_jam', True)
+        contexto['exibir_correcao'] = request.session.get('exibir_correcao', True)
+        return render(request, self.template_name, contexto)
+
+
+class LancamentoImportDownloadRelatorioView(LoginRequiredMixin, View):
+    """Gera e baixa o relatório XLSX de uma importação de lançamentos."""
+
+    def get(self, request, pk):
+        from .services.import_report_service import gerar_relatorio_lancamentos
+        importacao = get_object_or_404(ImportacaoLancamento, pk=pk, usuario=request.user)
+        if importacao.status != 'done':
+            return HttpResponse('Relatório disponível apenas após o processamento.', status=400)
+        xlsx_bytes = gerar_relatorio_lancamentos(importacao)
+        response = HttpResponse(
+            xlsx_bytes,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = (
+            f'attachment; filename="relatorio_lancamentos_{pk}.xlsx"'
+        )
+        return response
+
+
 class LancamentoImportPreviewView(LoginRequiredMixin, View):
     """Página de pré-visualização da amostra antes de confirmar o import."""
 
@@ -3286,6 +3444,7 @@ class RelatorioRecolhimentoFuncionarioView(LoginRequiredMixin, FormView):
 
                 funcionarios_lista.append({
                     'funcionario': func_obj,
+                    'matricula': vinculo.matricula if vinculo and vinculo.matricula else '',
                     'data_admissao': data_admissao,
                     'data_demissao': data_demissao,
                     'pis': func_obj.pis,
@@ -3475,7 +3634,7 @@ def export_recolhimento_funcionario_pdf(request):
                 return f'{v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
 
             table_data.append([
-                Paragraph(str(func_obj.pk), normal_style),
+                Paragraph(vinculo.matricula if vinculo and vinculo.matricula else '', normal_style),
                 Paragraph(func_obj.nome, normal_style),
                 Paragraph(fmt_date(data_adm), normal_style),
                 Paragraph(fmt_date(data_dem), normal_style),
@@ -3687,7 +3846,7 @@ def export_recolhimento_funcionario_xlsx(request):
             fill = PatternFill(fill_type='solid', fgColor=cor_linha_par) if row_idx % 2 == 1 else None
 
             ws.append([
-                str(func_obj.pk),
+                vinculo.matricula if vinculo and vinculo.matricula else '',
                 func_obj.nome,
                 fmt_date(data_adm),
                 fmt_date(data_dem),

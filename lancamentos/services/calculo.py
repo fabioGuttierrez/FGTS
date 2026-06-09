@@ -7,19 +7,33 @@ from configuracoes.models import Configuracao
 
 
 def get_config_numeric(key: str, default: Decimal) -> Decimal:
+    from django.core.cache import cache
+    cache_key = f'config_{key}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return Decimal(str(cached))
     try:
         cfg = Configuracao.objects.get(chave=key)
-        return Decimal(str(cfg.valor))
+        val = Decimal(str(cfg.valor))
     except Exception:
-        return default
+        val = default
+    cache.set(cache_key, str(val), timeout=3600)
+    return val
 
 
 def get_config_str(key: str, default: str) -> str:
+    from django.core.cache import cache
+    cache_key = f'config_{key}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return str(cached)
     try:
         cfg = Configuracao.objects.get(chave=key)
-        return str(cfg.valor)
+        val = str(cfg.valor)
     except Exception:
-        return default
+        val = default
+    cache.set(cache_key, val, timeout=3600)
+    return val
 
 
 def acumulado_indices(indices: Iterable[Tuple[date, Decimal]], competencia: date, pagamento: date) -> Decimal:
@@ -59,13 +73,19 @@ def _format_competencia_variants(comp_date: date) -> list[str]:
 
 
 def buscar_coef_jam(competencia: date) -> Decimal | None:
-    """Busca o coeficiente JAM para a competência.
+    """Busca o coeficiente JAM para a competência (com cache de 24h).
 
     - Tenta formatos MM/YYYY e YYYY-MM.
     - Se houver múltiplos registros, usa o mais recente por data_pagamento.
     - Retorna None se não encontrar.
     """
+    from django.core.cache import cache
     from coefjam.models import CoefJam
+
+    cache_key = f'coef_jam_{competencia.strftime("%Y%m")}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return None if cached == '__none__' else Decimal(str(cached))
 
     comp_formats = _format_competencia_variants(competencia)
     coef = (
@@ -74,9 +94,9 @@ def buscar_coef_jam(competencia: date) -> Decimal | None:
         .order_by('-data_pagamento')
         .first()
     )
-    if not coef:
-        return None
-    return Decimal(str(coef.valor))
+    valor = Decimal(str(coef.valor)) if coef else None
+    cache.set(cache_key, str(valor) if valor is not None else '__none__', timeout=86400)
+    return valor
 
 
 def calcular_jam_ate_pagamento(

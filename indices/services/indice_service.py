@@ -168,19 +168,27 @@ class IndiceFGTSService:
     
     @staticmethod
     def _buscar_via_orm(competencia: date, data_pagamento: date, tabela: int) -> Optional[Decimal]:
-        """Busca via ORM Django (SupabaseIndice model)."""
+        """Busca via ORM Django (SupabaseIndice model), com cache de 24h."""
         try:
+            from django.core.cache import cache
             from indices.models import SupabaseIndice
-            
+
+            cache_key = f'indice_fgts_{competencia.strftime("%Y%m")}_{data_pagamento.strftime("%Y%m%d")}_{tabela}'
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return None if cached == '__none__' else Decimal(str(cached))
+
             # FILTRO EXATO - NUNCA ALTERAR
             indice_obj = SupabaseIndice.objects.filter(
                 competencia=competencia,
                 data_base=data_pagamento,
                 tabela=tabela
             ).first()
-            
-            return indice_obj.indice if indice_obj else None
-            
+
+            valor = indice_obj.indice if indice_obj else None
+            cache.set(cache_key, str(valor) if valor is not None else '__none__', timeout=86400)
+            return valor
+
         except Exception as e:
             logger.error(f"[ÍNDICE FGTS] Erro ao buscar via ORM: {e}")
             return None

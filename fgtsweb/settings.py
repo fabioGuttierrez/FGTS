@@ -258,6 +258,25 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@bildee.com.br')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL  # Para emails de erro do servidor
 
+# Cache (Redis em produção, LocMem em desenvolvimento)
+REDIS_URL = os.getenv('REDIS_URL', '')
+if REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {'CLIENT_CLASS': 'django_redis.client.DefaultClient'},
+            'TIMEOUT': 3600,
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'TIMEOUT': 3600,
+        }
+    }
+
 # Logging
 # - Erros 500 aparecem em django.request (inclui Django Admin)
 # - Arquivo: FGTS/logs/django.log

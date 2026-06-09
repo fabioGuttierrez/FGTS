@@ -8,12 +8,15 @@ from .views import (
     export_recolhimento_funcionario_xlsx,
     LancamentoImportStatusView, lancamento_import_status_json,
     LancamentoImportPreviewView, LancamentoImportConfirmView,
+    LancamentoImportDownloadRelatorioView,
+    RelatorioTaskStatusView, relatorio_task_status_json, RelatorioTaskResultadoView,
 )
 from .views_re_extrato import (
     REImportView, REImportPreviewView, REImportConfirmView,
     REImportStatusView, re_import_status_json,
     ExtratoImportView, ExtratoImportPreviewView, ExtratoImportConfirmView,
     ExtratoImportStatusView, extrato_import_status_json,
+    ExtratoImportDownloadRelatorioView,
 )
 from .bulk_delete import LancamentoBulkDeleteView
 
@@ -27,6 +30,7 @@ urlpatterns = [
     path('importar/<int:pk>/confirmar/', LancamentoImportConfirmView.as_view(), name='lancamento-import-confirm'),
     path('importar/<int:pk>/status/', LancamentoImportStatusView.as_view(), name='lancamento-import-status'),
     path('importar/<int:pk>/status/json/', lancamento_import_status_json, name='lancamento-import-status-json'),
+    path('importar/<int:pk>/relatorio/', LancamentoImportDownloadRelatorioView.as_view(), name='lancamento-import-relatorio'),
     path('download-template/', LancamentoDownloadTemplateView.as_view(), name='lancamento-download-template'),
     path('ids/', lancamento_ids, name='lancamento-ids'),
     path('relatorio/', RelatorioCompetenciaView.as_view(), name='relatorio-competencia'),
@@ -38,6 +42,11 @@ urlpatterns = [
     path('relatorio/recolhimento-funcionario/pdf', export_recolhimento_funcionario_pdf, name='recolhimento-funcionario-pdf'),
     path('relatorio/recolhimento-funcionario/xlsx', export_recolhimento_funcionario_xlsx, name='recolhimento-funcionario-xlsx'),
     path('bulk-delete/', LancamentoBulkDeleteView.as_view(), name='lancamento-bulk-delete'),
+
+    # Relatório assíncrono (grandes volumes)
+    path('relatorio/task/<int:pk>/status/', RelatorioTaskStatusView.as_view(), name='relatorio-task-status'),
+    path('relatorio/task/<int:pk>/status/json/', relatorio_task_status_json, name='relatorio-task-status-json'),
+    path('relatorio/task/<int:pk>/resultado/', RelatorioTaskResultadoView.as_view(), name='relatorio-task-resultado'),
 
     # Importador RE / SEFIP
     path('importar-re/', REImportView.as_view(), name='re-import'),
@@ -52,4 +61,5 @@ urlpatterns = [
     path('importar-extrato/<int:pk>/confirmar/', ExtratoImportConfirmView.as_view(), name='extrato-import-confirm'),
     path('importar-extrato/<int:pk>/status/', ExtratoImportStatusView.as_view(), name='extrato-import-status'),
     path('importar-extrato/<int:pk>/status/json/', extrato_import_status_json, name='extrato-import-status-json'),
+    path('importar-extrato/<int:pk>/relatorio/', ExtratoImportDownloadRelatorioView.as_view(), name='extrato-import-relatorio'),
 ]
