@@ -659,7 +659,7 @@ class RelatorioCompetenciaView(FormView):
             grupos_ordenados = sorted(grupos.items(), key=lambda x: grupos[x[0]]['label'])
         return grupos_ordenados
 
-    def _compute_for(self, empresa, competencia_str, parcela_13, data_pagamento, funcionario=None, matricula=None, jam_state=None):
+    def _compute_for(self, empresa, competencia_str, parcela_13, data_pagamento, funcionario=None, matricula=None, jam_state=None, config_juros=None):
         import time
         from django.db.models import Q
         inicio_timestamp = time.time()
@@ -1207,16 +1207,6 @@ def relatorio_por_ids(request):
     if not ids:
         return HttpResponse('Nenhum lançamento selecionado.', status=400)
 
-    LIMITE_IDS = 5000
-    if len(ids) > LIMITE_IDS:
-        return render(request, 'lancamentos/relatorio_competencia.html', {
-            'erro_limite': {
-                'tipo': 'ids',
-                'total': len(ids),
-                'limite': LIMITE_IDS,
-            },
-        })
-
     # Buscar lançamentos pelos IDs e apenas não pagos
     lancamentos = Lancamento.objects.filter(id__in=ids, pago=False).select_related('empresa', 'funcionario', 'vinculo').prefetch_related('funcionario__vinculos')
     if not lancamentos.exists():
@@ -1234,6 +1224,25 @@ def relatorio_por_ids(request):
         lancamentos = lancamentos.filter(empresa__codigo__in=allowed_ids)
         if not lancamentos.exists():
             return HttpResponse('Você não tem permissão para acessar esses lançamentos.', status=403)
+
+    # Acima de 1000 IDs autorizados → processamento assíncrono
+    LIMITE_SYNC_IDS = 1000
+    if len(ids) > LIMITE_SYNC_IDS:
+        import threading
+        from .models_relatorio import RelatorioTask
+        from .services.relatorio_service import processar_relatorio_por_ids
+        ids_autorizados = list(lancamentos.values_list('id', flat=True))
+        task = RelatorioTask.objects.create(
+            usuario=request.user,
+            empresa=empresa_referencia,
+            parametros_json={
+                'ids': ids_autorizados,
+                'agrupamento': agrupamento,
+            },
+            total_lancamentos=len(ids_autorizados),
+        )
+        threading.Thread(target=processar_relatorio_por_ids, args=(task.id,), daemon=True).start()
+        return redirect('relatorio-task-status', pk=task.pk)
 
     # Filtrar por vínculo ativo na competência e não pago
     lancamentos_filtrados = []

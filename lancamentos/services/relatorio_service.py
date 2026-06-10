@@ -188,6 +188,8 @@ def deserializar_resultado(resultado_json):
         'exibir_jam': True,
         'exibir_correcao': True,
         'from_task': True,
+        'from_selection': resultado_json.get('from_selection', False),
+        'ids_param': resultado_json.get('ids_param', ''),
     }
 
 
@@ -242,7 +244,6 @@ def processar_relatorio(task_id: int) -> None:
             res, tot, err, jam_state, avisos = view._compute_for(
                 empresa, comp, parc, data_pagamento,
                 funcionario, matricula, jam_state,
-                config_juros=config_juros,
             )
             if err:
                 comp_display = f"{comp} (13º {parc})" if parc else comp
@@ -303,6 +304,159 @@ def processar_relatorio(task_id: int) -> None:
 
     except Exception as exc:
         logger.exception(f'[RelatorioTask #{task_id}] Erro inesperado: {exc}')
+        if task:
+            try:
+                task.status = 'error'
+                task.mensagem_erro = str(exc)
+                task.save(update_fields=['status', 'mensagem_erro', 'atualizado_em'])
+            except Exception:
+                pass
+    finally:
+        try:
+            connection.close()
+        except Exception:
+            pass
+
+
+def processar_relatorio_por_ids(task_id: int) -> None:
+    """Executado em daemon thread. Processa relatório a partir de lista de IDs."""
+    import re
+    from collections import defaultdict
+    from django.db import connection
+    task = None
+    try:
+        from lancamentos.models_relatorio import RelatorioTask
+        task = RelatorioTask.objects.get(pk=task_id)
+        task.status = 'processing'
+        task.save(update_fields=['status', 'atualizado_em'])
+
+        params = task.parametros_json
+        ids = params['ids']
+        agrupamento = params.get('agrupamento', 'competencia')
+
+        from lancamentos.models import Lancamento
+        from indices.services.indice_service import IndiceFGTSService
+        from lancamentos.views import RelatorioCompetenciaView
+
+        lancamentos = (
+            Lancamento.objects
+            .filter(id__in=ids, pago=False)
+            .select_related('empresa', 'funcionario', 'vinculo')
+            .prefetch_related('funcionario__vinculos')
+        )
+
+        data_pagamento = IndiceFGTSService.obter_ultima_data_base() or date.today()
+        view = RelatorioCompetenciaView()
+
+        # Filtrar por vínculo ativo na competência (replica lógica da view síncrona)
+        lancamentos_filtrados = []
+        empresa = None
+        for lanc in lancamentos:
+            if empresa is None:
+                empresa = lanc.empresa
+            competencia = lanc.competencia
+            funcionario = lanc.funcionario
+            vinculos = getattr(funcionario, 'vinculos', None)
+
+            competencia_norm = competencia
+            match = re.match(r'^(\d{2})/(\d{4})$', competencia)
+            if match:
+                mes, ano = match.groups()
+                competencia_norm = f"{ano}-{mes}"
+            elif re.match(r'^13/\d{4}$', competencia):
+                ano = competencia[-4:]
+                competencia_norm = f"{ano}-12"
+
+            vinculo_ativo = False
+            if vinculos:
+                empresa_id = getattr(lanc.empresa, 'id', None) or getattr(lanc.empresa, 'codigo', None)
+                for v in vinculos.all():
+                    if str(v.empresa_id) == str(empresa_id) and v.is_ativo_em_competencia(competencia_norm):
+                        vinculo_ativo = True
+                        break
+
+            if (vinculo_ativo or not vinculos):
+                lancamentos_filtrados.append(lanc)
+
+        ids_set = {l.id for l in lancamentos_filtrados}
+        grupos = defaultdict(list)
+        for lanc in lancamentos_filtrados:
+            comp_norm = view.normalizar_competencia(lanc.competencia)
+            key = (lanc.empresa_id, comp_norm, lanc.parcela_13 or 0)
+            grupos[key].append(lanc)
+
+        resultados = []
+        avisos_total = []
+        jam_state = {}
+        inicio_timestamp = time.time()
+        inicio_str = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+
+        for (empresa_id, comp_norm, parcela_13), _lancs in grupos.items():
+            empresa_grupo = _lancs[0].empresa
+            res, _tot, err, jam_state, avisos = view._compute_for(
+                empresa_grupo, comp_norm, parcela_13, data_pagamento,
+                funcionario=None, matricula=None, jam_state=jam_state,
+            )
+            if avisos:
+                avisos_total.extend(avisos)
+            if err:
+                continue
+            res_filtrados = [r for r in res if r.get('lancamento') and r['lancamento'].id in ids_set]
+            resultados.extend(res_filtrados)
+
+        fim_timestamp = time.time()
+        fim_str = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        tempo_total = fim_timestamp - inicio_timestamp
+
+        resultados_agrupados = view._agrupar_resultados(resultados, agrupamento)
+        totais = {k: Decimal('0') for k in ['valor_fgts', 'valor_corrigido', 'valor_jam', 'valor_deposito_fgts', 'total']}
+        for _, grupo_data in resultados_agrupados:
+            for k in totais:
+                totais[k] += grupo_data['totais'][k]
+
+        def _fmt_comp_display(comp, parcela_13):
+            if parcela_13 == 1:
+                return f"{comp} (13º 1ª)"
+            if parcela_13 == 2:
+                return f"{comp} (13º 2ª)"
+            return comp
+
+        competencias_display = [_fmt_comp_display(k[1], k[2]) for k in grupos.keys()]
+        competencias_param = [f"{k[1]}|{k[2] or ''}" for k in grupos.keys()]
+        avisos_unicos = list(dict.fromkeys(avisos_total))
+        total_lancamentos = len(resultados)
+
+        resultado_json = {
+            'empresa_id': empresa.pk if empresa else None,
+            'empresa_nome': empresa.nome if empresa else '',
+            'empresa_codigo': getattr(empresa, 'codigo', '') if empresa else '',
+            'funcionario_id': None,
+            'funcionario_nome': None,
+            'matricula': '',
+            'competencias': competencias_display,
+            'competencias_param': competencias_param,
+            'competencia_primeira': competencias_display[0] if competencias_display else '',
+            'agrupamento': agrupamento,
+            'data_pagamento': data_pagamento.isoformat(),
+            'avisos': avisos_unicos,
+            'kpi_inicio': inicio_str,
+            'kpi_fim': fim_str,
+            'kpi_tempo': f'{tempo_total:.2f} segundos',
+            'kpi_lancamentos': total_lancamentos,
+            'kpi_competencias': len(grupos),
+            'totais': {k: str(v) for k, v in totais.items()},
+            'resultados_serializados': [_serialize_item(r) for r in resultados],
+            'from_selection': True,
+            'ids_param': ','.join(str(i) for i in ids),
+        }
+
+        task.resultado_json = resultado_json
+        task.total_lancamentos = total_lancamentos
+        task.status = 'done'
+        task.save(update_fields=['resultado_json', 'total_lancamentos', 'status', 'atualizado_em'])
+
+    except Exception as exc:
+        logger.exception(f'[RelatorioTask #{task_id}] Erro inesperado (por_ids): {exc}')
         if task:
             try:
                 task.status = 'error'
