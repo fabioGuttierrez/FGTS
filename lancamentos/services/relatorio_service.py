@@ -140,7 +140,7 @@ def _deserialize_item(d):
     }
 
 
-def deserializar_resultado(resultado_json):
+def deserializar_resultado(resultado_json, agrupamento_override=None):
     """Reconstituí o contexto completo a partir de resultado_json armazenado."""
     if not resultado_json:
         return {}
@@ -157,7 +157,7 @@ def deserializar_resultado(resultado_json):
 
     from lancamentos.views import RelatorioCompetenciaView
     view = RelatorioCompetenciaView()
-    agrupamento = resultado_json.get('agrupamento', 'competencia')
+    agrupamento = agrupamento_override or resultado_json.get('agrupamento', 'competencia')
     resultados_agrupados = view._agrupar_resultados(resultados, agrupamento)
 
     totais_raw = resultado_json.get('totais', {})

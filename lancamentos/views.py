@@ -2725,7 +2725,8 @@ class RelatorioTaskResultadoView(LoginRequiredMixin, View):
         task = get_object_or_404(RelatorioTask, pk=pk, usuario=request.user)
         if task.status != 'done':
             return redirect('relatorio-task-status', pk=pk)
-        contexto = deserializar_resultado(task.resultado_json)
+        agrupamento_override = request.GET.get('agrupamento') or None
+        contexto = deserializar_resultado(task.resultado_json, agrupamento_override)
         empresa = contexto.get('empresa')
         contexto.update(feature_block_context('custom_reports', user=request.user, empresa=empresa))
         contexto['exibir_indice'] = request.session.get('exibir_indice', False)
