@@ -1403,19 +1403,147 @@ def relatorio_por_ids(request):
 
 @login_required
 def export_relatorio_competencia_csv(request):
+    # Mantido para compatibilidade — redireciona para XLSX
+    return export_relatorio_competencia_xlsx(request)
+
+
+def _render_xlsx_relatorio(resultados_agrupados, empresa, totais, agrupamento):
+    """Gera HttpResponse com XLSX a partir de resultados já agrupados."""
+    from io import BytesIO
+    import openpyxl
+    from openpyxl.styles import Font
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Relatório FGTS'
+
+    headers = ['Empresa', 'Competência', 'Funcionário', 'Matrícula', 'ID Vínculo',
+               'Empresa do Vínculo', 'Admissão', 'Demissão', 'Base FGTS', 'FGTS',
+               'Índice', 'Correção Monetária', 'Total']
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+
+    def _grupo_label(label):
+        if agrupamento == 'funcionario':
+            return f"Funcionário: {label}"
+        if agrupamento == 'ano':
+            return str(label)
+        return f"Competência: {label}"
+
+    empresa_nome = empresa.nome if empresa else ''
+
+    for _chave, grupo in resultados_agrupados:
+        ws.append([])
+        ws.append([_grupo_label(grupo.get('label', ''))])
+        for cell in ws[ws.max_row]:
+            cell.font = Font(bold=True)
+
+        for item in grupo['items']:
+            l = item['lancamento']
+            c = item['calc']
+            comp_out = item.get('competencia_display', item.get('competencia', ''))
+            func = l.funcionario
+            vinculo = l.vinculo
+            if vinculo is None:
+                try:
+                    vinculo = func.vinculos.filter(empresa=l.empresa).order_by('-data_admissao').first()
+                except Exception:
+                    vinculo = None
+            empresa_vinculo = (
+                getattr(getattr(vinculo, 'empresa', None), 'nome', None)
+                or l.empresa.nome
+            )
+            data_admissao = vinculo.data_admissao.strftime('%d/%m/%Y') if vinculo and getattr(vinculo, 'data_admissao', None) else ''
+            data_demissao = vinculo.data_demissao.strftime('%d/%m/%Y') if vinculo and getattr(vinculo, 'data_demissao', None) else ''
+            try:
+                base = float(l.base_fgts) if l.base_fgts is not None else ''
+                fgts = float(c.get('valor_fgts', l.valor_fgts))
+                correcao = float(c['valor_corrigido'])
+                total = float(c['total'])
+            except Exception:
+                base = str(l.base_fgts) if l.base_fgts is not None else ''
+                fgts = str(c.get('valor_fgts', l.valor_fgts))
+                correcao = str(c['valor_corrigido'])
+                total = str(c['total'])
+            ws.append([
+                empresa_nome or l.empresa.nome,
+                comp_out,
+                func.nome,
+                getattr(vinculo, 'matricula', '') or '',
+                getattr(vinculo, 'pk', '') or '',
+                empresa_vinculo,
+                data_admissao,
+                data_demissao,
+                base,
+                fgts,
+                str(c.get('indice', '')),
+                correcao,
+                total,
+            ])
+
+    ws.append([])
+    try:
+        totais_row = ['Totais', '', '', '', '', '',
+                      float(totais['valor_fgts']), '', '',
+                      float(totais['valor_corrigido']), '', '',
+                      float(totais['total'])]
+    except Exception:
+        totais_row = ['Totais', '', '', '', '', '',
+                      str(totais['valor_fgts']), '', '',
+                      str(totais['valor_corrigido']), '', '',
+                      str(totais['total'])]
+    ws.append(totais_row)
+    for cell in ws[ws.max_row]:
+        if cell.value:
+            cell.font = Font(bold=True)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    from django.http import HttpResponse
+    resp = HttpResponse(
+        output.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    resp['Content-Disposition'] = 'attachment; filename="relatorio_fgts.xlsx"'
+    return resp
+
+
+@login_required
+def export_relatorio_competencia_xlsx(request):
     from django.http import HttpResponse
     from collections import defaultdict
     import urllib.parse
-    
+
+    # Fast path: relatório gerado via task assíncrona — usa dados já calculados
+    task_id = request.GET.get('task_id')
+    if task_id:
+        from .models_relatorio import RelatorioTask
+        from .services.relatorio_service import deserializar_resultado
+        task = get_object_or_404(RelatorioTask, pk=task_id, usuario=request.user)
+        if task.status != 'done':
+            return HttpResponse('Relatório ainda não concluído.', status=400)
+        empresa_obj = Empresa.objects.filter(pk=task.resultado_json.get('empresa_id')).first()
+        allowed, motivo = can_use_feature('pdf_export', user=request.user, empresa=empresa_obj)
+        if not allowed:
+            return HttpResponseForbidden(motivo or 'Sem permissão para exportar.')
+        agrupamento_task = request.GET.get('agrupamento') or task.resultado_json.get('agrupamento', 'competencia')
+        contexto = deserializar_resultado(task.resultado_json, agrupamento_task)
+        return _render_xlsx_relatorio(
+            contexto['resultados_agrupados'],
+            contexto.get('empresa'),
+            contexto['totais'],
+            agrupamento_task,
+        )
+
     empresa_id = request.GET.get('empresa')
     competencias_multi = request.GET.get('competencias', '')
-    competencia_unica = request.GET.get('competencia', '')
     competencia_unica = request.GET.get('competencia', '')
     funcionario_id = request.GET.get('funcionario')
     matricula = (request.GET.get('matricula') or '').strip()
     data_pagamento_str = request.GET.get('data_pagamento')
     agrupamento = request.GET.get('agrupamento', 'competencia')
-    ids_str = request.GET.get('ids', '').strip()
     ids_str = request.GET.get('ids', '').strip()
 
     # Decodificar competências que podem vir URL-encoded
@@ -1528,55 +1656,7 @@ def export_relatorio_competencia_csv(request):
 
         agrupamento = 'funcionario'
         resultados_agrupados = view._agrupar_resultados(resultados, agrupamento)
-
-        import csv
-        resp = HttpResponse(content_type='text/csv')
-        resp['Content-Disposition'] = 'attachment; filename="relatorio_fgts.csv"'
-        writer = csv.writer(resp, delimiter=';')
-
-        def _grupo_label(label):
-            if agrupamento == 'funcionario':
-                return f"Funcionário: {label}"
-            if agrupamento == 'ano':
-                return f"{label}"
-            return f"Competência: {label}"
-
-        writer.writerow(['Empresa', 'Competência', 'Funcionário', 'Matrícula', 'ID Vínculo', 'Empresa do Vínculo', 'Admissão', 'Demissão', 'Base FGTS', 'FGTS Valor', 'Índice', 'Correção', 'Total'])
-
-        for _chave, grupo in resultados_agrupados:
-            writer.writerow([])
-            writer.writerow([_grupo_label(grupo.get('label'))])
-
-            for item in grupo['items']:
-                l = item['lancamento']
-                c = item['calc']
-                comp_out = item.get('competencia_display', item.get('competencia'))
-                funcionario = l.funcionario
-                vinculo = l.vinculo
-                if not vinculo:
-                    vinculo = funcionario.vinculos.filter(empresa=l.empresa).order_by('-data_admissao').first()
-                empresa_vinculo = vinculo.empresa.nome if vinculo else l.empresa.nome
-                data_admissao = vinculo.data_admissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_admissao else ''
-                data_demissao = vinculo.data_demissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_demissao else ''
-                writer.writerow([
-                    empresa.nome,
-                    comp_out,
-                    funcionario.nome,
-                    (vinculo.matricula if vinculo and vinculo.matricula else ''),
-                    (vinculo.pk if vinculo else ''),
-                    empresa_vinculo,
-                    data_admissao,
-                    data_demissao,
-                    f"{l.base_fgts}",
-                    f"{c.get('valor_fgts', l.valor_fgts)}",
-                    f"{c.get('indice', '')}",
-                    f"{c['valor_corrigido']}",
-                    f"{c['total']}",
-                ])
-
-        writer.writerow([])
-        writer.writerow(['Totais', '', '', '', '', '', totais['valor_fgts'], '', '', totais['valor_corrigido'], totais['total']])
-        return resp
+        return _render_xlsx_relatorio(resultados_agrupados, empresa, totais, agrupamento)
     
     # Parse competências (separar por \n ou %0A) mantendo parcela_13 quando informada
     competencias_raw = [c.strip() for c in competencias_multi.replace('%0A', '\n').split('\n') if c.strip()]
@@ -1653,58 +1733,29 @@ def export_relatorio_competencia_csv(request):
         return resp
 
     resultados_agrupados = view._agrupar_resultados(resultados, agrupamento)
-
-    import csv
-    resp = HttpResponse(content_type='text/csv')
-    resp['Content-Disposition'] = 'attachment; filename="relatorio_fgts.csv"'
-    writer = csv.writer(resp, delimiter=';')
-    
-    def _grupo_label(label):
-        if agrupamento == 'funcionario':
-            return f"Funcionário: {label}"
-        if agrupamento == 'ano':
-            return f"{label}"
-        return f"Competência: {label}"
-    
-    writer.writerow(['Empresa', 'Competência', 'Funcionário', 'Matrícula', 'ID Vínculo', 'Empresa do Vínculo', 'Admissão', 'Demissão', 'Base FGTS', 'FGTS Valor', 'Índice', 'Correção', 'Total'])
-
-    for _chave, grupo in resultados_agrupados:
-        writer.writerow([])
-        writer.writerow([_grupo_label(grupo.get('label'))])
-
-        for item in grupo['items']:
-            l = item['lancamento']
-            c = item['calc']
-            comp_out = item.get('competencia_display', item.get('competencia'))
-            funcionario = l.funcionario
-            vinculo = l.vinculo
-            if not vinculo:
-                vinculo = funcionario.vinculos.filter(empresa=l.empresa).order_by('-data_admissao').first()
-            empresa_vinculo = vinculo.empresa.nome if vinculo else l.empresa.nome
-            data_admissao = vinculo.data_admissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_admissao else ''
-            data_demissao = vinculo.data_demissao.strftime('%d/%m/%Y') if vinculo and vinculo.data_demissao else ''
-            writer.writerow([
-                empresa.nome,
-                comp_out,
-                funcionario.nome,
-                (vinculo.matricula if vinculo and vinculo.matricula else ''),
-                (vinculo.pk if vinculo else ''),
-                empresa_vinculo,
-                data_admissao,
-                data_demissao,
-                f"{l.base_fgts}",
-                f"{c.get('valor_fgts', l.valor_fgts)}",
-                f"{c.get('indice', '')}",
-                f"{c['valor_corrigido']}",
-                f"{c['total']}",
-            ])
-
-    writer.writerow([])
-    writer.writerow(['Totais', '', '', '', '', '', totais['valor_fgts'], '', '', totais['valor_corrigido'], totais['total']])
-    return resp
+    return _render_xlsx_relatorio(resultados_agrupados, empresa, totais, agrupamento)
 
 @login_required
 def export_relatorio_competencia_pdf(request):
+    # Fast path: relatório gerado via task assíncrona — usa IDs já autorizados da task
+    task_id = request.GET.get('task_id')
+    if task_id:
+        from django.http import HttpResponse
+        from .models_relatorio import RelatorioTask
+        task = get_object_or_404(RelatorioTask, pk=task_id, usuario=request.user)
+        if task.status != 'done':
+            return HttpResponse('Relatório ainda não concluído.', status=400)
+        empresa_obj = Empresa.objects.filter(pk=task.resultado_json.get('empresa_id')).first()
+        allowed, motivo = can_use_feature('pdf_export', user=request.user, empresa=empresa_obj)
+        if not allowed:
+            return HttpResponseForbidden(motivo or 'Sem permissão para exportar.')
+        # Injeta ids_param no GET mutable para reutilizar o caminho de IDs abaixo
+        request.GET = request.GET.copy()
+        ids_param = task.resultado_json.get('ids_param', '')
+        request.GET['ids'] = ids_param
+        request.GET['empresa'] = str(task.resultado_json.get('empresa_id', ''))
+        request.GET.setdefault('agrupamento', task.resultado_json.get('agrupamento', 'competencia'))
+
     # Função utilitária para converter competência em date
     def competencia_str_to_date(competencia):
         if isinstance(competencia, str):
@@ -1727,7 +1778,7 @@ def export_relatorio_competencia_pdf(request):
     from reportlab.lib.units import mm
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, PageBreak
     import urllib.parse
-    
+
     empresa_id = request.GET.get('empresa')
     competencias_multi = request.GET.get('competencias', '')
     competencia_unica = request.GET.get('competencia', '')
@@ -2732,6 +2783,7 @@ class RelatorioTaskResultadoView(LoginRequiredMixin, View):
         contexto['exibir_indice'] = request.session.get('exibir_indice', False)
         contexto['exibir_jam'] = request.session.get('exibir_jam', True)
         contexto['exibir_correcao'] = request.session.get('exibir_correcao', True)
+        contexto['task_id'] = pk
         return render(request, self.template_name, contexto)
 
 
