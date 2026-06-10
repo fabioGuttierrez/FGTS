@@ -462,6 +462,7 @@ class LancamentoImportService:
             'skipped': 0,
             'linhas_valor_do_arquivo': 0,
             'linhas_jam_aplicado': 0,
+            'rows': [],
         }
         
         linhas_processadas = 0
@@ -512,7 +513,18 @@ class LancamentoImportService:
 
             if progress_callback and linhas_processadas % 200 == 0:
                 progress_callback(linhas_processadas, total_linhas)
-            
+
+            # Captura prévia dos campos-chave para o relatório analítico
+            def _raw(col):
+                idx = column_indices.get(col)
+                return str(row[idx]).strip() if idx is not None and row[idx] not in (None, '') else ''
+
+            raw_cpf = _raw('CPF_FUNCIONARIO')
+            raw_nome = _raw('NOME_FUNCIONARIO')
+            raw_comp = _raw('COMPETENCIA')
+            raw_base = _raw('BASE_FGTS')
+            raw_emp = _raw('EMPRESA') or (empresa.nome if empresa else '')
+
             try:
                 lancamento_data = LancamentoImportService._process_row(
                     row, column_indices, empresa, user, row_idx,
@@ -565,6 +577,7 @@ class LancamentoImportService:
                                 atualizado_em=timezone.now(),
                             )
                         result['updated'] += 1
+                        acao = 'atualizado'
                     else:
                         # Criar novo
                         novo = Lancamento(**lancamento_data)
@@ -575,19 +588,41 @@ class LancamentoImportService:
                                 atualizado_em=timezone.now(),
                             )
                         result['created'] += 1
+                        acao = 'criado'
 
                     result['success'] += 1
                     if needs_restore:
                         result['linhas_valor_do_arquivo'] += 1
                     if _jam_aplicado:
                         result['linhas_jam_aplicado'] += 1
+
+                    detalhe = acao.capitalize()
+                    if needs_restore:
+                        detalhe += ' (valor mantido do arquivo)'
+                    if _jam_aplicado:
+                        detalhe += ' (JAM aplicado)'
+                    result['rows'].append({
+                        'linha': row_idx, 'cpf': raw_cpf, 'nome': raw_nome,
+                        'competencia': raw_comp, 'base_fgts': raw_base, 'empresa': raw_emp,
+                        'acao': acao, 'status': 'ok', 'detalhe': detalhe,
+                    })
                 else:
                     result['skipped'] += 1
-                    
+                    result['rows'].append({
+                        'linha': row_idx, 'cpf': raw_cpf, 'nome': raw_nome,
+                        'competencia': raw_comp, 'base_fgts': raw_base, 'empresa': raw_emp,
+                        'acao': 'ignorado', 'status': 'ignorado', 'detalhe': 'Linha ignorada',
+                    })
+
             except Exception as e:
                 result['errors'].append({
                     'row': row_idx,
                     'error': str(e)
+                })
+                result['rows'].append({
+                    'linha': row_idx, 'cpf': raw_cpf, 'nome': raw_nome,
+                    'competencia': raw_comp, 'base_fgts': raw_base, 'empresa': raw_emp,
+                    'acao': 'erro', 'status': 'erro', 'detalhe': str(e),
                 })
         
         # Validar se alguma linha foi processada

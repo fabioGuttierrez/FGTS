@@ -384,3 +384,23 @@ def extrato_import_status_json(request, pk):
         'linhas_total': importacao.linhas_total,
         'linhas_processadas': importacao.linhas_processadas,
     })
+
+
+class ExtratoImportDownloadRelatorioView(LoginRequiredMixin, View):
+    """Gera e baixa o relatório XLSX de uma importação de extrato analítico."""
+
+    def get(self, request, pk):
+        from django.http import HttpResponse
+        from .services.import_report_service import gerar_relatorio_extrato
+        importacao = get_object_or_404(ImportacaoExtratoAnalitico, pk=pk, usuario=request.user)
+        if importacao.status != 'done':
+            return HttpResponse('Relatório disponível apenas após o processamento.', status=400)
+        xlsx_bytes = gerar_relatorio_extrato(importacao)
+        response = HttpResponse(
+            xlsx_bytes,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = (
+            f'attachment; filename="relatorio_extrato_{pk}.xlsx"'
+        )
+        return response

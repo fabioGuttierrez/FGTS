@@ -101,6 +101,12 @@
                                 <i class="bi bi-upload me-1"></i>
                                 Nova Importação
                             </a>
+                            <a id="btn-relatorio"
+                               href="{% url 'lancamento-import-relatorio' pk=importacao.pk %}"
+                               class="btn btn-success rounded-3" style="display:none;">
+                                <i class="bi bi-file-earmark-spreadsheet me-1"></i>
+                                Baixar Relatório XLSX
+                            </a>
                             <a href="{% url 'lancamento-list' %}" class="btn btn-primary rounded-3">
                                 <i class="bi bi-list-ul me-1"></i>
                                 Ver Lançamentos
@@ -241,6 +247,8 @@
             }
             document.getElementById('error-list-container').style.display = '';
         }
+
+        document.getElementById('btn-relatorio').style.display = '';
     }
 
     function showError(msg) {
@@ -300,6 +308,11 @@
     } else {
         showProcessing(initialStatus, null);
         poll();
+    }
+
+    /* Mostra botão imediatamente se a página carregou já no estado done */
+    if (initialStatus === 'done') {
+        document.getElementById('btn-relatorio').style.display = '';
     }
 })();
 </script>

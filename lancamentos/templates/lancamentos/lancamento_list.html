@@ -568,8 +568,24 @@
                     }
                 }
 
-                const url = "{% url 'relatorio-por-ids' %}?ids=" + ids.join(',');
-                window.location.href = url;
+                function submeterRelatorio() {
+                    document.getElementById('inputRelatorioIds').value = ids.join(',');
+                    document.getElementById('loadingOverlayRelatorio').classList.remove('d-none');
+                    document.getElementById('formRelatorioIds').submit();
+                }
+
+                if (ids.length > 300) {
+                    document.getElementById('relatorioVolumeMensagem').textContent =
+                        `Você selecionou ${ids.length} lançamentos. Relatórios com grande volume podem levar alguns segundos para serem calculados. Deseja continuar?`;
+                    const modalVolume = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalRelatorioVolume'));
+                    document.getElementById('confirmarRelatorioVolumeBtn').onclick = function() {
+                        modalVolume.hide();
+                        submeterRelatorio();
+                    };
+                    modalVolume.show();
+                } else {
+                    submeterRelatorio();
+                }
             });
         }
 
@@ -733,4 +749,62 @@
     </div>
   </div>
 </div>
-{% endblock %}
+<!-- Form oculto para enviar IDs via POST (evita limite de URL com seleções grandes) -->
+<form id="formRelatorioIds" method="post" action="{% url 'relatorio-por-ids' %}" class="d-none">
+    {% csrf_token %}
+    <input type="hidden" name="ids" id="inputRelatorioIds">
+    <input type="hidden" name="agrupamento" value="competencia">
+</form>
+
+<!-- Loading overlay para geração de relatório -->
+<div id="loadingOverlayRelatorio" class="d-none" style="position: fixed; inset: 0; background: rgba(255,255,255,0.82); z-index: 1060; display: flex; align-items: center; justify-content: center;">
+    <div class="text-center" style="max-width: 480px;">
+        <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status">
+            <span class="visually-hidden">Carregando...</span>
+        </div>
+        <div class="fw-semibold text-dark fs-5">Gerando relatório, aguarde...</div>
+        <div class="text-muted small mt-1">Calculando valores atualizados de FGTS</div>
+        <div id="overlayAvisoLento" class="d-none mt-3 p-3 rounded" style="background: #fff3cd; border: 1px solid #ffc107;">
+            <i class="bi bi-clock-history me-1 text-warning"></i>
+            <span class="small text-dark">O volume é grande e o cálculo está demorando. O sistema vai retornar o máximo que conseguir processar dentro do tempo disponível.</span>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    var overlay = document.getElementById('loadingOverlayRelatorio');
+    var aviso = document.getElementById('overlayAvisoLento');
+    var observer = new MutationObserver(function() {
+        if (overlay && !overlay.classList.contains('d-none')) {
+            setTimeout(function() {
+                if (aviso) aviso.classList.remove('d-none');
+            }, 20000);
+        }
+    });
+    if (overlay) observer.observe(overlay, { attributes: true, attributeFilter: ['class'] });
+})();
+</script>
+
+<!-- Modal de confirmação para seleções com alto volume -->
+<div class="modal fade" id="modalRelatorioVolume" tabindex="-1" aria-labelledby="modalRelatorioVolumeLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-warning">
+        <h5 class="modal-title" id="modalRelatorioVolumeLabel">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i>Relatório com muitos lançamentos
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <p id="relatorioVolumeMensagem"></p>
+        <p class="text-muted small mb-0">Se o volume for muito alto, você verá uma mensagem orientando a filtrar por funcionário ou período menor.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="confirmarRelatorioVolumeBtn">Sim, gerar relatório</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock content %}

@@ -159,7 +159,7 @@
               <tbody>
                 {% for item in emp.funcionarios %}
                 <tr class="{% cycle '' 'table-light' %}">
-                  <td class="ps-3 text-muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.funcionario.pk }}</td>
+                  <td class="ps-3 text-muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.matricula|default:"—" }}</td>
                   <td class="fw-semibold" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ item.funcionario.nome }}">{{ item.funcionario.nome }}</td>
                   <td class="text-center" style="white-space:nowrap;">
                     {% if item.data_admissao %}{{ item.data_admissao|date:"d/m/Y" }}{% else %}—{% endif %}

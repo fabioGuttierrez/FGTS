@@ -68,6 +68,30 @@
     </div>
   </div>
 
+  {% if erro_limite %}
+  <div class="card border-danger mb-4">
+    <div class="card-header bg-danger text-white">
+      <i class="bi bi-exclamation-triangle-fill me-2"></i>
+      <strong>Volume de dados muito alto para exibição em tela</strong>
+    </div>
+    <div class="card-body">
+      {% if erro_limite.tipo == 'competencias' %}
+        <p class="mb-2">Foram encontradas <strong>{{ erro_limite.total }} competências</strong> em aberto para os filtros selecionados. O limite para exibição em tela é de <strong>{{ erro_limite.limite }} competências</strong>.</p>
+      {% elif erro_limite.tipo == 'ids' %}
+        <p class="mb-2">Você selecionou <strong>{{ erro_limite.total }} lançamentos</strong>. O limite para geração de relatório em tela é de <strong>{{ erro_limite.limite }} lançamentos</strong>.</p>
+      {% else %}
+        <p class="mb-2">Foram encontrados <strong>{{ erro_limite.total }} lançamentos</strong> para os filtros selecionados. O limite para exibição em tela é de <strong>{{ erro_limite.limite }} lançamentos</strong>.</p>
+      {% endif %}
+      <p class="mb-3 text-muted">Relatórios com volume muito alto podem travar o sistema. Para acessar esses dados, use uma das opções abaixo:</p>
+      <ul class="mb-0">
+        <li><strong>Filtre por um funcionário específico</strong> — selecione um colaborador no campo "Funcionário" e gere o relatório individual.</li>
+        <li><strong>Reduza o período</strong> — informe uma competência única (ex: <code>01/2025</code>) ou um conjunto menor de competências.</li>
+        <li><strong>Exporte CSV ou PDF</strong> — os exportadores suportam volumes maiores e não travam a tela.</li>
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+
   {% if not from_selection %}
   <div class="card shadow-lg mb-4">
     <div class="card-header bg-dark text-white">Filtros</div>
@@ -142,7 +166,7 @@
       {% if erro %}
         <div class="alert alert-warning mt-3">{{ erro }}</div>
       {% endif %}
-      
+
       <!-- Bloco de avisos -->
       {% if avisos %}
         <div class="alert alert-warning mt-3 border-0" role="alert">

@@ -37,33 +37,48 @@ MESES_PT = {
     'NOVEMBRO': '11', 'DEZEMBRO': '12',
 }
 
+# Linha após o cabeçalho PIS/PASEP DTA.ADM DATA DE AFAST.:
+# "12345678901  DD/MM/YYYY  DD/MM/YYYY"  (datas podem estar em células separadas)
+_RE_PIS_LINHA = re.compile(
+    r'(\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{11})'   # PIS (formatado ou não)
+    r'\D+(\d{2}/\d{2}/\d{4})'                    # DTA.ADM
+    r'(?:\D+(\d{2}/\d{2}/\d{4}))?',              # DATA DE AFAST. (opcional)
+)
+
 # "DEPOSITO [EM ATRASO] NOMEMES/ANO  valor"
 _RE_DEPOSITO = re.compile(
     r'^DEPOSITO(?:\s+EM\s+ATRASO)?\s+([A-Z]+)/(\d{4})\s+([\d.,]+)',
     re.IGNORECASE,
 )
 
+# Tolerância percentual para comparação de valores (cobre diferenças de arredondamento CEF)
+_TOLERANCIA_VALOR = Decimal('0.01')
 
-def _extrair_deposito(linha: str) -> Optional[Tuple[str, Decimal, Optional[date]]]:
+
+def _extrair_deposito(linha: str) -> Optional[Tuple[str, Decimal, Optional[date], bool]]:
+    """Retorna (competencia, valor, data_pg, em_atraso) ou None."""
     data_pg = _parse_data(linha[:10])
     resto = linha[10:].strip()
     m = _RE_DEPOSITO.match(resto)
     if not m:
         return None
-    mes_nome = m.group(1).upper().replace('Ç', 'C').replace('Ã', 'A')
+    em_atraso = bool(m.group(0).upper().startswith('DEPOSITO EM ATRASO') or
+                     'EM ATRASO' in m.group(0).upper())
+    mes_nome = m.group(1).upper().replace('Ç', 'C').replace('Ã', 'A').replace('Á', 'A').replace('É', 'E')
     mes_num = MESES_PT.get(mes_nome)
     if not mes_num:
         return None
     valor = _parse_valor(m.group(3))
     if valor <= 0:
         return None
-    return f'{mes_num}/{m.group(2)}', valor, data_pg
+    return f'{mes_num}/{m.group(2)}', valor, data_pg, em_atraso
 
 
 class RegistroExtrato:
     __slots__ = (
         'empresa_ref', 'matricula', 'pis', 'cnpj', 'nome',
-        'competencia', 'data_pagamento', 'valor',
+        'competencia', 'data_pagamento', 'valor', 'em_atraso',
+        'data_admissao', 'data_demissao',
     )
 
     def __init__(
@@ -76,8 +91,11 @@ class RegistroExtrato:
         pis: str = '',
         cnpj: str = '',
         nome: str = '',
+        em_atraso: bool = False,
+        data_admissao: Optional[date] = None,
+        data_demissao: Optional[date] = None,
     ):
-        self.empresa_ref = empresa_ref   # int (empresa.codigo) ou None
+        self.empresa_ref = empresa_ref
         self.matricula = matricula
         self.pis = pis
         self.cnpj = cnpj
@@ -85,6 +103,9 @@ class RegistroExtrato:
         self.competencia = competencia
         self.data_pagamento = data_pagamento
         self.valor = valor
+        self.em_atraso = em_atraso
+        self.data_admissao = data_admissao
+        self.data_demissao = data_demissao
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +207,8 @@ def parse_original(ws) -> Tuple[List[RegistroExtrato], List[str]]:
     pis_atual = ''
     cnpj_atual = ''
     nome_atual = ''
+    data_adm_atual: Optional[date] = None
+    data_dem_atual: Optional[date] = None
     em_historico = False
 
     i = 0
@@ -201,9 +224,21 @@ def parse_original(ws) -> Tuple[List[RegistroExtrato], List[str]]:
 
         elif 'PIS/PASEP' in linha and 'DTA.ADM' in linha:
             pis_linha = linhas[i + 1] if (i + 1) < len(linhas) else ''
-            m_pis = re.match(r'^(\d{11})', pis_linha.replace(' ', ''))
+            m_pis = _RE_PIS_LINHA.search(pis_linha)
             if m_pis:
-                pis_atual = m_pis.group(1)
+                pis_raw = re.sub(r'\D', '', m_pis.group(1))
+                pis_atual = pis_raw.zfill(11)
+                data_adm_atual = _parse_data(m_pis.group(2))
+                dem_raw = m_pis.group(3)
+                # 00/00/0000 indica sem demissão
+                data_dem_atual = _parse_data(dem_raw) if dem_raw and dem_raw != '00/00/0000' else None
+            else:
+                # Fallback: extrai só o PIS (sem datas)
+                m_so_pis = re.match(r'^(\d{11})', pis_linha.replace(' ', ''))
+                if m_so_pis:
+                    pis_atual = m_so_pis.group(1)
+                data_adm_atual = None
+                data_dem_atual = None
             i += 1
 
         elif 'INSCRICAO EMPREGADOR' in linha:
@@ -224,7 +259,7 @@ def parse_original(ws) -> Tuple[List[RegistroExtrato], List[str]]:
             elif re.match(r'^\d{2}/\d{2}/\d{4}', linha):
                 resultado = _extrair_deposito(linha)
                 if resultado and pis_atual and cnpj_atual:
-                    comp, valor, data_pg = resultado
+                    comp, valor, data_pg, em_atraso = resultado
                     registros.append(RegistroExtrato(
                         pis=pis_atual,
                         cnpj=cnpj_atual,
@@ -232,6 +267,9 @@ def parse_original(ws) -> Tuple[List[RegistroExtrato], List[str]]:
                         competencia=comp,
                         data_pagamento=data_pg,
                         valor=valor,
+                        em_atraso=em_atraso,
+                        data_admissao=data_adm_atual,
+                        data_demissao=data_dem_atual,
                     ))
 
         i += 1
@@ -325,6 +363,9 @@ class ExtratoAnaliticoService:
         """
         Confirma pagamentos em todos os registros do extrato.
         Marca: pago=True, fonte_confirmacao_pagamento='extrato_analitico'.
+
+        Quando uma competência possui dois lançamentos (mensal + 13º), compara
+        o valor do extrato com a soma de ambos para decidir se dá baixa nos dois.
         """
         registros, parse_erros = self._parse_xlsx(xlsx_bytes)
         total = len(registros)
@@ -333,31 +374,150 @@ class ExtratoAnaliticoService:
             progress_callback(0, total)
 
         confirmados = 0
+        confirmados_com_13 = 0
         nao_encontrados = 0
         ja_confirmados = 0
         erros: List[str] = list(parse_erros)
         avisos: List[str] = []
+        rows: List[Dict[str, Any]] = []
+
+        def _row_base(reg: RegistroExtrato, empresa=None) -> Dict[str, Any]:
+            return {
+                'empresa': empresa.nome if empresa else (reg.cnpj or ''),
+                'cnpj': reg.cnpj,
+                'funcionario': reg.nome,
+                'pis': reg.pis,
+                'matricula': reg.matricula,
+                'competencia': reg.competencia,
+                'valor': str(reg.valor),
+                'tipo': 'DEPOSITO EM ATRASO' if reg.em_atraso else 'DEPOSITO',
+            }
 
         for idx, reg in enumerate(registros, 1):
             empresa, vinculo, func, erro = self._resolver(reg)
 
             if erro or not empresa:
-                erros.append(f'Reg {idx} ({reg.nome} / {reg.competencia}): {erro or "empresa não identificada"}')
+                msg = erro or "empresa não identificada"
+                erros.append(f'Reg {idx} ({reg.nome} / {reg.competencia}): {msg}')
+                rows.append({**_row_base(reg, empresa), 'status': 'erro', 'detalhe': msg})
                 continue
 
-            lancamento = self._buscar_lancamento(vinculo, func, empresa, reg.competencia)
-            if not lancamento:
+            lancamentos = self._buscar_lancamentos(vinculo, func, empresa, reg.competencia)
+            if not lancamentos:
                 nao_encontrados += 1
-                avisos.append(
-                    f'Reg {idx}: sem lançamento para '
-                    f'{reg.nome} / {reg.competencia} — ignorado.'
-                )
+                detalhe = f'Lançamento não encontrado para {reg.nome} / {reg.competencia}'
+                avisos.append(f'Reg {idx}: sem lançamento para {reg.nome} / {reg.competencia} — ignorado.')
+                rows.append({**_row_base(reg, empresa), 'status': 'nao_encontrado', 'detalhe': detalhe})
                 continue
 
-            if lancamento.fonte_confirmacao_pagamento == 'extrato_analitico':
+            # Separa lançamentos já confirmados dos pendentes
+            pendentes = [l for l in lancamentos if l.fonte_confirmacao_pagamento != 'extrato_analitico']
+            if not pendentes:
                 ja_confirmados += 1
+                rows.append({**_row_base(reg, empresa), 'status': 'ja_confirmado', 'detalhe': 'Já confirmado pelo extrato CEF'})
                 continue
 
+            # Caso com dois lançamentos: possível mensal + 13º, ou dois vínculos distintos
+            if len(pendentes) == 2:
+                mensal_list = [l for l in pendentes if l.parcela_13 is None]
+                decimo_list = [l for l in pendentes if l.parcela_13 is not None]
+
+                # Sub-caso: dois lançamentos mensais (vínculos distintos na mesma competência)
+                # Seleciona o que corresponde ao vínculo resolvido para este bloco do extrato
+                if len(mensal_list) == 2 and not decimo_list:
+                    vinculo_pk = vinculo.pk if vinculo else None
+                    alvo = next(
+                        (l for l in mensal_list if l.vinculo_id == vinculo_pk),
+                        mensal_list[0],
+                    )
+                    try:
+                        with transaction.atomic():
+                            Lancamento.objects.filter(pk=alvo.pk).update(
+                                pago=True,
+                                fonte_confirmacao_pagamento='extrato_analitico',
+                                data_pagto=reg.data_pagamento or alvo.data_pagto,
+                                valor_pago=reg.valor if reg.valor > 0 else alvo.valor_pago,
+                            )
+                        confirmados += 1
+                        rows.append({**_row_base(reg, empresa), 'status': 'confirmado', 'detalhe': 'Confirmado (múltiplos vínculos)'})
+                    except Exception as exc:
+                        erros.append(f'Reg {idx}: erro ao salvar — {exc}')
+                        rows.append({**_row_base(reg, empresa), 'status': 'erro', 'detalhe': str(exc)})
+                    if progress_callback and idx % 50 == 0:
+                        progress_callback(idx, total)
+                    continue
+
+                if mensal_list and decimo_list:
+                    mensal = mensal_list[0]
+                    decimo = decimo_list[0]
+                    soma_ambos = (mensal.valor_fgts or Decimal('0')) + (decimo.valor_fgts or Decimal('0'))
+
+                    if soma_ambos > 0 and abs(reg.valor - soma_ambos) / soma_ambos <= _TOLERANCIA_VALOR:
+                        # Valor do extrato cobre mensal + 13º — baixa nos dois
+                        try:
+                            with transaction.atomic():
+                                Lancamento.objects.filter(pk=mensal.pk).update(
+                                    pago=True,
+                                    fonte_confirmacao_pagamento='extrato_analitico',
+                                    data_pagto=reg.data_pagamento or mensal.data_pagto,
+                                    valor_pago=mensal.valor_fgts,
+                                )
+                                Lancamento.objects.filter(pk=decimo.pk).update(
+                                    pago=True,
+                                    fonte_confirmacao_pagamento='extrato_analitico',
+                                    data_pagto=reg.data_pagamento or decimo.data_pagto,
+                                    valor_pago=decimo.valor_fgts,
+                                )
+                            confirmados_com_13 += 1
+                            rows.append({**_row_base(reg, empresa), 'status': 'confirmado', 'detalhe': 'Confirmado (mensal + 13º)'})
+                        except Exception as exc:
+                            erros.append(f'Reg {idx}: erro ao salvar mensal+13º — {exc}')
+                            rows.append({**_row_base(reg, empresa), 'status': 'erro', 'detalhe': str(exc)})
+
+                        if progress_callback and idx % 50 == 0:
+                            progress_callback(idx, total)
+                        continue
+
+                    # Valor cobre apenas o mensal (13º separado ou pago em outra guia)
+                    valor_mensal = mensal.valor_fgts or Decimal('0')
+                    if valor_mensal > 0 and abs(reg.valor - valor_mensal) / valor_mensal <= _TOLERANCIA_VALOR:
+                        try:
+                            with transaction.atomic():
+                                Lancamento.objects.filter(pk=mensal.pk).update(
+                                    pago=True,
+                                    fonte_confirmacao_pagamento='extrato_analitico',
+                                    data_pagto=reg.data_pagamento or mensal.data_pagto,
+                                    valor_pago=reg.valor,
+                                )
+                            confirmados += 1
+                            rows.append({**_row_base(reg, empresa), 'status': 'confirmado', 'detalhe': 'Confirmado (mensal); 13º permanece em aberto'})
+                        except Exception as exc:
+                            erros.append(f'Reg {idx}: erro ao salvar mensal — {exc}')
+                            rows.append({**_row_base(reg, empresa), 'status': 'erro', 'detalhe': str(exc)})
+                        avisos.append(
+                            f'Reg {idx}: {reg.nome} / {reg.competencia} — '
+                            f'valor do extrato ({reg.valor}) corresponde só ao mensal; '
+                            f'13º permanece em aberto.'
+                        )
+                        if progress_callback and idx % 50 == 0:
+                            progress_callback(idx, total)
+                        continue
+
+                    # Valor não bate com nenhum padrão esperado
+                    detalhe_aviso = (
+                        f'Valor do extrato ({reg.valor}) não corresponde ao mensal '
+                        f'({mensal.valor_fgts}) nem à soma mensal+13º ({soma_ambos}). '
+                        f'Verifique manualmente.'
+                    )
+                    avisos.append(f'Reg {idx}: {reg.nome} / {reg.competencia} — {detalhe_aviso}')
+                    nao_encontrados += 1
+                    rows.append({**_row_base(reg, empresa), 'status': 'nao_encontrado', 'detalhe': detalhe_aviso})
+                    if progress_callback and idx % 50 == 0:
+                        progress_callback(idx, total)
+                    continue
+
+            # Caso padrão: um único lançamento pendente (ou múltiplos sem padrão mensal+13º)
+            lancamento = pendentes[0]
             try:
                 with transaction.atomic():
                     Lancamento.objects.filter(pk=lancamento.pk).update(
@@ -367,8 +527,10 @@ class ExtratoAnaliticoService:
                         valor_pago=reg.valor if reg.valor > 0 else lancamento.valor_pago,
                     )
                 confirmados += 1
+                rows.append({**_row_base(reg, empresa), 'status': 'confirmado', 'detalhe': 'Confirmado'})
             except Exception as exc:
                 erros.append(f'Reg {idx}: erro ao salvar — {exc}')
+                rows.append({**_row_base(reg, empresa), 'status': 'erro', 'detalhe': str(exc)})
 
             if progress_callback and idx % 50 == 0:
                 progress_callback(idx, total)
@@ -378,11 +540,13 @@ class ExtratoAnaliticoService:
 
         return {
             'confirmados': confirmados,
+            'confirmados_com_13': confirmados_com_13,
             'nao_encontrados': nao_encontrados,
             'ja_confirmados': ja_confirmados,
             'erros': erros,
             'avisos': avisos,
             'total': total,
+            'rows': rows,
         }
 
     # ------------------------------------------------------------------
@@ -438,7 +602,7 @@ class ExtratoAnaliticoService:
     def _resolver_vinculo(
         self, reg: RegistroExtrato, empresa: Empresa
     ) -> Tuple[Optional[FuncionarioVinculo], Optional[Funcionario]]:
-        # Aba Tratada: usa matrícula
+        # Aba Tratada: usa matrícula — sem ambiguidade
         if reg.matricula:
             key = f'{empresa.pk}:mat:{reg.matricula}'
             if key not in self._vinculo_cache:
@@ -451,23 +615,31 @@ class ExtratoAnaliticoService:
             if vinculo:
                 return vinculo, vinculo.funcionario
 
-        # Aba Original (ou fallback): usa PIS
+        # Aba Original: usa PIS + datas de admissão/demissão (chave composta)
         if reg.pis:
             pis_limpo = re.sub(r'\D', '', reg.pis).zfill(11)
-            key = f'{empresa.pk}:pis:{pis_limpo}'
+
+            # Chave de cache: inclui datas quando disponíveis para suportar duplo vínculo
+            adm_str = reg.data_admissao.isoformat() if reg.data_admissao else ''
+            dem_str = reg.data_demissao.isoformat() if reg.data_demissao else ''
+            key = f'{empresa.pk}:pis:{pis_limpo}:adm:{adm_str}:dem:{dem_str}'
+
             if key not in self._vinculo_cache:
-                func = Funcionario.objects.filter(
-                    pis=pis_limpo,
-                    vinculos__empresa=empresa,
-                ).first()
-                if func:
-                    v = FuncionarioVinculo.objects.filter(
-                        funcionario=func,
+                vinculos = list(
+                    FuncionarioVinculo.objects.filter(
+                        funcionario__pis=pis_limpo,
                         empresa=empresa,
-                    ).select_related('funcionario').order_by('-data_admissao').first()
-                    self._vinculo_cache[key] = v
-                else:
+                    ).select_related('funcionario').order_by('-data_admissao')
+                )
+
+                if not vinculos:
                     self._vinculo_cache[key] = None
+                elif len(vinculos) == 1:
+                    self._vinculo_cache[key] = vinculos[0]
+                else:
+                    # Duplo vínculo: tenta casar pela data de admissão do extrato
+                    matched = self._casar_vinculo_por_datas(vinculos, reg.data_admissao, reg.data_demissao)
+                    self._vinculo_cache[key] = matched
 
             v = self._vinculo_cache[key]
             if v:
@@ -475,27 +647,81 @@ class ExtratoAnaliticoService:
 
         return None, None
 
-    def _buscar_lancamento(
+    @staticmethod
+    def _casar_vinculo_por_datas(
+        vinculos: List['FuncionarioVinculo'],
+        data_adm: Optional[date],
+        data_dem: Optional[date],
+    ) -> Optional['FuncionarioVinculo']:
+        """
+        Dado uma lista de vínculos com duplo contrato, tenta identificar o correto
+        usando a chave composta data_admissao + data_demissao do extrato.
+
+        Estratégia:
+        1. Match exato em ambas as datas
+        2. Match só pela admissão (demissão pode estar ausente no extrato)
+        3. Match por mês/ano da admissão (CEF pode usar dia diferente do cadastro)
+        4. Vínculo cuja janela (adm → dem) contém a data de admissão do extrato
+        5. Fallback: vínculo mais recente
+        """
+        if not data_adm:
+            return vinculos[0]  # sem data, retorna o mais recente
+
+        # Tentativa 1: match exato admissão + demissão
+        if data_dem:
+            for v in vinculos:
+                if v.data_admissao == data_adm and v.data_demissao == data_dem:
+                    return v
+
+        # Tentativa 2: match só pela admissão (data exata)
+        for v in vinculos:
+            if v.data_admissao == data_adm:
+                return v
+
+        # Tentativa 3: match por mês/ano da admissão (CEF pode reportar dia diferente do cadastro)
+        for v in vinculos:
+            if (v.data_admissao and
+                    v.data_admissao.year == data_adm.year and
+                    v.data_admissao.month == data_adm.month):
+                return v
+
+        # Tentativa 4: vínculo cuja janela (adm → dem) contém a data de admissão do extrato
+        for v in vinculos:
+            if v.data_admissao and v.data_admissao <= data_adm:
+                if v.data_demissao is None or v.data_demissao >= data_adm:
+                    return v
+
+        # Fallback: mais recente
+        return vinculos[0]
+
+    def _buscar_lancamentos(
         self,
         vinculo: Optional[FuncionarioVinculo],
         func: Optional[Funcionario],
         empresa: Empresa,
         competencia: str,
-    ) -> Optional[Lancamento]:
-        """Busca Lancamento por vínculo (ou funcionário + empresa) + competência."""
-        if vinculo:
-            lanc = Lancamento.objects.filter(
-                vinculo=vinculo,
-                competencia=competencia,
-            ).first()
-            if lanc:
-                return lanc
+    ) -> List[Lancamento]:
+        """Retorna todos os Lancamentos do funcionário na empresa/competência (qualquer vínculo).
 
+        Busca primeiro por funcionário+empresa para garantir que lançamentos de
+        todos os vínculos ativos sejam retornados — crítico quando o colaborador
+        tem múltiplos contratos simultâneos na mesma empresa.
+        """
         if func:
-            return Lancamento.objects.filter(
+            lancs = list(Lancamento.objects.filter(
                 funcionario=func,
                 empresa=empresa,
                 competencia=competencia,
-            ).first()
+            ))
+            if lancs:
+                return lancs
 
-        return None
+        # Fallback legado: lançamentos sem funcionário vinculado diretamente
+        if vinculo:
+            return list(Lancamento.objects.filter(
+                vinculo=vinculo,
+                competencia=competencia,
+                funcionario__isnull=True,
+            ))
+
+        return []
