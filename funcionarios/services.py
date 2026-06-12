@@ -347,37 +347,6 @@ class FuncionarioImportService:
                         # Validar após vínculo existir
                         funcionario.full_clean()
                     
-                    # Criar primeiro lançamento automaticamente se salário foi informado
-                    salario_str = row_data.get('SALARIO')
-                    if salario_str is not None and str(salario_str).strip() != "":
-                        try:
-                            from decimal import Decimal
-                            from lancamentos.models import Lancamento
-                            salario = Decimal(str(salario_str).strip())
-                            if salario > 0:
-                                competencia = data_admissao.strftime('%m/%Y')
-                                # Verificar se já existe lançamento
-                                existe = Lancamento.objects.filter(
-                                    empresa=empresa,
-                                    funcionario=funcionario,
-                                    competencia=competencia,
-                                    parcela_13__isnull=True
-                                ).exists()
-                                if not existe:
-                                    valor_fgts = salario * Decimal('0.08')
-                                    Lancamento.objects.create(
-                                        empresa=empresa,
-                                        funcionario=funcionario,
-                                        competencia=competencia,
-                                        base_fgts=salario,
-                                        valor_fgts=valor_fgts,
-                                        pago=False
-                                    )
-                        except Exception as e:
-                            # Log do erro mas não interrompe a importação
-                            error_msg = f"Linha {row_idx}: Funcionário criado, mas erro ao criar lançamento: {str(e)}"
-                            result['errors'].append(error_msg)
-                    
                     result['success'] += 1
                     result['created_funcionarios'].append(funcionario.id)
                     

@@ -48,42 +48,11 @@ class FuncionarioCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
         return context
 
     def form_valid(self, form):
-        from lancamentos.models import Lancamento
-        from decimal import Decimal
         empresa = form.cleaned_data.get('empresa')
         if empresa and not is_empresa_allowed(self.request.user, empresa.codigo):
             return HttpResponseForbidden('Empresa não permitida para este usuário.')
         funcionario = form.save()
-        # Criar primeiro lançamento automaticamente se salário inicial foi informado
-        salario_inicial = form.cleaned_data.get('salario_inicial')
-        data_admissao = form.cleaned_data.get('data_admissao')
-        if salario_inicial and salario_inicial > 0 and data_admissao:
-            competencia = data_admissao.strftime('%m/%Y')
-            existe = Lancamento.objects.filter(
-                empresa=empresa,
-                funcionario=funcionario,
-                competencia=competencia,
-                parcela_13__isnull=True
-            ).exists()
-            if not existe:
-                valor_fgts = salario_inicial * Decimal('0.08')
-                Lancamento.objects.create(
-                    empresa=empresa,
-                    funcionario=funcionario,
-                    competencia=competencia,
-                    base_fgts=salario_inicial,
-                    valor_fgts=valor_fgts,
-                    pago=False
-                )
-                messages.success(
-                    self.request, 
-                    f'✅ Funcionário "{funcionario.nome}" cadastrado com sucesso! '
-                    f'Lançamento inicial criado para {competencia} com base FGTS de R$ {salario_inicial}.'
-                )
-            else:
-                messages.success(self.request, f'✅ Funcionário "{funcionario.nome}" cadastrado com sucesso!')
-        else:
-            messages.success(self.request, f'✅ Funcionário "{funcionario.nome}" cadastrado com sucesso!')
+        messages.success(self.request, f'✅ Funcionário "{funcionario.nome}" cadastrado com sucesso!')
         return super().form_valid(form)
 
     def form_invalid(self, form):
