@@ -11,6 +11,7 @@ from .views import (
     LancamentoImportPreviewView, LancamentoImportConfirmView,
     LancamentoImportDownloadRelatorioView,
     RelatorioTaskStatusView, relatorio_task_status_json, RelatorioTaskResultadoView,
+    RelatorioStatusPosicaoView, RelatorioStatusPosicaoResultadoView, export_relatorio_posicao_xlsx,
 )
 from .views_re_extrato import (
     REImportView, REImportPreviewView, REImportConfirmView,
@@ -49,6 +50,11 @@ urlpatterns = [
     path('relatorio/task/<int:pk>/status/', RelatorioTaskStatusView.as_view(), name='relatorio-task-status'),
     path('relatorio/task/<int:pk>/status/json/', relatorio_task_status_json, name='relatorio-task-status-json'),
     path('relatorio/task/<int:pk>/resultado/', RelatorioTaskResultadoView.as_view(), name='relatorio-task-resultado'),
+
+    # Relatório de Posição em Aberto (com Valor Atualizado)
+    path('relatorio/posicao/', RelatorioStatusPosicaoView.as_view(), name='relatorio-posicao'),
+    path('relatorio/task/<int:pk>/posicao-resultado/', RelatorioStatusPosicaoResultadoView.as_view(), name='relatorio-posicao-resultado'),
+    path('relatorio/task/<int:pk>/posicao-xlsx/', export_relatorio_posicao_xlsx, name='relatorio-posicao-xlsx'),
 
     # Importador RE / SEFIP
     path('importar-re/', REImportView.as_view(), name='re-import'),

@@ -747,3 +747,59 @@ class ImportacaoConfirmacaoForm(forms.Form):
         widget=forms.CheckboxInput(attrs={'class': 'form-check-input', 'id': 'id_aceite_responsabilidade'}),
         error_messages={'required': 'É obrigatório aceitar a responsabilidade antes de confirmar.'},
     )
+
+
+class RelatorioStatusPosicaoForm(forms.Form):
+    """Filtros para o Relatório de Posição em Aberto com Valor Atualizado."""
+
+    empresa = forms.ModelChoiceField(
+        queryset=Empresa.objects.none(),
+        label='Empresa',
+        widget=forms.Select(attrs={'class': 'form-select', 'autocomplete': 'off'})
+    )
+    competencia_inicio = forms.CharField(
+        label='Competência Inicial',
+        max_length=7,
+        help_text='MM/YYYY',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control competencia-input',
+            'placeholder': 'MM/YYYY',
+            'autocomplete': 'off',
+            'data-auto-format': 'competencia',
+        })
+    )
+    competencia_fim = forms.CharField(
+        label='Competência Final',
+        max_length=7,
+        help_text='MM/YYYY',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control competencia-input',
+            'placeholder': 'MM/YYYY',
+            'autocomplete': 'off',
+            'data-auto-format': 'competencia',
+        })
+    )
+
+    def __init__(self, *args, empresa_ids=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if empresa_ids is not None:
+            self.fields['empresa'].queryset = Empresa.objects.filter(pk__in=empresa_ids)
+
+    def _parse_competencia(self, value, field_name):
+        value = value.strip()
+        try:
+            parts = value.split('/')
+            if len(parts) != 2:
+                raise ValueError
+            mes, ano = int(parts[0]), int(parts[1])
+            if not (1 <= mes <= 13) or ano < 1970:
+                raise ValueError
+            return value
+        except (ValueError, IndexError):
+            raise forms.ValidationError(f'{field_name} deve estar no formato MM/YYYY.')
+
+    def clean_competencia_inicio(self):
+        return self._parse_competencia(self.cleaned_data['competencia_inicio'], 'Competência Inicial')
+
+    def clean_competencia_fim(self):
+        return self._parse_competencia(self.cleaned_data['competencia_fim'], 'Competência Final')

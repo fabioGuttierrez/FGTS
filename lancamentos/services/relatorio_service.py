@@ -469,3 +469,164 @@ def processar_relatorio_por_ids(task_id: int) -> None:
             connection.close()
         except Exception:
             pass
+
+
+def processar_relatorio_posicao(task_id: int) -> None:
+    """Executado em daemon thread. Gera relatório de posição em aberto com Valor Atualizado.
+
+    Para lançamentos pagos: usa valor_pago registrado.
+    Para lançamentos em aberto: calcula valor_deposito_fgts (principal × índice) até
+    a última data disponível em SupabaseIndice, sem JAM.
+    """
+    from decimal import Decimal
+    from datetime import date
+    from django.db import connection
+    task = None
+    try:
+        from lancamentos.models_relatorio import RelatorioTask
+        task = RelatorioTask.objects.get(pk=task_id)
+        task.status = 'processing'
+        task.save(update_fields=['status', 'atualizado_em'])
+
+        params = task.parametros_json
+        empresa_id = params['empresa_id']
+        competencia_inicio = params['competencia_inicio']
+        competencia_fim = params['competencia_fim']
+
+        from lancamentos.models import Lancamento
+        from empresas.models import Empresa
+        from indices.services.indice_service import IndiceFGTSService
+        from lancamentos.services.calculo import calcular_fgts_atualizado
+
+        empresa = Empresa.objects.get(pk=empresa_id)
+
+        def _parse_comp(s):
+            m, y = s.split('/')
+            return date(int(y), int(m), 1)
+
+        def _iter_competencias(inicio_str, fim_str):
+            from dateutil.relativedelta import relativedelta
+            cur = _parse_comp(inicio_str)
+            fim = _parse_comp(fim_str)
+            while cur <= fim:
+                yield cur.strftime('%m/%Y')
+                cur += relativedelta(months=1)
+
+        competencias_list = list(_iter_competencias(competencia_inicio, competencia_fim))
+
+        from django.db.models import Q
+        filtro_comp = Q()
+        for comp in competencias_list:
+            mes, ano = comp.split('/')
+            comp_iso = f"{ano}-{mes.zfill(2)}"
+            filtro_comp |= Q(competencia=comp) | Q(competencia=comp_iso)
+
+        lancamentos = (
+            Lancamento.objects
+            .filter(empresa=empresa)
+            .filter(filtro_comp)
+            .select_related('funcionario', 'vinculo', 'vinculo__empresa')
+            .order_by('competencia', 'funcionario__nome')
+        )
+
+        data_ref = IndiceFGTSService.obter_ultima_data_base()
+
+        _indice_cache = {}
+
+        def _get_indice(competencia_date: date):
+            if competencia_date not in _indice_cache:
+                _indice_cache[competencia_date] = IndiceFGTSService.buscar_indice(
+                    competencia=competencia_date,
+                    data_pagamento=data_ref,
+                )
+            return _indice_cache[competencia_date]
+
+        linhas = []
+        total_lancamentos = 0
+
+        for l in lancamentos:
+            total_lancamentos += 1
+            func = l.funcionario
+            vinculo = getattr(l, 'vinculo', None)
+
+            comp_raw = l.competencia or ''
+            if '-' in comp_raw and '/' not in comp_raw:
+                parts = comp_raw.split('-')
+                comp_display = f"{parts[1]}/{parts[0]}" if len(parts) == 2 else comp_raw
+            else:
+                comp_display = comp_raw
+
+            valor_atualizado = None
+            if l.pago:
+                valor_atualizado = str(l.valor_pago) if l.valor_pago is not None else None
+            elif data_ref:
+                try:
+                    comp_base = comp_display.replace('13/', '12/')
+                    mes_str, ano_str = comp_base.split('/')
+                    competencia_date = date(int(ano_str), int(mes_str), 1)
+                    indice = _get_indice(competencia_date)
+                    if indice is not None:
+                        resultado = calcular_fgts_atualizado(
+                            valor_fgts=l.valor_fgts,
+                            competencia=competencia_date,
+                            pagamento=data_ref,
+                            indice=indice,
+                            jam_coef=Decimal('0'),
+                            valor_fgts_base=l.base_fgts,
+                            aplicar_plano_economico=True,
+                        )
+                        valor_atualizado = str(resultado['valor_deposito_fgts'])
+                except Exception:
+                    valor_atualizado = None
+
+            linhas.append({
+                'competencia': comp_display,
+                'parcela_13': l.parcela_13,
+                'cod_empresa': str(empresa.codigo),
+                'empresa': empresa.nome,
+                'empresa_cnpj': empresa.cnpj,
+                'funcionario': func.nome if func else '',
+                'funcionario_pis': getattr(func, 'pis', '') or '',
+                'matricula': getattr(vinculo, 'matricula', '') or '',
+                'cargo': getattr(vinculo, 'cargo', '') or '',
+                'cbo': getattr(func, 'cbo', '') or '',
+                'data_admissao': vinculo.data_admissao.isoformat() if vinculo and getattr(vinculo, 'data_admissao', None) else None,
+                'data_demissao': vinculo.data_demissao.isoformat() if vinculo and getattr(vinculo, 'data_demissao', None) else None,
+                'status_vinculo': getattr(vinculo, 'status', '') or '',
+                'motivo_saida': getattr(vinculo, 'motivo_saida', '') or '',
+                'base_fgts': str(l.base_fgts) if l.base_fgts is not None else '',
+                'valor_fgts': str(l.valor_fgts),
+                'status_pagamento': 'Pago' if l.pago else 'Em aberto',
+                'data_pagamento': l.data_pagto.isoformat() if l.data_pagto else None,
+                'valor_pago': str(l.valor_pago) if l.valor_pago is not None else None,
+                'fonte_confirmacao_pagamento': l.fonte_confirmacao_pagamento or '',
+                'valor_atualizado': valor_atualizado,
+            })
+
+        task.resultado_json = {
+            'tipo': 'posicao',
+            'empresa_id': empresa_id,
+            'empresa_nome': empresa.nome,
+            'competencia_inicio': competencia_inicio,
+            'competencia_fim': competencia_fim,
+            'data_ref': data_ref.isoformat() if data_ref else None,
+            'linhas': linhas,
+        }
+        task.total_lancamentos = total_lancamentos
+        task.status = 'done'
+        task.save(update_fields=['resultado_json', 'total_lancamentos', 'status', 'atualizado_em'])
+
+    except Exception as exc:
+        logger.exception(f'[RelatorioTask #{task_id}] Erro inesperado (posicao): {exc}')
+        if task:
+            try:
+                task.status = 'error'
+                task.mensagem_erro = str(exc)
+                task.save(update_fields=['status', 'mensagem_erro', 'atualizado_em'])
+            except Exception:
+                pass
+    finally:
+        try:
+            connection.close()
+        except Exception:
+            pass

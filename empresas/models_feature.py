@@ -25,6 +25,7 @@ class EmpresaFeature(models.Model):
         ("gerar_sefip", "Gerar SEFIP.RE"),
         ("importar_re_sefip", "Importar RE / SEFIP"),
         ("importar_extrato_cef", "Importar Extrato Analítico CEF"),
+        ("relatorio_posicao_fgts", "Relatório de Posição FGTS"),
         # Adicione outros recursos conforme necessário
     ]
     empresa = models.OneToOneField('empresas.Empresa', on_delete=models.CASCADE, related_name="features")
@@ -42,6 +43,7 @@ class EmpresaFeature(models.Model):
     gerar_sefip = models.BooleanField(default=False)
     importar_re_sefip = models.BooleanField(default=False)
     importar_extrato_cef = models.BooleanField(default=False)
+    relatorio_posicao_fgts = models.BooleanField(default=False, verbose_name="Relatório de Posição FGTS")
 
     def __str__(self):
         return f"Permissões de recursos para {self.empresa.nome}"

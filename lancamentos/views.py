@@ -2758,10 +2758,18 @@ def relatorio_task_status_json(request, pk):
     """Endpoint JSON para polling do status do relatório assíncrono."""
     from .models_relatorio import RelatorioTask
     task = get_object_or_404(RelatorioTask, pk=pk, usuario=request.user)
+
+    tipo = (task.parametros_json or {}).get('tipo', '')
+    if tipo == 'posicao':
+        redirect_url = reverse_lazy('relatorio-posicao-resultado', kwargs={'pk': pk})
+    else:
+        redirect_url = reverse_lazy('relatorio-task-resultado', kwargs={'pk': pk})
+
     return JsonResponse({
         'status': task.status,
         'erro': task.mensagem_erro,
         'total_lancamentos': task.total_lancamentos,
+        'redirect_url': str(redirect_url),
     })
 
 
@@ -3986,4 +3994,177 @@ def export_recolhimento_funcionario_xlsx(request):
         f'_a_{comp_fim.replace("/","_")}.xlsx"'
     )
     resp.write(xlsx_bytes)
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# Relatório de Posição em Aberto (com Valor Atualizado)
+# ---------------------------------------------------------------------------
+
+class RelatorioStatusPosicaoView(LoginRequiredMixin, View):
+    """Formulário de filtros para o relatório de posição em aberto."""
+    template_name = 'lancamentos/relatorio_posicao.html'
+
+    def _form(self, data=None):
+        from .forms import RelatorioStatusPosicaoForm
+        empresa_ids = get_allowed_empresa_ids(self.request.user)
+        return RelatorioStatusPosicaoForm(data, empresa_ids=empresa_ids)
+
+    def _check_feature(self, empresa):
+        from empresas.models_feature import empresa_tem_recurso
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return True
+        return empresa_tem_recurso(empresa, 'relatorio_posicao_fgts')
+
+    def get(self, request):
+        return render(request, self.template_name, {'form': self._form()})
+
+    def post(self, request):
+        form = self._form(request.POST)
+        if not form.is_valid():
+            return render(request, self.template_name, {'form': form})
+
+        empresa = form.cleaned_data['empresa']
+        if not is_empresa_allowed(request.user, empresa.pk):
+            return HttpResponseForbidden()
+        if not self._check_feature(empresa):
+            return HttpResponseForbidden()
+
+        from .models_relatorio import RelatorioTask
+        from .services.relatorio_service import processar_relatorio_posicao
+
+        task = RelatorioTask.objects.create(
+            empresa=empresa,
+            usuario=request.user,
+            status='pending',
+            parametros_json={
+                'tipo': 'posicao',
+                'empresa_id': empresa.pk,
+                'competencia_inicio': form.cleaned_data['competencia_inicio'],
+                'competencia_fim': form.cleaned_data['competencia_fim'],
+            },
+        )
+        threading.Thread(target=processar_relatorio_posicao, args=(task.id,), daemon=True).start()
+        return redirect('relatorio-task-status', pk=task.pk)
+
+
+class RelatorioStatusPosicaoResultadoView(LoginRequiredMixin, View):
+    """Exibe resultado do relatório de posição após processamento assíncrono."""
+    template_name = 'lancamentos/relatorio_posicao_resultado.html'
+
+    def get(self, request, pk):
+        from .models_relatorio import RelatorioTask
+        from empresas.models_feature import empresa_tem_recurso
+        task = get_object_or_404(RelatorioTask, pk=pk, usuario=request.user)
+        if not request.user.is_staff and not request.user.is_superuser:
+            if task.empresa and not empresa_tem_recurso(task.empresa, 'relatorio_posicao_fgts'):
+                return HttpResponseForbidden()
+        if task.status != 'done':
+            return redirect('relatorio-task-status', pk=pk)
+        resultado = task.resultado_json or {}
+        linhas = resultado.get('linhas', [])
+        return render(request, self.template_name, {
+            'task': task,
+            'resultado': resultado,
+            'linhas_preview': linhas[:50],
+            'total_linhas': len(linhas),
+            'data_ref': resultado.get('data_ref'),
+        })
+
+
+@login_required
+def export_relatorio_posicao_xlsx(request, pk):
+    """Gera download XLSX do relatório de posição em aberto."""
+    from io import BytesIO
+    import openpyxl
+    from openpyxl.styles import Font
+    from .models_relatorio import RelatorioTask
+    from empresas.models_feature import empresa_tem_recurso
+
+    task = get_object_or_404(RelatorioTask, pk=pk, usuario=request.user)
+    if not request.user.is_staff and not request.user.is_superuser:
+        if task.empresa and not empresa_tem_recurso(task.empresa, 'relatorio_posicao_fgts'):
+            return HttpResponseForbidden()
+    if task.status != 'done':
+        return redirect('relatorio-task-status', pk=pk)
+
+    resultado = task.resultado_json or {}
+    linhas = resultado.get('linhas', [])
+    data_ref = resultado.get('data_ref', '')
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Posição FGTS'
+
+    headers = [
+        'Competência', 'parcela_13', 'Cod_Empresa', 'Empresa', 'CNPJ',
+        'Funcionário', 'PIS', 'Matrícula', 'Cargo', 'CBO',
+        'Admissão', 'Demissão', 'Status Vínculo', 'Motivo Saída',
+        'Base FGTS', 'Valor FGTS', 'Status Pagamento', 'Data Pagamento',
+        'Valor Pago', 'Fonte Confirmação', f'Valor Atualizado (ref. {data_ref})',
+    ]
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+
+    def _fmt_date(iso_str):
+        if not iso_str:
+            return ''
+        try:
+            from datetime import date
+            d = date.fromisoformat(iso_str)
+            return d.strftime('%d/%m/%Y')
+        except Exception:
+            return iso_str
+
+    def _decimal(s):
+        if s is None or s == '':
+            return ''
+        try:
+            return float(s)
+        except Exception:
+            return s
+
+    for l in linhas:
+        ws.append([
+            l.get('competencia', ''),
+            l.get('parcela_13') or '',
+            l.get('cod_empresa', ''),
+            l.get('empresa', ''),
+            l.get('empresa_cnpj', ''),
+            l.get('funcionario', ''),
+            l.get('funcionario_pis', ''),
+            l.get('matricula', ''),
+            l.get('cargo', ''),
+            l.get('cbo', ''),
+            _fmt_date(l.get('data_admissao')),
+            _fmt_date(l.get('data_demissao')),
+            l.get('status_vinculo', ''),
+            l.get('motivo_saida', ''),
+            _decimal(l.get('base_fgts')),
+            _decimal(l.get('valor_fgts')),
+            l.get('status_pagamento', ''),
+            _fmt_date(l.get('data_pagamento')),
+            _decimal(l.get('valor_pago')),
+            l.get('fonte_confirmacao_pagamento', ''),
+            _decimal(l.get('valor_atualizado')),
+        ])
+
+    col_widths = [12, 10, 12, 30, 18, 30, 14, 12, 20, 10,
+                  12, 12, 14, 20, 12, 12, 16, 14, 12, 18, 20]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    comp_i = resultado.get('competencia_inicio', '').replace('/', '_')
+    comp_f = resultado.get('competencia_fim', '').replace('/', '_')
+    resp = HttpResponse(
+        buffer.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    resp['Content-Disposition'] = f'attachment; filename="posicao_fgts_{comp_i}_a_{comp_f}.xlsx"'
     return resp

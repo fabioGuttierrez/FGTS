@@ -21,8 +21,8 @@ class FuncionarioImportService:
     ]
     
     OPTIONAL_COLUMNS = [
-        'MATRICULA', 'PIS', 'CBO', 'CARTEIRA_PROFISSIONAL', 
-        'SERIE_CARTEIRA', 'DATA_NASCIMENTO', 'DATA_DEMISSAO', 'OBSERVACAO', 'SALARIO'
+        'MATRICULA', 'PIS', 'CBO', 'CARTEIRA_PROFISSIONAL',
+        'SERIE_CARTEIRA', 'DATA_NASCIMENTO', 'DATA_DEMISSAO', 'OBSERVACAO', 'SALARIO', 'CARGO'
     ]
 
     @staticmethod
@@ -342,6 +342,7 @@ class FuncionarioImportService:
                             data_admissao=data_admissao,
                             data_demissao=data_demissao,
                             salario=str(row_data.get('SALARIO')).strip() if row_data.get('SALARIO') is not None else None,
+                            cargo=str(row_data.get('CARGO')).strip() or None if row_data.get('CARGO') else None,
                         )
 
                         # Validar após vínculo existir

@@ -137,15 +137,17 @@
         startElapsedCounter();
     }
 
-    function showDone() {
+    function showDone(redirectUrl) {
         stopElapsedCounter();
         elProcessing.style.display = 'none';
         elError.style.display = 'none';
         elDone.style.display = '';
         var totalSec = Math.round((Date.now() - startTime) / 1000);
         document.getElementById('done-tempo').textContent = 'Processado em ' + fmtSeconds(totalSec);
+        var dest = redirectUrl || resultadoUrl;
+        document.getElementById('btn-resultado').href = dest;
         // Redireciona automaticamente após 1.5s
-        setTimeout(function() { window.location.href = resultadoUrl; }, 1500);
+        setTimeout(function() { window.location.href = dest; }, 1500);
     }
 
     function showError(msg) {
@@ -162,7 +164,7 @@
             showProcessing(s);
             return false;
         } else if (s === 'done') {
-            showDone();
+            showDone(data.redirect_url);
             return true;
         } else if (s === 'error') {
             showError(data.erro);
@@ -186,7 +188,7 @@
 
     var initialStatus = "{{ task.status }}";
     if (initialStatus === 'done') {
-        showDone();
+        showDone(null);
     } else if (initialStatus === 'error') {
         fetch(statusUrl, { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
