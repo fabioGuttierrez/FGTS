@@ -782,7 +782,10 @@ class RelatorioStatusPosicaoForm(forms.Form):
 
     def __init__(self, *args, empresa_ids=None, **kwargs):
         super().__init__(*args, **kwargs)
-        if empresa_ids is not None:
+        if empresa_ids is None:
+            # None = irrestrito (superuser/staff) → mostra todas
+            self.fields['empresa'].queryset = Empresa.objects.all()
+        else:
             self.fields['empresa'].queryset = Empresa.objects.filter(pk__in=empresa_ids)
 
     def _parse_competencia(self, value, field_name):
