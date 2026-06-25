@@ -265,17 +265,29 @@
                 return;
             }
             vinculoSelect.disabled = false;
+            vinculoSelect.innerHTML = '<option value="">Carregando...</option>';
             fetch(VINCULOS_JSON_URL + '?empresa_id=' + encodeURIComponent(empresaId))
-                .then(function (r) { return r.json(); })
+                .then(function (r) {
+                    if (!r.ok) throw new Error('Erro HTTP ' + r.status);
+                    return r.json();
+                })
                 .then(function (lista) {
-                    vinculoSelect.innerHTML = '<option value="">---------</option>';
-                    lista.forEach(function (v) {
-                        var opt = document.createElement('option');
-                        opt.value = v.id;
-                        opt.textContent = v.nome;
-                        if (String(v.id) === String(manter)) opt.selected = true;
-                        vinculoSelect.appendChild(opt);
-                    });
+                    if (lista.length === 0) {
+                        vinculoSelect.innerHTML = '<option value="">Nenhum vínculo encontrado para esta empresa</option>';
+                    } else {
+                        vinculoSelect.innerHTML = '<option value="">---------</option>';
+                        lista.forEach(function (v) {
+                            var opt = document.createElement('option');
+                            opt.value = v.id;
+                            opt.textContent = v.nome;
+                            if (String(v.id) === String(manter)) opt.selected = true;
+                            vinculoSelect.appendChild(opt);
+                        });
+                    }
+                })
+                .catch(function (err) {
+                    console.error('Erro ao carregar vínculos:', err);
+                    vinculoSelect.innerHTML = '<option value="">Erro ao carregar. Recarregue a página.</option>';
                 });
         }
 

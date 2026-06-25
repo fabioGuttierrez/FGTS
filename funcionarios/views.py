@@ -641,7 +641,7 @@ def vinculos_json(request):
 
     allowed_ids = get_allowed_empresa_ids(request.user)
     if allowed_ids is not None:
-        if not Empresa.objects.filter(id=empresa_id, codigo__in=allowed_ids).exists():
+        if empresa_id not in allowed_ids:
             return JsonResponse([], safe=False)
 
     vinculos = (
