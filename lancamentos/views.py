@@ -4098,10 +4098,10 @@ def export_relatorio_posicao_xlsx(request, pk):
     ws.title = 'Posição FGTS'
 
     headers = [
-        'Competência', 'parcela_13', 'Cod_Empresa', 'Empresa', 'CNPJ',
+        'Competência', 'Cod_Empresa', 'Empresa', 'CNPJ',
         'Funcionário', 'PIS', 'Matrícula', 'Cargo', 'CBO',
         'Admissão', 'Demissão', 'Status Vínculo', 'Motivo Saída',
-        'Base FGTS', 'Valor FGTS', 'Status Pagamento', 'Data Pagamento',
+        'parcela_13', 'Base FGTS', 'Valor FGTS', 'Status Pagamento', 'Data Pagamento',
         'Valor Pago', 'Fonte Confirmação', f'Valor Atualizado (ref. {data_ref})',
     ]
     ws.append(headers)
@@ -4129,7 +4129,6 @@ def export_relatorio_posicao_xlsx(request, pk):
     for l in linhas:
         ws.append([
             l.get('competencia', ''),
-            l.get('parcela_13') or '',
             l.get('cod_empresa', ''),
             l.get('empresa', ''),
             l.get('empresa_cnpj', ''),
@@ -4142,6 +4141,7 @@ def export_relatorio_posicao_xlsx(request, pk):
             _fmt_date(l.get('data_demissao')),
             l.get('status_vinculo', ''),
             l.get('motivo_saida', ''),
+            l.get('parcela_13') or '',
             _decimal(l.get('base_fgts')),
             _decimal(l.get('valor_fgts')),
             l.get('status_pagamento', ''),

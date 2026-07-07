@@ -582,7 +582,7 @@ def processar_relatorio_posicao(task_id: int) -> None:
             linhas.append({
                 'competencia': comp_display,
                 'parcela_13': l.parcela_13,
-                'cod_empresa': str(empresa.codigo),
+                'cod_empresa': str(empresa.codigo_folha),
                 'empresa': empresa.nome,
                 'empresa_cnpj': empresa.cnpj,
                 'funcionario': func.nome if func else '',
