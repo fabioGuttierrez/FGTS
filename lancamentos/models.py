@@ -317,6 +317,11 @@ class ImportacaoLancamento(models.Model):
 		verbose_name='Aplicar correção JAM',
 		help_text='Aplica juros acumulados (JAM) até a data de referência sobre o valor FGTS importado.',
 	)
+	extrato_analitico = models.BooleanField(
+		default=False,
+		verbose_name='Extrato Analítico',
+		help_text='Todos os lançamentos pagos desta importação serão marcados como confirmados pelo Extrato Analítico da CEF.',
+	)
 	data_referencia_jam = models.DateField(
 		null=True,
 		blank=True,

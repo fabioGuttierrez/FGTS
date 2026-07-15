@@ -357,7 +357,8 @@ class LancamentoImportService:
     def import_lancamentos_from_file(file, empresa, user, progress_callback=None, *,
                                      recalcular_fgts: bool = True,
                                      aplicar_jam: bool = False,
-                                     data_referencia_jam=None):
+                                     data_referencia_jam=None,
+                                     extrato_analitico: bool = False):
         """
         Importa lançamentos de um arquivo XLSX para uma empresa específica
 
@@ -533,6 +534,7 @@ class LancamentoImportService:
                     aplicar_jam=aplicar_jam,
                     data_referencia_jam=data_referencia_jam,
                     jam_coef_lookup=_jam_coef_lookup,
+                    extrato_analitico=extrato_analitico,
                 )
 
                 if lancamento_data:
@@ -646,7 +648,8 @@ class LancamentoImportService:
                      recalcular_fgts: bool = True,
                      aplicar_jam: bool = False,
                      data_referencia_jam=None,
-                     jam_coef_lookup=None):
+                     jam_coef_lookup=None,
+                     extrato_analitico: bool = False):
         """Processa uma linha do arquivo e retorna dados do lançamento"""
 
         # Extrair MATRÍCULA (opcional)
@@ -828,6 +831,10 @@ class LancamentoImportService:
         if pago_idx is not None and row[pago_idx]:
             pago_value = str(row[pago_idx]).strip().upper()
             lancamento_data['pago'] = pago_value in ['SIM', 'S', 'TRUE', '1', 'YES']
+
+        # Definir fonte_confirmacao_pagamento para lançamentos pagos
+        if lancamento_data['pago']:
+            lancamento_data['fonte_confirmacao_pagamento'] = 'extrato_analitico' if extrato_analitico else 'manual'
 
         # Se marcado como pago, garantir que data_pagto seja preenchida
         if lancamento_data['pago'] and not lancamento_data['data_pagto']:

@@ -178,6 +178,18 @@
                                     {% endif %}
                                     <small class="form-text text-muted d-block mt-2">Valor que foi efetivamente pago (pode incluir juros/correção)</small>
                                 </div>
+                                <div class="col-12 mt-2">
+                                    <div class="form-check">
+                                        {{ form.extrato_analitico }}
+                                        <label class="form-check-label fw-semibold text-success" for="{{ form.extrato_analitico.id_for_label }}">
+                                            {{ form.extrato_analitico.label }}
+                                        </label>
+                                        <small class="form-text text-muted d-block mt-1">
+                                            <i class="bi bi-shield-check me-1 text-success"></i>
+                                            {{ form.extrato_analitico.help_text }}
+                                        </small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 

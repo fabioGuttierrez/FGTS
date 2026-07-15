@@ -14,7 +14,14 @@ from .models import Lancamento
 
 class LancamentoForm(forms.ModelForm):
     """Formulário para cadastro/edição de lançamentos mensais (base FGTS)"""
-    
+
+    extrato_analitico = forms.BooleanField(
+        required=False,
+        label="Confirmado pelo Extrato Analítico CEF",
+        help_text="Marque se este pagamento foi confirmado via Extrato Analítico da CEF (fonte da verdade).",
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input', 'id': 'id_extrato_analitico'}),
+    )
+
     class Meta:
         model = Lancamento
         fields = ['empresa', 'vinculo', 'competencia', 'parcela_13', 'base_fgts', 'pago', 'data_pagto', 'valor_pago']
@@ -57,6 +64,12 @@ class LancamentoForm(forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # Pre-populate extrato_analitico from existing instance
+        if self.instance and self.instance.pk:
+            self.fields['extrato_analitico'].initial = (
+                self.instance.fonte_confirmacao_pagamento == 'extrato_analitico'
+            )
 
         allowed_ids = None
 
@@ -156,6 +169,12 @@ class LancamentoForm(forms.ModelForm):
         if base_fgts and (lancamento.valor_fgts is None or lancamento.valor_fgts == 0):
             from decimal import Decimal
             lancamento.valor_fgts = base_fgts * Decimal('0.08')
+        if lancamento.pago:
+            lancamento.fonte_confirmacao_pagamento = (
+                'extrato_analitico' if self.cleaned_data.get('extrato_analitico') else 'manual'
+            )
+        else:
+            lancamento.fonte_confirmacao_pagamento = None
         if commit:
             lancamento.save()
         return lancamento
@@ -731,6 +750,13 @@ class ImportacaoUploadForm(forms.Form):
         label='Data de referência (para JAM)',
         widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control form-control-sm'}),
         help_text='Deixe em branco para usar a data de hoje.',
+    )
+
+    extrato_analitico = forms.BooleanField(
+        required=False,
+        label="Lançamentos pagos confirmados pelo Extrato Analítico CEF",
+        help_text="Marque se os pagamentos desta importação foram confirmados via Extrato Analítico da CEF (fonte da verdade).",
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
     )
 
 

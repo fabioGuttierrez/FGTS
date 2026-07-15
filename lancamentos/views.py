@@ -80,6 +80,7 @@ def _process_importacao(importacao_id):
                 recalcular_fgts=importacao.recalcular_fgts,
                 aplicar_jam=importacao.aplicar_jam,
                 data_referencia_jam=importacao.data_referencia_jam,
+                extrato_analitico=importacao.extrato_analitico,
             )
 
         importacao.status = 'done'
@@ -2682,6 +2683,7 @@ class LancamentoImportView(LoginRequiredMixin, EmpresaScopeMixin, View):
         # Ler opções de cálculo do formulário
         recalcular_fgts = request.POST.get('recalcular_fgts', 'recalcular') != 'manter'
         aplicar_jam = request.POST.get('aplicar_jam') in ('on', '1', 'true', 'True')
+        extrato_analitico = request.POST.get('extrato_analitico') in ('on', '1', 'true', 'True')
         data_referencia_jam_raw = request.POST.get('data_referencia_jam', '').strip()
         data_referencia_jam = None
         if data_referencia_jam_raw:
@@ -2701,6 +2703,7 @@ class LancamentoImportView(LoginRequiredMixin, EmpresaScopeMixin, View):
             recalcular_fgts=recalcular_fgts,
             aplicar_jam=aplicar_jam,
             data_referencia_jam=data_referencia_jam,
+            extrato_analitico=extrato_analitico,
         )
 
         try:
