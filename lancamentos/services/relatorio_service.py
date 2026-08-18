@@ -579,7 +579,10 @@ def processar_relatorio_posicao(task_id: int) -> None:
                 except Exception:
                     valor_atualizado = None
 
+            ano = comp_display.split('/')[-1] if '/' in comp_display else ''
+
             linhas.append({
+                'ano': ano,
                 'competencia': comp_display,
                 'parcela_13': l.parcela_13,
                 'cod_empresa': str(empresa.codigo_folha),

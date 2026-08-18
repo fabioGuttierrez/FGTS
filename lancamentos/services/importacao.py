@@ -832,15 +832,6 @@ class LancamentoImportService:
             pago_value = str(row[pago_idx]).strip().upper()
             lancamento_data['pago'] = pago_value in ['SIM', 'S', 'TRUE', '1', 'YES']
 
-        # Definir fonte_confirmacao_pagamento para lançamentos pagos
-        if lancamento_data['pago']:
-            lancamento_data['fonte_confirmacao_pagamento'] = 'extrato_analitico' if extrato_analitico else 'manual'
-
-        # Se marcado como pago, garantir que data_pagto seja preenchida
-        if lancamento_data['pago'] and not lancamento_data['data_pagto']:
-            # Se não veio do arquivo, usar data atual
-            lancamento_data['data_pagto'] = datetime.today().date()
-        
         # Processar DATA_PAGTO (opcional)
         data_pagto_idx = column_indices.get('DATA_PAGTO')
         if data_pagto_idx is not None and row[data_pagto_idx]:
@@ -854,7 +845,7 @@ class LancamentoImportService:
                     lancamento_data['data_pagto'] = datetime.strptime(data_str, '%d/%m/%Y').date()
             except Exception:
                 pass  # Ignorar data inválida
-        
+
         # Processar VALOR_PAGO (opcional)
         valor_pago_idx = column_indices.get('VALOR_PAGO')
         if valor_pago_idx is not None and row[valor_pago_idx]:
@@ -867,7 +858,27 @@ class LancamentoImportService:
                     lancamento_data['valor_pago'] = Decimal(valor_pago_str)
             except (InvalidOperation, ValueError):
                 pass  # Ignorar valor inválido
-        
+
+        # Validar consistência entre PAGO e DATA_PAGTO/VALOR_PAGO
+        if not lancamento_data['pago'] and (lancamento_data['data_pagto'] or lancamento_data['valor_pago']):
+            raise ValueError(
+                "❌ Divergência: PAGO está 'NÃO'/vazio, mas DATA_PAGTO ou VALOR_PAGO estão "
+                "preenchidos. Marque PAGO=SIM ou remova a data/valor de pagamento da planilha."
+            )
+        if lancamento_data['pago'] and data_pagto_idx is not None and not lancamento_data['data_pagto']:
+            raise ValueError(
+                "❌ Divergência: PAGO está 'SIM', mas a coluna DATA_PAGTO está em branco nesta linha. "
+                "Preencha a data de pagamento ou marque PAGO=NÃO."
+            )
+
+        # Definir fonte_confirmacao_pagamento para lançamentos pagos
+        if lancamento_data['pago']:
+            lancamento_data['fonte_confirmacao_pagamento'] = 'extrato_analitico' if extrato_analitico else 'manual'
+
+        # Se marcado como pago e o arquivo não possui a coluna DATA_PAGTO, usar data atual
+        if lancamento_data['pago'] and not lancamento_data['data_pagto']:
+            lancamento_data['data_pagto'] = datetime.today().date()
+
         # Processar PARCELA_13 (opcional)
         # Aceita valores: 1, 2, "1", "2", "SIM" (= 1), "PRIMEIRA" (= 1), "SEGUNDA" (= 2), etc.
         parcela_13_idx = column_indices.get('PARCELA_13')

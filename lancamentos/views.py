@@ -4101,11 +4101,12 @@ def export_relatorio_posicao_xlsx(request, pk):
     ws.title = 'Posição FGTS'
 
     headers = [
-        'Competência', 'Cod_Empresa', 'Empresa', 'CNPJ',
+        'Cod_Empresa', 'Empresa', 'CNPJ',
         'Funcionário', 'PIS', 'Matrícula', 'Cargo', 'CBO',
-        'Admissão', 'Demissão', 'Status Vínculo', 'Motivo Saída',
-        'parcela_13', 'Base FGTS', 'Valor FGTS', 'Status Pagamento', 'Data Pagamento',
+        'Admissão', 'Demissão', 'Ano', 'Competência',
+        'Base FGTS', 'Valor FGTS', 'parcela_13', 'Status Pagamento', 'Data Pagamento',
         'Valor Pago', 'Fonte Confirmação', f'Valor Atualizado (ref. {data_ref})',
+        'Status Vínculo', 'Motivo Saída',
     ]
     ws.append(headers)
     for cell in ws[1]:
@@ -4129,9 +4130,15 @@ def export_relatorio_posicao_xlsx(request, pk):
         except Exception:
             return s
 
+    def _ano(l):
+        ano = l.get('ano')
+        if ano:
+            return ano
+        comp = l.get('competencia', '')
+        return comp.split('/')[-1] if '/' in comp else ''
+
     for l in linhas:
         ws.append([
-            l.get('competencia', ''),
             l.get('cod_empresa', ''),
             l.get('empresa', ''),
             l.get('empresa_cnpj', ''),
@@ -4142,20 +4149,22 @@ def export_relatorio_posicao_xlsx(request, pk):
             l.get('cbo', ''),
             _fmt_date(l.get('data_admissao')),
             _fmt_date(l.get('data_demissao')),
-            l.get('status_vinculo', ''),
-            l.get('motivo_saida', ''),
-            l.get('parcela_13') or '',
+            _ano(l),
+            l.get('competencia', ''),
             _decimal(l.get('base_fgts')),
             _decimal(l.get('valor_fgts')),
+            l.get('parcela_13') or '',
             l.get('status_pagamento', ''),
             _fmt_date(l.get('data_pagamento')),
             _decimal(l.get('valor_pago')),
             l.get('fonte_confirmacao_pagamento', ''),
             _decimal(l.get('valor_atualizado')),
+            l.get('status_vinculo', ''),
+            l.get('motivo_saida', ''),
         ])
 
-    col_widths = [12, 10, 12, 30, 18, 30, 14, 12, 20, 10,
-                  12, 12, 14, 20, 12, 12, 16, 14, 12, 18, 20]
+    col_widths = [10, 12, 30, 18, 30, 14, 12, 20, 10, 10,
+                  8, 12, 12, 12, 14, 16, 14, 12, 18, 20, 12, 20]
     for i, w in enumerate(col_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
 
