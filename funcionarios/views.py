@@ -567,6 +567,7 @@ def funcionarios_autocomplete(request):
 
     q = request.GET.get('q', '').strip()
     empresa_id = request.GET.get('empresa_id', '').strip()
+    agrupar_cpf = request.GET.get('agrupar_cpf', '').strip() == '1'
 
     if len(q) < 2:
         return JsonResponse([], safe=False)
@@ -607,20 +608,44 @@ def funcionarios_autocomplete(request):
         if allowed_ids is not None:
             qs = qs.filter(empresa__codigo__in=allowed_ids)
 
-        func_map = defaultdict(lambda: {'nome': '', 'empresas': []})
-        for v in qs[:100]:
-            func_map[v.funcionario_id]['nome'] = v.funcionario.nome
-            if v.empresa.nome not in func_map[v.funcionario_id]['empresas']:
-                func_map[v.funcionario_id]['empresas'].append(v.empresa.nome)
+        if agrupar_cpf:
+            # Agrupa por CPF: a mesma pessoa pode ter registros de Funcionario
+            # distintos em cada empresa do grupo econômico — aqui ela aparece
+            # como uma única opção, cruzando todas as empresas permitidas.
+            func_map = defaultdict(lambda: {'nome': '', 'cpf': '', 'funcionario_id': None, 'empresas': []})
+            for v in qs[:200]:
+                cpf = (v.funcionario.cpf or '').strip()
+                chave = ('cpf', cpf) if cpf else ('id', v.funcionario_id)
+                func_map[chave]['nome'] = v.funcionario.nome
+                func_map[chave]['cpf'] = cpf
+                func_map[chave]['funcionario_id'] = v.funcionario_id
+                if v.empresa.nome not in func_map[chave]['empresas']:
+                    func_map[chave]['empresas'].append(v.empresa.nome)
 
-        data = []
-        for fid, info in func_map.items():
-            empresas_label = ' / '.join(info['empresas'])
-            label = '{} ({})'.format(info['nome'], empresas_label)
-            data.append({'id': fid, 'label': label})
+            data = []
+            for chave, info in func_map.items():
+                empresas_label = ' / '.join(info['empresas'])
+                label = '{} ({})'.format(info['nome'], empresas_label)
+                id_val = 'cpf:{}'.format(info['cpf']) if info['cpf'] else info['funcionario_id']
+                data.append({'id': id_val, 'label': label})
 
-        data.sort(key=lambda x: x['label'])
-        data = data[:30]
+            data.sort(key=lambda x: x['label'])
+            data = data[:30]
+        else:
+            func_map = defaultdict(lambda: {'nome': '', 'empresas': []})
+            for v in qs[:100]:
+                func_map[v.funcionario_id]['nome'] = v.funcionario.nome
+                if v.empresa.nome not in func_map[v.funcionario_id]['empresas']:
+                    func_map[v.funcionario_id]['empresas'].append(v.empresa.nome)
+
+            data = []
+            for fid, info in func_map.items():
+                empresas_label = ' / '.join(info['empresas'])
+                label = '{} ({})'.format(info['nome'], empresas_label)
+                data.append({'id': fid, 'label': label})
+
+            data.sort(key=lambda x: x['label'])
+            data = data[:30]
 
     return JsonResponse(data, safe=False)
 

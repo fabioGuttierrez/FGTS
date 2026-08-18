@@ -3433,23 +3433,83 @@ def _gerar_competencias_no_periodo(inicio_str, fim_str):
     return competencias
 
 
-def _calcular_dados_recolhimento(lancamentos_qs):
+def _valor_atualizado_lancamento(lanc, data_ref, indice_cache):
+    """
+    Valor atualizado de um único lançamento na data de referência (data_ref):
+    - Pago: mantém o valor efetivamente pago (ou valor_fgts se valor_pago nulo).
+    - Em aberto: valor de depósito corrigido (base_fgts × índice), sem somar JAM.
+    """
+    if lanc.pago:
+        return lanc.valor_pago if lanc.valor_pago is not None else (lanc.valor_fgts or Decimal('0'))
+    if not data_ref or not lanc.competencia:
+        return lanc.valor_fgts or Decimal('0')
+    try:
+        comp_str = lanc.competencia.replace('13/', '12/')
+        mes_str, ano_str = comp_str.split('/')
+        competencia_date = date(int(ano_str), int(mes_str), 1)
+    except Exception:
+        return lanc.valor_fgts or Decimal('0')
+
+    if competencia_date not in indice_cache:
+        indice_cache[competencia_date] = IndiceFGTSService.buscar_indice(
+            competencia=competencia_date, data_pagamento=data_ref,
+        )
+    indice = indice_cache[competencia_date]
+    if indice is None:
+        return lanc.valor_fgts or Decimal('0')
+
+    try:
+        resultado = calcular_fgts_atualizado(
+            valor_fgts=lanc.valor_fgts,
+            competencia=competencia_date,
+            pagamento=data_ref,
+            indice=indice,
+            jam_coef=Decimal('0'),
+            valor_fgts_base=lanc.base_fgts,
+            aplicar_plano_economico=True,
+        )
+        return resultado['valor_deposito_fgts']
+    except Exception:
+        return lanc.valor_fgts or Decimal('0')
+
+
+def _filtrar_qs_por_funcionario(qs, funcionario_filtro):
+    """
+    Aplica o filtro de funcionário vindo de RelatorioRecolhimentoFuncionarioForm.clean_funcionario:
+    - modo 'cpf': busca por CPF, cruzando todas as empresas do queryset (mesma pessoa pode ter
+      registros de Funcionario distintos por empresa).
+    - modo 'id': busca por Funcionario.pk exato.
+    """
+    if not funcionario_filtro:
+        return qs
+    if funcionario_filtro['modo'] == 'cpf':
+        return qs.filter(funcionario__cpf=funcionario_filtro['cpf'])
+    return qs.filter(funcionario_id=funcionario_filtro['funcionario_id'])
+
+
+def _calcular_dados_recolhimento(lancamentos_qs, data_ref=None, indice_cache=None):
     """
     Dado um queryset de Lancamento, retorna dict com:
     - valor_a_recolher: soma de valor_fgts dos não pagos
     - total_recolhido:  soma de valor_pago dos pagos (ou valor_fgts se valor_pago nulo)
+    - valor_atualizado: soma do valor atualizado (na data_ref) de cada lançamento
     """
     valor_a_recolher = Decimal('0')
     total_recolhido = Decimal('0')
+    valor_atualizado = Decimal('0')
+    if indice_cache is None:
+        indice_cache = {}
     for lanc in lancamentos_qs:
         if lanc.pago:
             total_recolhido += (lanc.valor_pago or lanc.valor_fgts or Decimal('0'))
         else:
             valor_a_recolher += (lanc.valor_fgts or Decimal('0'))
+        valor_atualizado += _valor_atualizado_lancamento(lanc, data_ref, indice_cache)
     return {
         'valor_a_recolher': valor_a_recolher,
         'total_recolhido': total_recolhido,
         'total_geral': valor_a_recolher + total_recolhido,
+        'valor_atualizado': valor_atualizado,
     }
 
 
@@ -3480,8 +3540,7 @@ class RelatorioRecolhimentoFuncionarioView(LoginRequiredMixin, FormView):
             qs = qs.filter(empresa__codigo__in=allowed_ids)
         if empresa:
             qs = qs.filter(empresa=empresa)
-        if funcionario_filtro:
-            qs = qs.filter(funcionario=funcionario_filtro)
+        qs = _filtrar_qs_por_funcionario(qs, funcionario_filtro)
 
         # Agrupa por empresa → funcionário
         from collections import defaultdict
@@ -3491,6 +3550,13 @@ class RelatorioRecolhimentoFuncionarioView(LoginRequiredMixin, FormView):
             emp_id = lanc.empresa_id
             empresas_dict[emp_id]['empresa'] = lanc.empresa
             empresas_dict[emp_id]['funcionarios'][lanc.funcionario_id].append(lanc)
+
+        # Modo "Valor Atualizado": funcionário específico com histórico em mais de uma
+        # empresa do grupo — nesse caso, a coluna "Total Geral" vira "Valor Atualizado"
+        # em todo o relatório (linha do funcionário, subtotal por empresa e total geral).
+        modo_valor_atualizado = bool(funcionario_filtro) and len(empresas_dict) > 1
+        data_ref = IndiceFGTSService.obter_ultima_data_base()
+        indice_cache = {}
 
         # Monta estrutura final
         empresas_resultado = []
@@ -3502,19 +3568,21 @@ class RelatorioRecolhimentoFuncionarioView(LoginRequiredMixin, FormView):
             funcionarios_lista = []
             emp_recolher = Decimal('0')
             emp_recolhido = Decimal('0')
+            emp_atualizado = Decimal('0')
 
             for func_id, lancamentos in sorted(
                 emp_data['funcionarios'].items(),
                 key=lambda x: x[1][0].funcionario.nome if x[1] else ''
             ):
                 func_obj = lancamentos[0].funcionario
-                dados = _calcular_dados_recolhimento(lancamentos)
+                dados = _calcular_dados_recolhimento(lancamentos, data_ref, indice_cache)
 
                 # Dados de admissão/demissão via vínculo
                 vinculo = getattr(lancamentos[0], 'vinculo', None) or func_obj.vinculo_atual()
                 data_admissao = vinculo.data_admissao if vinculo else getattr(func_obj, 'data_admissao', None)
                 data_demissao = vinculo.data_demissao if vinculo else getattr(func_obj, 'data_demissao', None)
 
+                total_exibido = dados['valor_atualizado'] if modo_valor_atualizado else dados['total_geral']
                 funcionarios_lista.append({
                     'funcionario': func_obj,
                     'matricula': vinculo.matricula if vinculo and vinculo.matricula else '',
@@ -3523,20 +3591,27 @@ class RelatorioRecolhimentoFuncionarioView(LoginRequiredMixin, FormView):
                     'pis': func_obj.pis,
                     'valor_a_recolher': dados['valor_a_recolher'],
                     'total_recolhido': dados['total_recolhido'],
-                    'total_geral': dados['total_geral'],
+                    'total_geral': total_exibido,
                 })
                 emp_recolher += dados['valor_a_recolher']
                 emp_recolhido += dados['total_recolhido']
+                emp_atualizado += dados['valor_atualizado']
 
+            emp_total_exibido = emp_atualizado if modo_valor_atualizado else (emp_recolher + emp_recolhido)
             empresas_resultado.append({
                 'empresa': emp_obj,
                 'funcionarios': funcionarios_lista,
                 'total_a_recolher': emp_recolher,
                 'total_recolhido': emp_recolhido,
-                'total_geral': emp_recolher + emp_recolhido,
+                'total_geral': emp_total_exibido,
             })
             total_geral_recolher += emp_recolher
             total_geral_recolhido += emp_recolhido
+
+        total_geral_exibido = (
+            sum((e['total_geral'] for e in empresas_resultado), Decimal('0'))
+            if modo_valor_atualizado else total_geral_recolher + total_geral_recolhido
+        )
 
         return render(self.request, self.template_name, {
             'form': form,
@@ -3545,7 +3620,8 @@ class RelatorioRecolhimentoFuncionarioView(LoginRequiredMixin, FormView):
             'comp_fim': comp_fim,
             'total_geral_recolher': total_geral_recolher,
             'total_geral_recolhido': total_geral_recolhido,
-            'total_geral': total_geral_recolher + total_geral_recolhido,
+            'total_geral': total_geral_exibido,
+            'modo_valor_atualizado': modo_valor_atualizado,
             'gerou_relatorio': True,
         })
 
@@ -3592,14 +3668,18 @@ def export_recolhimento_funcionario_pdf(request):
         qs = qs.filter(empresa__codigo__in=allowed_ids)
     if empresa_filtro:
         qs = qs.filter(empresa=empresa_filtro)
-    if funcionario_filtro:
-        qs = qs.filter(funcionario=funcionario_filtro)
+    qs = _filtrar_qs_por_funcionario(qs, funcionario_filtro)
 
     from collections import defaultdict
     empresas_dict = defaultdict(lambda: {'empresa': None, 'funcionarios': defaultdict(list)})
     for lanc in qs:
         empresas_dict[lanc.empresa_id]['empresa'] = lanc.empresa
         empresas_dict[lanc.empresa_id]['funcionarios'][lanc.funcionario_id].append(lanc)
+
+    modo_valor_atualizado = bool(funcionario_filtro) and len(empresas_dict) > 1
+    data_ref = IndiceFGTSService.obter_ultima_data_base()
+    indice_cache = {}
+    label_total = 'Valor Atualizado' if modo_valor_atualizado else 'Total Geral'
 
     # Estilos
     styles = getSampleStyleSheet()
@@ -3633,6 +3713,7 @@ def export_recolhimento_funcionario_pdf(request):
 
     total_geral_recolher = Decimal('0')
     total_geral_recolhido = Decimal('0')
+    total_geral_atualizado = Decimal('0')
     primeira_empresa = True
 
     for emp_id, emp_data in sorted(empresas_dict.items()):
@@ -3679,12 +3760,13 @@ def export_recolhimento_funcionario_pdf(request):
             Paragraph('P I S', header_style),
             Paragraph('Valor a Recolher', header_style),
             Paragraph('Total Recolhido', header_style),
-            Paragraph('Total Geral', header_style),
+            Paragraph(label_total, header_style),
         ]
 
         table_data = [header_row]
         emp_recolher = Decimal('0')
         emp_recolhido = Decimal('0')
+        emp_atualizado = Decimal('0')
         row_idx = 0
 
         for func_id, lancamentos in sorted(
@@ -3692,13 +3774,15 @@ def export_recolhimento_funcionario_pdf(request):
             key=lambda x: x[1][0].funcionario.nome if x[1] else ''
         ):
             func_obj = lancamentos[0].funcionario
-            dados = _calcular_dados_recolhimento(lancamentos)
+            dados = _calcular_dados_recolhimento(lancamentos, data_ref, indice_cache)
             vinculo = getattr(lancamentos[0], 'vinculo', None) or func_obj.vinculo_atual()
             data_adm = vinculo.data_admissao if vinculo else getattr(func_obj, 'data_admissao', None)
             data_dem = vinculo.data_demissao if vinculo else getattr(func_obj, 'data_demissao', None)
 
             emp_recolher += dados['valor_a_recolher']
             emp_recolhido += dados['total_recolhido']
+            emp_atualizado += dados['valor_atualizado']
+            total_exibido_linha = dados['valor_atualizado'] if modo_valor_atualizado else dados['total_geral']
 
             def fmt_date(d):
                 return d.strftime('%d/%m/%Y') if d else '—'
@@ -3714,7 +3798,7 @@ def export_recolhimento_funcionario_pdf(request):
                 Paragraph(func_obj.pis or '—', normal_style),
                 Paragraph(fmt_val(dados['valor_a_recolher']), normal_style),
                 Paragraph(fmt_val(dados['total_recolhido']), normal_style),
-                Paragraph(fmt_val(dados['total_geral']), normal_style),
+                Paragraph(fmt_val(total_exibido_linha), normal_style),
             ])
             row_idx += 1
 
@@ -3722,7 +3806,7 @@ def export_recolhimento_funcionario_pdf(request):
         def fmt_val(v):
             return f'{v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
 
-        total_emp = emp_recolher + emp_recolhido
+        total_emp = emp_atualizado if modo_valor_atualizado else (emp_recolher + emp_recolhido)
         table_data.append([
             Paragraph('', normal_style),
             Paragraph('<b>EMPRESA: Totais:</b>', normal_style),
@@ -3735,6 +3819,7 @@ def export_recolhimento_funcionario_pdf(request):
         ])
         total_geral_recolher += emp_recolher
         total_geral_recolhido += emp_recolhido
+        total_geral_atualizado += emp_atualizado
 
         tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
         ts = [
@@ -3760,7 +3845,7 @@ def export_recolhimento_funcionario_pdf(request):
     # Total geral (todas as empresas)
     if len(empresas_dict) > 1:
         story.append(Spacer(1, 5*mm))
-        total_rel = total_geral_recolher + total_geral_recolhido
+        total_rel = total_geral_atualizado if modo_valor_atualizado else (total_geral_recolher + total_geral_recolhido)
         def fmt_val(v):
             return f'{v:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
         total_data = [[
@@ -3825,14 +3910,18 @@ def export_recolhimento_funcionario_xlsx(request):
         qs = qs.filter(empresa__codigo__in=allowed_ids)
     if empresa_filtro:
         qs = qs.filter(empresa=empresa_filtro)
-    if funcionario_filtro:
-        qs = qs.filter(funcionario=funcionario_filtro)
+    qs = _filtrar_qs_por_funcionario(qs, funcionario_filtro)
 
     from collections import defaultdict
     empresas_dict = defaultdict(lambda: {'empresa': None, 'funcionarios': defaultdict(list)})
     for lanc in qs:
         empresas_dict[lanc.empresa_id]['empresa'] = lanc.empresa
         empresas_dict[lanc.empresa_id]['funcionarios'][lanc.funcionario_id].append(lanc)
+
+    modo_valor_atualizado = bool(funcionario_filtro) and len(empresas_dict) > 1
+    data_ref = IndiceFGTSService.obter_ultima_data_base()
+    indice_cache = {}
+    label_total = 'Valor Atualizado' if modo_valor_atualizado else 'Total Geral'
 
     def fmt_date(d):
         return d.strftime('%d/%m/%Y') if d else ''
@@ -3871,10 +3960,11 @@ def export_recolhimento_funcionario_xlsx(request):
     ws.append([])  # linha em branco
 
     colunas = ['Cod.', 'Nome do Funcionário', 'Admissão', 'Demissão', 'PIS',
-               'Valor a Recolher', 'Total Recolhido', 'Total Geral']
+               'Valor a Recolher', 'Total Recolhido', label_total]
 
     total_geral_recolher = Decimal('0')
     total_geral_recolhido = Decimal('0')
+    total_geral_atualizado = Decimal('0')
 
     for emp_id, emp_data in sorted(empresas_dict.items()):
         emp_obj = emp_data['empresa']
@@ -3901,6 +3991,7 @@ def export_recolhimento_funcionario_xlsx(request):
 
         emp_recolher = Decimal('0')
         emp_recolhido = Decimal('0')
+        emp_atualizado = Decimal('0')
         row_idx = 0
 
         for func_id, lancamentos in sorted(
@@ -3908,13 +3999,16 @@ def export_recolhimento_funcionario_xlsx(request):
             key=lambda x: x[1][0].funcionario.nome if x[1] else ''
         ):
             func_obj = lancamentos[0].funcionario
-            dados = _calcular_dados_recolhimento(lancamentos)
+            dados = _calcular_dados_recolhimento(lancamentos, data_ref, indice_cache)
             vinculo = getattr(lancamentos[0], 'vinculo', None) or func_obj.vinculo_atual()
             data_adm = vinculo.data_admissao if vinculo else getattr(func_obj, 'data_admissao', None)
             data_dem = vinculo.data_demissao if vinculo else getattr(func_obj, 'data_demissao', None)
 
             emp_recolher += dados['valor_a_recolher']
             emp_recolhido += dados['total_recolhido']
+            emp_atualizado += dados['valor_atualizado']
+
+            total_exibido_linha = dados['valor_atualizado'] if modo_valor_atualizado else dados['total_geral']
 
             fill = PatternFill(fill_type='solid', fgColor=cor_linha_par) if row_idx % 2 == 1 else None
 
@@ -3926,7 +4020,7 @@ def export_recolhimento_funcionario_xlsx(request):
                 func_obj.pis or '',
                 float(dados['valor_a_recolher']),
                 float(dados['total_recolhido']),
-                float(dados['total_geral']),
+                float(total_exibido_linha),
             ])
             data_row = ws.max_row
             for col in range(1, 9):
@@ -3941,7 +4035,7 @@ def export_recolhimento_funcionario_xlsx(request):
             row_idx += 1
 
         # Total da empresa
-        total_emp = emp_recolher + emp_recolhido
+        total_emp = emp_atualizado if modo_valor_atualizado else (emp_recolher + emp_recolhido)
         ws.append([
             '', 'EMPRESA: Totais:', '', '', '',
             float(emp_recolher), float(emp_recolhido), float(total_emp)
@@ -3958,12 +4052,13 @@ def export_recolhimento_funcionario_xlsx(request):
 
         total_geral_recolher += emp_recolher
         total_geral_recolhido += emp_recolhido
+        total_geral_atualizado += emp_atualizado
 
         ws.append([])  # separador entre empresas
 
     # Total geral (quando há > 1 empresa)
     if len(empresas_dict) > 1:
-        total_rel = total_geral_recolher + total_geral_recolhido
+        total_rel = total_geral_atualizado if modo_valor_atualizado else (total_geral_recolher + total_geral_recolhido)
         ws.append([
             'TOTAL GERAL DO RELATÓRIO:', '', '', '', '',
             float(total_geral_recolher), float(total_geral_recolhido), float(total_rel)

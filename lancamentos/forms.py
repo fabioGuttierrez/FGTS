@@ -654,12 +654,10 @@ class RelatorioRecolhimentoFuncionarioForm(forms.Form):
             'data-auto-format': 'competencia'
         })
     )
-    funcionario = forms.ModelChoiceField(
-        queryset=Funcionario.objects.none(),
+    funcionario = forms.CharField(
         label='Funcionário (opcional)',
         required=False,
-        empty_label='Todos os funcionários',
-        widget=forms.Select(attrs={'class': 'form-select', 'autocomplete': 'off'})
+        widget=forms.HiddenInput(),
     )
 
     def __init__(self, *args, user=None, **kwargs):
@@ -669,20 +667,49 @@ class RelatorioRecolhimentoFuncionarioForm(forms.Form):
             allowed_ids = get_allowed_empresa_ids(user)
             if allowed_ids is not None:
                 self.fields['empresa'].queryset = Empresa.objects.filter(codigo__in=allowed_ids)
+        self._allowed_ids = allowed_ids
 
-        data_dict = kwargs.get('data') or {}
-        empresa_id = data_dict.get('empresa')
-        if empresa_id:
-            try:
-                self.fields['funcionario'].queryset = Funcionario.objects.filter(
-                    vinculos__empresa_id=empresa_id
-                ).distinct().order_by('nome')
-            except (ValueError, TypeError):
-                self.fields['funcionario'].queryset = Funcionario.objects.none()
+    def clean_funcionario(self):
+        """
+        Aceita dois formatos vindos do autocomplete:
+        - 'cpf:<cpf>'  → busca por CPF, cruzando todas as empresas do escopo permitido
+                         (mesma pessoa pode ter registros de Funcionario distintos por empresa).
+        - '<id>'       → busca por Funcionario.pk exato (fluxo com empresa pré-selecionada).
+        Sempre valida se o resultado está dentro do escopo (empresa selecionada ou allowed_ids).
+        """
+        raw = (self.cleaned_data.get('funcionario') or '').strip()
+        if not raw:
+            return None
+
+        empresa = self.cleaned_data.get('empresa')
+        allowed_ids = getattr(self, '_allowed_ids', None)
+
+        if raw.startswith('cpf:'):
+            cpf = raw[4:].strip()
+            if not cpf:
+                raise ValidationError('Funcionário inválido.')
+            qs = Funcionario.objects.filter(cpf=cpf)
+            if empresa is not None:
+                qs = qs.filter(vinculos__empresa=empresa)
+            elif allowed_ids is not None:
+                qs = qs.filter(vinculos__empresa__codigo__in=allowed_ids)
+            if not qs.exists():
+                raise ValidationError('Funcionário não encontrado ou fora do escopo permitido.')
+            return {'modo': 'cpf', 'cpf': cpf}
+
+        try:
+            pk = int(raw)
+        except ValueError:
+            raise ValidationError('Funcionário inválido.')
+
+        qs = Funcionario.objects.filter(pk=pk)
+        if empresa is not None:
+            qs = qs.filter(vinculos__empresa=empresa)
         elif allowed_ids is not None:
-            self.fields['funcionario'].queryset = Funcionario.objects.filter(
-                vinculos__empresa__codigo__in=allowed_ids
-            ).distinct().order_by('nome')
+            qs = qs.filter(vinculos__empresa__codigo__in=allowed_ids)
+        if not qs.exists():
+            raise ValidationError('Funcionário não encontrado ou fora do escopo permitido.')
+        return {'modo': 'id', 'funcionario_id': pk}
 
     def _parse_competencia(self, value):
         from datetime import datetime
