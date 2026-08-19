@@ -112,7 +112,7 @@
         </div>
         <div class="col-sm-4">
           <div class="card border-0 shadow-sm text-center py-3">
-            <div class="text-muted small mb-1"><i class="bi bi-sigma text-primary me-1"></i>{% if modo_valor_atualizado %}Valor Atualizado{% else %}Total Geral{% endif %}</div>
+            <div class="text-muted small mb-1"><i class="bi bi-sigma text-primary me-1"></i>Valor Atualizado</div>
             <div class="fs-5 fw-bold text-primary">{{ total_geral|brl }}</div>
           </div>
         </div>
@@ -153,7 +153,7 @@
                   <th class="text-center">P I S</th>
                   <th class="text-end pe-2">Valor a Recolher</th>
                   <th class="text-end pe-2">Total Recolhido</th>
-                  <th class="text-end pe-3">{% if modo_valor_atualizado %}Valor Atualizado{% else %}Total Geral{% endif %}</th>
+                  <th class="text-end pe-3">Valor Atualizado</th>
                 </tr>
               </thead>
               <tbody>
@@ -198,8 +198,7 @@
       </div>
       {% endfor %}
 
-      {# Totais gerais (quando há > 1 empresa) #}
-      {% if empresas_resultado|length > 1 %}
+      {# Rodapé com totais gerais — sempre visível #}
       <div class="card border-0 shadow-sm mb-4" style="background:linear-gradient(90deg,#005CA9,#003A78);">
         <div class="card-body py-3 text-white">
           <div class="row text-center">
@@ -212,13 +211,12 @@
               <div class="fs-5 fw-bold">{{ total_geral_recolhido|brl }}</div>
             </div>
             <div class="col-md-4">
-              <div class="opacity-75 small">{% if modo_valor_atualizado %}Valor Atualizado do Relatório{% else %}Total Geral do Relatório{% endif %}</div>
+              <div class="opacity-75 small">Valor Atualizado do Relatório</div>
               <div class="fs-5 fw-bold">{{ total_geral|brl }}</div>
             </div>
           </div>
         </div>
       </div>
-      {% endif %}
 
     {% else %}
       <div class="alert alert-info">

@@ -3559,10 +3559,9 @@ class RelatorioRecolhimentoFuncionarioView(LoginRequiredMixin, FormView):
             empresas_dict[emp_id]['empresa'] = lanc.empresa
             empresas_dict[emp_id]['funcionarios'][lanc.funcionario_id].append(lanc)
 
-        # Modo "Valor Atualizado": funcionário específico com histórico em mais de uma
-        # empresa do grupo — nesse caso, a coluna "Total Geral" vira "Valor Atualizado"
-        # em todo o relatório (linha do funcionário, subtotal por empresa e total geral).
-        modo_valor_atualizado = bool(funcionario_filtro) and len(empresas_dict) > 1
+        # Sempre exibe "Valor Atualizado" (FGTS em aberto corrigido pelo índice) como
+        # terceira métrica, independente de empresa única ou grupo.
+        modo_valor_atualizado = True
         data_ref = IndiceFGTSService.obter_ultima_data_base()
         indice_cache = {}
 
@@ -3684,10 +3683,10 @@ def export_recolhimento_funcionario_pdf(request):
         empresas_dict[lanc.empresa_id]['empresa'] = lanc.empresa
         empresas_dict[lanc.empresa_id]['funcionarios'][lanc.funcionario_id].append(lanc)
 
-    modo_valor_atualizado = bool(funcionario_filtro) and len(empresas_dict) > 1
+    modo_valor_atualizado = True
     data_ref = IndiceFGTSService.obter_ultima_data_base()
     indice_cache = {}
-    label_total = 'Valor Atualizado' if modo_valor_atualizado else 'Total Geral'
+    label_total = 'Valor Atualizado'
 
     # Estilos
     styles = getSampleStyleSheet()
@@ -3926,10 +3925,10 @@ def export_recolhimento_funcionario_xlsx(request):
         empresas_dict[lanc.empresa_id]['empresa'] = lanc.empresa
         empresas_dict[lanc.empresa_id]['funcionarios'][lanc.funcionario_id].append(lanc)
 
-    modo_valor_atualizado = bool(funcionario_filtro) and len(empresas_dict) > 1
+    modo_valor_atualizado = True
     data_ref = IndiceFGTSService.obter_ultima_data_base()
     indice_cache = {}
-    label_total = 'Valor Atualizado' if modo_valor_atualizado else 'Total Geral'
+    label_total = 'Valor Atualizado'
 
     def fmt_date(d):
         return d.strftime('%d/%m/%Y') if d else ''
