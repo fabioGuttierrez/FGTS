@@ -109,8 +109,10 @@ class ConferenciaLancamento(models.Model):
         if self.lancamento.valor_fgts <= 0:
             problemas.append("Valor FGTS inválido (≤ 0)")
 
-        # 2. Validar se valor_fgts é coerente com base_fgts (8%)
-        base_calc = self.lancamento.valor_fgts / Decimal('0.08')
+        # 2. Validar se valor_fgts é coerente com base_fgts (alíquota do vínculo)
+        from empresas.models_grupo import get_aliquota_fgts
+        aliquota = get_aliquota_fgts(self.lancamento.vinculo)
+        base_calc = self.lancamento.valor_fgts / aliquota if aliquota else Decimal('0')
         if abs(base_calc - self.lancamento.base_fgts) > Decimal('1'):  # Tolerância de R$ 1
             problemas.append(f"Base FGTS incongruente: calculada {base_calc:.2f}, informada {self.lancamento.base_fgts:.2f}")
 

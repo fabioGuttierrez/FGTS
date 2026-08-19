@@ -15,7 +15,7 @@ from empresas.models import Empresa
 from funcionarios.models import Funcionario
 from billing.models import BillingCustomer
 from fgtsweb.mixins import is_empresa_allowed, get_allowed_empresa_ids
-from empresas.models_grupo import FuncionarioVinculo
+from empresas.models_grupo import FuncionarioVinculo, get_aliquota_fgts
 
 
 class LancamentoImportService:
@@ -541,10 +541,12 @@ class LancamentoImportService:
                     # Extrair flags internas antes de criar o objeto
                     _jam_aplicado = lancamento_data.pop('_jam_aplicado', False)
                     desired_valor_fgts = lancamento_data['valor_fgts']
-                    computed_8pct = lancamento_data['base_fgts'] * Decimal('0.08')
-                    # Precisamos restaurar o valor do arquivo se o usuário escolheu MANTER
-                    # e o valor difere do 8% (pois Lancamento.save() sempre força 8%)
-                    needs_restore = (not recalcular_fgts) and (desired_valor_fgts != computed_8pct)
+                    _vinculo = lancamento_data.get('vinculo')
+                    _aliquota = get_aliquota_fgts(_vinculo)
+                    computed_expected = (lancamento_data['base_fgts'] * _aliquota).quantize(Decimal('0.01'))
+                    # needs_restore: o valor foi validado em _process_row, mas Lancamento.save()
+                    # pode recalcular; restauramos se o valor final difere do esperado
+                    needs_restore = (not recalcular_fgts) and (desired_valor_fgts != computed_expected)
 
                     # Verificar se já existe lançamento para esta competência/parcela
                     existing_qs = Lancamento.objects.filter(
@@ -788,10 +790,22 @@ class LancamentoImportService:
                 pass
 
         if recalcular_fgts or valor_fgts_arquivo is None:
-            # Opção padrão: forçar 8% da base
-            valor_fgts = base_fgts * Decimal('0.08')
+            # Calcular usando o percentual do tipo de vínculo
+            aliquota = get_aliquota_fgts(vinculo)
+            valor_fgts = (base_fgts * aliquota).quantize(Decimal('0.01'))
         else:
-            # Usuário escolheu MANTER o valor do arquivo
+            # Arquivo tem valor explícito → validar contra % do vínculo
+            aliquota = get_aliquota_fgts(vinculo)
+            esperado = (base_fgts * aliquota).quantize(Decimal('0.01'))
+            if valor_fgts_arquivo != esperado:
+                tipo_nome = vinculo.tipo_vinculo.descricao if vinculo.tipo_vinculo_id else 'CLT'
+                pct = aliquota * 100
+                raise ValueError(
+                    f"Valor FGTS no arquivo (R$ {valor_fgts_arquivo:.2f}) não corresponde ao "
+                    f"tipo de vínculo '{tipo_nome}' ({pct:.0f}%). "
+                    f"Valor esperado: R$ {esperado:.2f}. "
+                    f"Corrija o arquivo ou use a opção 'Recalcular FGTS'."
+                )
             valor_fgts = valor_fgts_arquivo
         
         # Aplicar correção JAM se o usuário solicitou

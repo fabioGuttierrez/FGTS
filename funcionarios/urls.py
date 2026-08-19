@@ -16,4 +16,5 @@ urlpatterns = [
     path('vinculos/baixar-modelo-atualizacao/', views.VinculoDownloadUpdateTemplateView.as_view(), name='vinculo-download-update-template'),
     path('<int:pk>/vinculos/novo/', views.FuncionarioVinculoCreateView.as_view(), name='funcionario-vinculo-create'),
     path('<int:pk>/transferir/', views.FuncionarioTransferenciaView.as_view(), name='funcionario-transferir'),
+    path('<int:pk>/vinculos/<int:vid>/recalcular/', views.VinculoRecalcularView.as_view(), name='vinculo-recalcular'),
 ]

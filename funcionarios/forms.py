@@ -4,7 +4,7 @@ from decimal import Decimal
 from fgtsweb.utils.validators import digits_only, normalize_upper_ascii, validate_cpf
 from .models import Funcionario
 from empresas.models import Empresa
-from empresas.models_grupo import FuncionarioVinculo
+from empresas.models_grupo import FuncionarioVinculo, TipoVinculo
 from .forms_transferencia import TransferenciaFuncionarioForm
 
 class FuncionarioForm(forms.ModelForm):
@@ -73,6 +73,13 @@ class FuncionarioForm(forms.ModelForm):
             choices=[('', '---------')] + list(FuncionarioVinculo.MOTIVO_SAIDA_CHOICES),
             widget=forms.Select(attrs={'class': 'form-select'})
         )
+        self.fields['tipo_vinculo'] = forms.ModelChoiceField(
+            queryset=TipoVinculo.objects.filter(ativo=True),
+            required=False,
+            label='Tipo de Vínculo',
+            empty_label='CLT (padrão)',
+            widget=forms.Select(attrs={'class': 'form-select'}),
+        )
         # Pré-popula dados do vínculo atual ao editar
         instance = getattr(self, 'instance', None)
         if instance and getattr(instance, 'pk', None):
@@ -84,6 +91,7 @@ class FuncionarioForm(forms.ModelForm):
                 self.fields['data_demissao'].initial = vinculo.data_demissao
                 self.fields['cargo'].initial = vinculo.cargo
                 self.fields['motivo_saida'].initial = vinculo.motivo_saida or ''
+                self.fields['tipo_vinculo'].initial = vinculo.tipo_vinculo
                 if vinculo.salario:
                     self.fields['salario_inicial'].initial = vinculo.salario
         # Django 5+ usa dict normal, não OrderedDict; não há garantia de ordem, mas não quebra o form
@@ -141,6 +149,7 @@ class FuncionarioForm(forms.ModelForm):
         salario = self.cleaned_data.get('salario_inicial')
         cargo = (self.cleaned_data.get('cargo') or '').strip() or None
         motivo_saida = self.cleaned_data.get('motivo_saida') or None
+        tipo_vinculo = self.cleaned_data.get('tipo_vinculo')
         # Atualiza vínculo atual (mesma empresa) ou cria novo se necessário
         vinculo = funcionario.vinculo_atual()
         if vinculo and vinculo.empresa == empresa:
@@ -150,6 +159,7 @@ class FuncionarioForm(forms.ModelForm):
             vinculo.salario = salario or None
             vinculo.cargo = cargo
             vinculo.motivo_saida = motivo_saida
+            vinculo.tipo_vinculo = tipo_vinculo
             vinculo.save()
         elif not funcionario.vinculos.filter(empresa=empresa, data_admissao=data_admissao).exists():
             FuncionarioVinculo.objects.create(
@@ -161,6 +171,7 @@ class FuncionarioForm(forms.ModelForm):
                 salario=salario or None,
                 cargo=cargo,
                 motivo_saida=motivo_saida,
+                tipo_vinculo=tipo_vinculo,
             )
         return funcionario
 
@@ -170,10 +181,11 @@ class FuncionarioVinculoForm(forms.ModelForm):
 
     class Meta:
         model = FuncionarioVinculo
-        fields = ['empresa', 'matricula', 'data_admissao', 'data_demissao', 'cargo', 'salario', 'observacoes']
+        fields = ['empresa', 'matricula', 'tipo_vinculo', 'data_admissao', 'data_demissao', 'cargo', 'salario', 'observacoes']
         widgets = {
             'empresa': forms.Select(attrs={'class': 'form-select'}),
             'matricula': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex: 1001'}),
+            'tipo_vinculo': forms.Select(attrs={'class': 'form-select'}),
             'data_admissao': forms.DateInput(format='%Y-%m-%d', attrs={'class': 'form-control', 'type': 'date'}),
             'data_demissao': forms.DateInput(format='%Y-%m-%d', attrs={'class': 'form-control', 'type': 'date'}),
             'cargo': forms.TextInput(attrs={'class': 'form-control'}),
@@ -187,6 +199,9 @@ class FuncionarioVinculoForm(forms.ModelForm):
         # Matrícula é altamente recomendada quando há múltiplos vínculos.
         self.fields['matricula'].required = True
         self.fields['matricula'].help_text = 'Obrigatório. Usado para importar lançamentos sem ambiguidade.'
+        self.fields['tipo_vinculo'].required = False
+        self.fields['tipo_vinculo'].empty_label = 'CLT (padrão)'
+        self.fields['tipo_vinculo'].queryset = TipoVinculo.objects.filter(ativo=True)
 
         from fgtsweb.mixins import get_allowed_empresa_ids
         allowed_ids = get_allowed_empresa_ids(user) if user else None

@@ -1,10 +1,24 @@
 from django.contrib import admin
-from .admin_feature import * 
+from .admin_feature import *
 from .admin_grupo import *
 from .models import Empresa
 from .models_relatorio import RelatorioPremium
 from .models import EmailLog
 from .models_leads import LeadEmailFlow
+from .models_grupo import TipoVinculo
+
+
+@admin.register(TipoVinculo)
+class TipoVinculoAdmin(admin.ModelAdmin):
+    list_display = ('codigo', 'descricao', 'percentual_fgts', 'ativo')
+    list_editable = ('ativo',)
+    readonly_fields = ('id',)
+    ordering = ('codigo',)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.vinculos.exists():
+            return False
+        return super().has_delete_permission(request, obj)
 
 
 @admin.register(Empresa)

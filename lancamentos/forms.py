@@ -163,12 +163,12 @@ class LancamentoForm(forms.ModelForm):
 
     def save(self, commit=True):
         """Sobrescrever save para calcular valor_fgts automaticamente"""
+        from empresas.models_grupo import get_aliquota_fgts
         lancamento = super().save(commit=False)
-        # ⚡ Calcular valor_fgts automaticamente (8% da base_fgts)
         base_fgts = lancamento.base_fgts
         if base_fgts and (lancamento.valor_fgts is None or lancamento.valor_fgts == 0):
-            from decimal import Decimal
-            lancamento.valor_fgts = base_fgts * Decimal('0.08')
+            aliquota = get_aliquota_fgts(lancamento.vinculo)
+            lancamento.valor_fgts = (base_fgts * aliquota).quantize(Decimal('0.01'))
         if lancamento.pago:
             lancamento.fonte_confirmacao_pagamento = (
                 'extrato_analitico' if self.cleaned_data.get('extrato_analitico') else 'manual'

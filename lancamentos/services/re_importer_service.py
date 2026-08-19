@@ -18,7 +18,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from django.db import transaction
 
 from empresas.models import Empresa
-from empresas.models_grupo import FuncionarioVinculo
+from empresas.models_grupo import FuncionarioVinculo, get_aliquota_fgts
 from funcionarios.models import Funcionario
 from lancamentos.models import Lancamento
 
@@ -321,7 +321,7 @@ class REImporterService:
                 'nome_arquivo': reg.nome,
                 'competencia': reg.competencia,
                 'base_fgts': str(reg.base_fgts),
-                'valor_fgts': str((reg.base_fgts * Decimal('0.08')).quantize(Decimal('0.01'))),
+                'valor_fgts': str((reg.base_fgts * get_aliquota_fgts(vinculo)).quantize(Decimal('0.01'))),
                 'parcela_13': reg.parcela_13,
                 'empresa_nome': empresa_resolvida.nome if empresa_resolvida else None,
                 'funcionario_nome': func.nome if func else None,
@@ -390,7 +390,7 @@ class REImporterService:
                         parcela_13=reg.parcela_13,
                         defaults={
                             'base_fgts': reg.base_fgts,
-                            'valor_fgts': (reg.base_fgts * Decimal('0.08')).quantize(Decimal('0.01')),
+                            'valor_fgts': (reg.base_fgts * get_aliquota_fgts(vinculo)).quantize(Decimal('0.01')),
                             'pago': False,
                         },
                     )

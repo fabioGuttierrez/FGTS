@@ -201,7 +201,7 @@ class SefipImporter:
                 vinculo=None,
                 defaults={
                     "base_fgts": base_fgts,
-                    "valor_fgts": (base_fgts * Decimal("0.08")).quantize(Decimal("0.01")),
+                    "valor_fgts": (base_fgts * Decimal("0.08")).quantize(Decimal("0.01")),  # SEFIP não tem vínculo: CLT padrão
                     "pago": False,
                 },
             )

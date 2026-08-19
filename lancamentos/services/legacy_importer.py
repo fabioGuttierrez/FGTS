@@ -148,7 +148,7 @@ class LegacyDataImporter:
                             competencia=competencia,
                             defaults={
                                 "base_fgts": base_fgts,
-                                "valor_fgts": base_fgts * Decimal("0.08"),
+                                "valor_fgts": base_fgts * Decimal("0.08"),  # Legado sem vínculo: CLT padrão
                                 "pago": False,
                                 "data_pagto": data_pagto,
                             },

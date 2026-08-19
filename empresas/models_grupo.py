@@ -1,5 +1,32 @@
+from decimal import Decimal
 from django.db import models
 from django.conf import settings
+
+
+class TipoVinculo(models.Model):
+    """Parametriza o tipo de contratação e a alíquota de FGTS correspondente. Gerenciado pelo admin Django."""
+    codigo = models.CharField(max_length=20, unique=True, verbose_name='Código')
+    descricao = models.CharField(max_length=100, verbose_name='Descrição')
+    percentual_fgts = models.DecimalField(
+        max_digits=5, decimal_places=2,
+        verbose_name='Percentual FGTS (%)',
+        help_text='Ex: 8.00 para CLT, 2.00 para Aprendiz',
+    )
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+
+    class Meta:
+        verbose_name = 'Tipo de vínculo'
+        verbose_name_plural = 'Tipos de vínculo'
+        ordering = ['codigo']
+
+    def __str__(self):
+        return f"{self.descricao} ({self.percentual_fgts}%)"
+
+    @property
+    def aliquota(self) -> Decimal:
+        """Retorna a alíquota como fração (ex: Decimal('0.02') para 2%)."""
+        return self.percentual_fgts / Decimal('100')
+
 
 class GrupoEmpresa(models.Model):
     nome = models.CharField(max_length=255, unique=True)
@@ -43,6 +70,15 @@ class FuncionarioVinculo(models.Model):
     cargo = models.CharField(max_length=100, blank=True, null=True)
     salario = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     data_transferencia = models.DateField(blank=True, null=True)
+    tipo_vinculo = models.ForeignKey(
+        TipoVinculo,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vinculos',
+        verbose_name='Tipo de vínculo',
+        help_text='Nulo = CLT (8%). Altere apenas para corrigir cadastros incorretos; para efetivação de aprendiz crie um novo vínculo.',
+    )
 
     def is_ativo_em_competencia(self, competencia):
         """
@@ -116,6 +152,13 @@ class FuncionarioVinculo(models.Model):
         ident = f"Matrícula {matricula_label}" if matricula_label else f"Vínculo {self.pk}"
         periodo = f"{self.data_admissao} a {self.data_demissao or 'atual'}"
         return f"{self.funcionario.nome} - {self.empresa.nome} ({ident}) ({periodo})"
+
+
+def get_aliquota_fgts(vinculo) -> Decimal:
+    """Retorna a alíquota FGTS fracionária do vínculo (ex: Decimal('0.02')). Padrão: 0.08 (CLT)."""
+    if vinculo is not None and getattr(vinculo, 'tipo_vinculo_id', None):
+        return vinculo.tipo_vinculo.percentual_fgts / Decimal('100')
+    return Decimal('0.08')
 
 class TransferenciaFuncionario(models.Model):
     funcionario = models.ForeignKey('funcionarios.Funcionario', on_delete=models.CASCADE)

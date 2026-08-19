@@ -47,6 +47,15 @@
             </div>
 
             <div class="row g-3 mt-1">
+              <div class="col-md-4">
+                <label class="form-label fw-bold" for="{{ form.tipo_vinculo.id_for_label }}">{{ form.tipo_vinculo.label }}</label>
+                {{ form.tipo_vinculo }}
+                <small class="form-text text-muted">Aprendiz: FGTS 2%. Padrão = CLT (8%).</small>
+                {% if form.tipo_vinculo.errors %}<div class="invalid-feedback d-block">{{ form.tipo_vinculo.errors }}</div>{% endif %}
+              </div>
+            </div>
+
+            <div class="row g-3 mt-1">
               <div class="col-md-6">
                 <label class="form-label fw-bold" for="{{ form.data_admissao.id_for_label }}">{{ form.data_admissao.label }}</label>
                 {{ form.data_admissao }}

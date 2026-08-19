@@ -182,6 +182,13 @@
                             <td class="py-3 px-4 text-break">
                                 <div class="fw-bold text-dark mb-1">
                                     <a href="{% url 'funcionario-detail' funcionario.id %}" class="text-dark text-decoration-none">{{ funcionario.nome }}</a>
+                                    {% with va=funcionario.vinculo_atual %}
+                                        {% if va and va.tipo_vinculo and va.tipo_vinculo.codigo == 'APRENDIZ' %}
+                                            <span class="badge bg-warning text-dark rounded-pill ms-1" title="Aprendiz — alíquota FGTS 2%">
+                                                <i class="bi bi-mortarboard me-1"></i>Aprendiz
+                                            </span>
+                                        {% endif %}
+                                    {% endwith %}
                                 </div>
                                 <small class="text-muted">{{ funcionario.pis|default:"Sem PIS" }}</small>
                             </td>

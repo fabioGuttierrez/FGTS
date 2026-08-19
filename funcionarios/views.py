@@ -21,8 +21,11 @@ from billing.models import BillingCustomer
 from io import BytesIO
 from django.core.cache import cache
 from django.views.generic.detail import DetailView
-from empresas.models_grupo import TransferenciaFuncionario, FuncionarioVinculo
+from empresas.models_grupo import TransferenciaFuncionario, FuncionarioVinculo, get_aliquota_fgts
 from usuarios.models import EmpresaUsuarioRole
+from audit_logs.models import AuditLog
+from lancamentos.models import Lancamento
+from decimal import Decimal
 
 class FuncionarioCreateView(LoginRequiredMixin, EmpresaScopeMixin, CreateView):
     model = Funcionario
@@ -234,9 +237,63 @@ class FuncionarioUpdateView(LoginRequiredMixin, EmpresaScopeMixin, UpdateView):
         empresa = form.cleaned_data.get('empresa')
         if empresa and not is_empresa_allowed(self.request.user, empresa.codigo):
             return HttpResponseForbidden('Empresa não permitida para este usuário.')
+
+        # Captura tipo_vinculo ANTES de salvar para detectar mudança e aplicar restrição
+        funcionario_obj = self.get_object()
+        old_vinculo = funcionario_obj.vinculo_atual()
+        old_tipo = old_vinculo.tipo_vinculo if old_vinculo else None
+        new_tipo = form.cleaned_data.get('tipo_vinculo')
+
+        is_admin = self.request.user.is_staff or self.request.user.is_superuser
+        tipo_mudou = old_tipo != new_tipo
+
+        # Regra: usuário regular não pode mudar Aprendiz → outro tipo
+        if (
+            tipo_mudou
+            and old_tipo is not None
+            and old_tipo.codigo == 'APRENDIZ'
+            and not is_admin
+        ):
+            form.add_error(
+                'tipo_vinculo',
+                'Para efetivação de Aprendiz como CLT, encerre este vínculo e crie um novo. '
+                'Se for um cadastro incorreto, solicite a correção ao administrador da plataforma.'
+            )
+            return self.form_invalid(form)
+
         funcionario = form.save()
+        vinculo_atualizado = funcionario.vinculo_atual()
+
+        if tipo_mudou and vinculo_atualizado:
+            ip = self.request.META.get('HTTP_X_FORWARDED_FOR', self.request.META.get('REMOTE_ADDR', ''))
+            AuditLog.objects.create(
+                user=self.request.user,
+                action='UPDATE',
+                module='funcionarios',
+                view_name='FuncionarioUpdateView',
+                url_path=self.request.path,
+                ip_address=(ip.split(',')[0].strip() if ip else None),
+                user_agent=self.request.META.get('HTTP_USER_AGENT', '')[:500],
+                method='POST',
+                status_code=302,
+                object_id=vinculo_atualizado.pk,
+                object_repr=f'Vínculo #{vinculo_atualizado.pk} — {funcionario.nome}',
+                description=(
+                    f'Tipo de vínculo alterado de '
+                    f'"{old_tipo.descricao if old_tipo else "CLT (padrão)"}" para '
+                    f'"{new_tipo.descricao if new_tipo else "CLT (padrão)"}"'
+                ),
+                old_values={'tipo_vinculo': str(old_tipo) if old_tipo else 'CLT (padrão)'},
+                new_values={'tipo_vinculo': str(new_tipo) if new_tipo else 'CLT (padrão)'},
+            )
+            messages.success(
+                self.request,
+                f'✅ Tipo de vínculo de "{funcionario.nome}" atualizado com sucesso.'
+            )
+            return redirect('vinculo-recalcular', pk=funcionario.pk, vid=vinculo_atualizado.pk)
+
         messages.success(self.request, f'✅ Funcionário "{funcionario.nome}" atualizado com sucesso!')
-        return super().form_valid(form)
+        return redirect(self.success_url)
 
     def form_invalid(self, form):
         messages.error(self.request, 'Foram encontradas inconsistencias nas informacoes enviadas. Revise as informacoes.')
@@ -680,3 +737,95 @@ def vinculos_json(request):
 
 
 from datetime import datetime
+
+
+def _recalcular_historico_vinculo(vinculo, user, ip=None):
+    """
+    Recalcula valor_fgts de todos os lançamentos do vínculo usando a alíquota atual.
+    Lançamentos sem base_fgts são coletados mas não alterados.
+    Retorna dict com contagens e lista de ids sem base.
+    Usa bulk_update para não disparar Lancamento.save() e evitar loops.
+    """
+    aliquota = get_aliquota_fgts(vinculo)
+    qs = Lancamento.objects.filter(vinculo=vinculo)
+
+    com_base = list(qs.filter(base_fgts__isnull=False))
+    sem_base_ids = list(qs.filter(base_fgts__isnull=True).values_list('id', flat=True))
+
+    for lanc in com_base:
+        lanc.valor_fgts = (lanc.base_fgts * aliquota).quantize(Decimal('0.01'))
+
+    if com_base:
+        Lancamento.objects.bulk_update(com_base, ['valor_fgts'])
+
+    tipo_nome = vinculo.tipo_vinculo.descricao if vinculo.tipo_vinculo_id else 'CLT (padrão)'
+    AuditLog.objects.create(
+        user=user,
+        action='UPDATE',
+        module='lancamentos',
+        view_name='VinculoRecalcularView',
+        ip_address=ip,
+        object_id=vinculo.pk,
+        object_repr=f'Vínculo #{vinculo.pk} — {vinculo.funcionario.nome}',
+        description=(
+            f'Recálculo histórico de FGTS: {len(com_base)} lançamento(s) atualizados '
+            f'para {float(aliquota) * 100:.0f}% ({tipo_nome}). '
+            f'{len(sem_base_ids)} lançamento(s) ignorados por ausência de base_fgts.'
+        ),
+        new_values={'aliquota_pct': str(aliquota * 100), 'recalculados': len(com_base), 'sem_base': len(sem_base_ids)},
+    )
+    return {'recalculados': len(com_base), 'sem_base_ids': sem_base_ids}
+
+
+class VinculoRecalcularView(LoginRequiredMixin, View):
+    """
+    GET: Pergunta ao usuário se deseja recalcular o histórico após mudança de tipo_vinculo.
+    POST: Executa o recálculo e exibe resultado.
+    """
+    template_name = 'funcionarios/vinculo_recalcular_confirm.html'
+
+    def _get_vinculo_and_funcionario(self, pk, vid):
+        funcionario = Funcionario.objects.get(pk=pk)
+        vinculo = FuncionarioVinculo.objects.select_related(
+            'tipo_vinculo', 'funcionario', 'empresa'
+        ).get(pk=vid, funcionario=funcionario)
+        return funcionario, vinculo
+
+    def get(self, request, pk, vid):
+        try:
+            funcionario, vinculo = self._get_vinculo_and_funcionario(pk, vid)
+        except (Funcionario.DoesNotExist, FuncionarioVinculo.DoesNotExist):
+            messages.error(request, 'Vínculo não encontrado.')
+            return redirect('funcionario-list')
+
+        total_lancamentos = Lancamento.objects.filter(vinculo=vinculo).count()
+        sem_base = Lancamento.objects.filter(vinculo=vinculo, base_fgts__isnull=True).count()
+
+        return render(request, self.template_name, {
+            'funcionario': funcionario,
+            'vinculo': vinculo,
+            'total_lancamentos': total_lancamentos,
+            'sem_base': sem_base,
+        })
+
+    def post(self, request, pk, vid):
+        try:
+            funcionario, vinculo = self._get_vinculo_and_funcionario(pk, vid)
+        except (Funcionario.DoesNotExist, FuncionarioVinculo.DoesNotExist):
+            messages.error(request, 'Vínculo não encontrado.')
+            return redirect('funcionario-list')
+
+        if 'confirmar' in request.POST:
+            ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', ''))
+            resultado = _recalcular_historico_vinculo(
+                vinculo, request.user, ip=(ip.split(',')[0].strip() if ip else None)
+            )
+            messages.success(
+                request,
+                f'✅ {resultado["recalculados"]} lançamento(s) recalculados. '
+                + (f'⚠️ {len(resultado["sem_base_ids"])} lançamento(s) sem base FGTS foram ignorados.' if resultado["sem_base_ids"] else '')
+            )
+        else:
+            messages.info(request, 'Recálculo cancelado. Os lançamentos existentes não foram alterados.')
+
+        return redirect('funcionario-detail', pk=funcionario.pk)

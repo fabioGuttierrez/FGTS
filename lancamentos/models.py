@@ -3,6 +3,7 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 from decimal import Decimal
 from empresas.models import Empresa
+from empresas.models_grupo import get_aliquota_fgts
 from funcionarios.models import Funcionario
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
@@ -92,7 +93,8 @@ class Lancamento(models.Model):
 
 		# Recalcular valor_fgts sempre que a base mudar
 		if self.base_fgts is not None:
-			valor_calculado = self.base_fgts * Decimal('0.08')
+			aliquota = get_aliquota_fgts(self.vinculo if self.vinculo_id else None)
+			valor_calculado = (self.base_fgts * aliquota).quantize(Decimal('0.01'))
 			if base_fgts_mudou or self.valor_fgts is None or self.valor_fgts != valor_calculado:
 				self.valor_fgts = valor_calculado
 		
@@ -216,18 +218,19 @@ class Lancamento(models.Model):
 			lancamentos_posteriores = Lancamento.objects.filter(
 			**filtro,
 			parcela_13__isnull=True,  # Não propagar para parcelas de 13° salário
-		).order_by('competencia')
-			
+		).select_related('vinculo__tipo_vinculo').order_by('competencia')
+
 			# Filtrar apenas os meses posteriores ao atual
 			for lancamento in lancamentos_posteriores:
 				try:
 					mes_l, ano_l = map(int, lancamento.competencia.split('/'))
 					data_lancamento = datetime(ano_l, mes_l, 1)
-					
+
 					# Se for posterior, atualizar
 					if data_lancamento > data_atual:
+						aliquota = get_aliquota_fgts(lancamento.vinculo)
 						lancamento.base_fgts = self.base_fgts
-						lancamento.valor_fgts = self.base_fgts * Decimal('0.08')  # Recalcular 8%
+						lancamento.valor_fgts = (self.base_fgts * aliquota).quantize(Decimal('0.01'))
 						# Usar update direto para evitar recursão infinita
 						Lancamento.objects.filter(pk=lancamento.pk).update(
 							base_fgts=lancamento.base_fgts,

@@ -23,6 +23,7 @@
         <th>Matrícula</th>
         <th>ID Vínculo</th>
         <th>Empresa</th>
+        <th>Tipo</th>
         <th>Admissão</th>
         <th>Demissão</th>
         <th>Cargo</th>
@@ -36,6 +37,13 @@
         <td>{{ vinculo.matricula|default:'—' }}</td>
         <td>{{ vinculo.id }}</td>
         <td>{{ vinculo.empresa.nome }}</td>
+        <td>
+          {% if vinculo.tipo_vinculo and vinculo.tipo_vinculo.codigo == 'APRENDIZ' %}
+            <span class="badge bg-warning text-dark rounded-pill"><i class="bi bi-mortarboard me-1"></i>Aprendiz</span>
+          {% else %}
+            <span class="text-muted">CLT</span>
+          {% endif %}
+        </td>
         <td>{{ vinculo.data_admissao|date:'d/m/Y' }}</td>
         <td>{{ vinculo.data_demissao|date:'d/m/Y' }}</td>
         <td>{{ vinculo.cargo|default:'—' }}</td>
