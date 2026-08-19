@@ -263,11 +263,14 @@ def calcular_fgts_atualizado(valor_fgts: Decimal,
                               aplicar_plano_economico: bool = True,
                               fator_plano_info: tuple[Decimal, Decimal, Decimal] | None = None,
                               valor_fgts_base: Decimal | None = None,
+                              aliquota: Decimal = Decimal('0.08'),
                               **kwargs) -> dict:
     """Cálculo FGTS simplificado:
     O índice representa o fator aplicado sobre a base FGTS para obter o depósito correto.
+    O índice da tabela foi construído para alíquota de 8% (CLT). Para outras alíquotas,
+    o índice é reescalado: indice_efetivo = indice_tabela × (aliquota / 0.08).
 
-    - Valor Depósito FGTS = Base FGTS × Índice
+    - Valor Depósito FGTS = Base FGTS × Índice Efetivo
     - Correção (valor_corrigido) = Valor Depósito FGTS − Valor FGTS do mês
     - JAM = Calculado separadamente
     - Total = Correção + JAM
@@ -289,8 +292,11 @@ def calcular_fgts_atualizado(valor_fgts: Decimal,
     # Se não houver índice, usa 1.0 (sem correção)
     indice_final = indice if indice is not None else Decimal('1.0')
 
-    # Depósito correto para a competência (Base × Índice)
-    valor_deposito_fgts = (base_para_correcao * indice_final).quantize(Decimal('0.01'))
+    # Escala o índice pela alíquota real (o índice da tabela foi construído para 8%)
+    indice_efetivo = (indice_final * aliquota / Decimal('0.08')).quantize(Decimal('0.000000001'))
+
+    # Depósito correto para a competência (Base × Índice Efetivo)
+    valor_deposito_fgts = (base_para_correcao * indice_efetivo).quantize(Decimal('0.01'))
 
     # Correção = valor que faltou para atingir o depósito correto
     valor_corrigido = (valor_deposito_fgts - valor_fgts).quantize(Decimal('0.01'))

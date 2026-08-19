@@ -497,6 +497,7 @@ def processar_relatorio_posicao(task_id: int) -> None:
         from empresas.models import Empresa
         from indices.services.indice_service import IndiceFGTSService
         from lancamentos.services.calculo import calcular_fgts_atualizado
+        from empresas.models_grupo import get_aliquota_fgts
 
         empresa = Empresa.objects.get(pk=empresa_id)
 
@@ -528,7 +529,6 @@ def processar_relatorio_posicao(task_id: int) -> None:
             .select_related('funcionario', 'vinculo', 'vinculo__empresa', 'vinculo__tipo_vinculo')
             .order_by('competencia', 'funcionario__nome')
         )
-
         data_ref = IndiceFGTSService.obter_ultima_data_base()
 
         _indice_cache = {}
@@ -573,6 +573,7 @@ def processar_relatorio_posicao(task_id: int) -> None:
                             indice=indice,
                             jam_coef=Decimal('0'),
                             valor_fgts_base=l.base_fgts,
+                            aliquota=get_aliquota_fgts(l.vinculo),
                             aplicar_plano_economico=True,
                         )
                         valor_atualizado = str(resultado['valor_deposito_fgts'])

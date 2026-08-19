@@ -663,6 +663,7 @@ class RelatorioCompetenciaView(FormView):
     def _compute_for(self, empresa, competencia_str, parcela_13, data_pagamento, funcionario=None, matricula=None, jam_state=None, config_juros=None):
         import time
         from django.db.models import Q
+        from empresas.models_grupo import get_aliquota_fgts
         inicio_timestamp = time.time()
         inicio_str = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         try:
@@ -740,7 +741,7 @@ class RelatorioCompetenciaView(FormView):
             .filter(empresa=empresa)
             .filter(filtro_comp)
             .filter(parcela_13=parcela_13, pago=False)
-            .select_related('funcionario', 'vinculo')
+            .select_related('funcionario', 'vinculo', 'vinculo__tipo_vinculo')
             .prefetch_related('funcionario__vinculos')
             .order_by('funcionario_id', 'vinculo_id'))
         if funcionario:
@@ -871,6 +872,7 @@ class RelatorioCompetenciaView(FormView):
                 aplicar_plano_economico=False,
                 fator_plano_info=(fator_mult, fator_div, fator_liquido),
                 valor_fgts_base=l.base_fgts,
+                aliquota=get_aliquota_fgts(l.vinculo),
                 juros_tipo=juros_tipo,
                 juros_mensal=juros_mensal,
                 juros_diario=juros_diario,
@@ -2577,6 +2579,7 @@ def download_memoria_calculo(request):
         aplicar_plano_economico=False,
         fator_plano_info=(fator_mult, fator_div, fator_liquido),
         valor_fgts_base=lancamento.base_fgts,
+        aliquota=aliquota_vinculo,
     )
 
     valor_deposito_fgts = calc['valor_deposito_fgts']
@@ -3440,8 +3443,9 @@ def _valor_atualizado_lancamento(lanc, data_ref, indice_cache):
     """
     Valor atualizado de um único lançamento na data de referência (data_ref):
     - Pago: mantém o valor efetivamente pago (ou valor_fgts se valor_pago nulo).
-    - Em aberto: valor de depósito corrigido (base_fgts × índice), sem somar JAM.
+    - Em aberto: valor de depósito corrigido (base_fgts × índice efetivo), sem somar JAM.
     """
+    from empresas.models_grupo import get_aliquota_fgts
     if lanc.pago:
         return lanc.valor_pago if lanc.valor_pago is not None else (lanc.valor_fgts or Decimal('0'))
     if not data_ref or not lanc.competencia:
@@ -3469,6 +3473,7 @@ def _valor_atualizado_lancamento(lanc, data_ref, indice_cache):
             indice=indice,
             jam_coef=Decimal('0'),
             valor_fgts_base=lanc.base_fgts,
+            aliquota=get_aliquota_fgts(getattr(lanc, 'vinculo', None)),
             aplicar_plano_economico=True,
         )
         return resultado['valor_deposito_fgts']
@@ -3536,7 +3541,7 @@ class RelatorioRecolhimentoFuncionarioView(LoginRequiredMixin, FormView):
 
         # Monta queryset base
         qs = Lancamento.objects.filter(competencia__in=competencias_periodo).select_related(
-            'empresa', 'funcionario', 'vinculo'
+            'empresa', 'funcionario', 'vinculo', 'vinculo__tipo_vinculo'
         )
         allowed_ids = get_allowed_empresa_ids(self.request.user)
         if allowed_ids is not None:
@@ -3664,7 +3669,7 @@ def export_recolhimento_funcionario_pdf(request):
     competencias_periodo = _gerar_competencias_no_periodo(comp_inicio, comp_fim)
 
     qs = Lancamento.objects.filter(competencia__in=competencias_periodo).select_related(
-        'empresa', 'funcionario', 'vinculo'
+        'empresa', 'funcionario', 'vinculo', 'vinculo__tipo_vinculo'
     )
     allowed_ids = get_allowed_empresa_ids(request.user)
     if allowed_ids is not None:
@@ -3906,7 +3911,7 @@ def export_recolhimento_funcionario_xlsx(request):
     competencias_periodo = _gerar_competencias_no_periodo(comp_inicio, comp_fim)
 
     qs = Lancamento.objects.filter(competencia__in=competencias_periodo).select_related(
-        'empresa', 'funcionario', 'vinculo'
+        'empresa', 'funcionario', 'vinculo', 'vinculo__tipo_vinculo'
     )
     allowed_ids = get_allowed_empresa_ids(request.user)
     if allowed_ids is not None:
