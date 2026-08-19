@@ -2569,6 +2569,8 @@ def download_memoria_calculo(request):
     )
 
     # Usar a mesma função do relatório para garantir valores idênticos
+    from empresas.models_grupo import get_aliquota_fgts
+    aliquota_vinculo = get_aliquota_fgts(lancamento.vinculo if lancamento.vinculo_id else None)
     calc = calcular_fgts_atualizado(
         valor_fgts=valor_fgts_ajustado,
         competencia=competencia_date,
@@ -2590,8 +2592,6 @@ def download_memoria_calculo(request):
     data_admissao_mes = funcionario.data_admissao.strftime('%m/%Y')
     
     # Gera memória de cálculo
-    from empresas.models_grupo import get_aliquota_fgts
-    aliquota_vinculo = get_aliquota_fgts(lancamento.vinculo if lancamento.vinculo_id else None)
     memoria = gerar_memoria_calculo(
         funcionario_nome=funcionario.nome,
         funcionario_cpf=funcionario.cpf,
