@@ -116,3 +116,13 @@ class Funcionario(models.Model):
         verbose_name_plural = 'Funcionários'
         # Permite múltiplos vínculos de um mesmo CPF (mesma empresa ou não)
         # Exemplo: um funcionário pode ser horista e advogado simultaneamente
+
+
+class DiagnosticoOrfaos(models.Model):
+    """Modelo âncora para a página de diagnóstico no admin. Não cria tabela."""
+
+    class Meta:
+        managed = False
+        verbose_name = 'Diagnóstico de Órfãos'
+        verbose_name_plural = 'Diagnóstico de Dados Órfãos'
+        app_label = 'funcionarios'

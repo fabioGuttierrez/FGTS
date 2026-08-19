@@ -37,7 +37,8 @@ class FGTSCalculadoraForm(forms.Form):
         super().__init__(*args, **kwargs)
         hoje = timezone.now().date()
         data_maxima = IndiceFGTSService.obter_ultima_data_base()
-        self.fields['data_pagamento'].widget.attrs['min'] = hoje.strftime('%Y-%m-%d')
+        data_min = min(hoje, data_maxima) if data_maxima else hoje
+        self.fields['data_pagamento'].widget.attrs['min'] = data_min.strftime('%Y-%m-%d')
         if data_maxima:
             self.fields['data_pagamento'].widget.attrs['max'] = data_maxima.strftime('%Y-%m-%d')
 
