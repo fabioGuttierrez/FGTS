@@ -391,10 +391,15 @@ def gerar_memoria_calculo(funcionario_nome: str, funcionario_cpf: str, data_admi
     memoria.append("3. CÁLCULO DO FGTS CORRIGIDO")
     memoria.append("-" * 80)
     base_correcao = salario_colaborador if salario_colaborador is not None else valor_fgts
-    deposito_fgts_display = valor_deposito_fgts if valor_deposito_fgts is not None else (base_correcao * indice).quantize(Decimal('0.01'))
-    memoria.append(f"   Fórmula: Base FGTS × Índice FGTS = Valor depósito FGTS")
+    # Índice efetivo = índice tabela × (alíquota / 0.08); para CLT (8%) permanece igual
+    indice_efetivo = (indice * aliquota / Decimal('0.08')).quantize(Decimal('0.000000001'))
+    deposito_fgts_display = valor_deposito_fgts if valor_deposito_fgts is not None else (base_correcao * indice_efetivo).quantize(Decimal('0.01'))
+    pct_display_sec3 = int(aliquota * 100) if aliquota * 100 == int(aliquota * 100) else f"{aliquota * 100:.2f}".rstrip('0').rstrip('.')
     memoria.append(f"   Índice FGTS (Tabela): {indice}")
-    memoria.append(f"   Cálculo do depósito: R$ {base_correcao:,.2f} × {indice} = R$ {deposito_fgts_display:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+    if aliquota != Decimal('0.08'):
+        memoria.append(f"   Ajuste por alíquota ({pct_display_sec3}%): {indice} × ({pct_display_sec3}% ÷ 8%) = {indice_efetivo}")
+        memoria.append(f"   Índice Efetivo: {indice_efetivo}")
+    memoria.append(f"   Cálculo do depósito: R$ {base_correcao:,.2f} × {indice_efetivo} = R$ {deposito_fgts_display:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
     memoria.append(f"   Correção = Depósito − FGTS do mês = R$ {deposito_fgts_display:,.2f} − R$ {valor_fgts:,.2f} = R$ {valor_corrigido:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
     memoria.append("")
     
