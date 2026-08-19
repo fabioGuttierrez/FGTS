@@ -320,13 +320,14 @@ def calcular_fgts_atualizado(valor_fgts: Decimal,
 
 def gerar_memoria_calculo(funcionario_nome: str, funcionario_cpf: str, data_admissao: date,
                          valor_fgts: Decimal, competencia_str: str, data_pagamento: date,
-                         indice: Decimal, valor_jam: Decimal, valor_corrigido: Decimal, 
+                         indice: Decimal, valor_jam: Decimal, valor_corrigido: Decimal,
                          total: Decimal, data_admissao_mes: str,
                          salario_colaborador: Decimal | None = None,
                          valor_deposito_fgts: Decimal | None = None,
                          fator_plano_economico: Decimal = Decimal('1'),
                          fator_plano_mult: Decimal = Decimal('1'),
-                         fator_plano_div: Decimal = Decimal('1')) -> str:
+                         fator_plano_div: Decimal = Decimal('1'),
+                         aliquota: Decimal = Decimal('0.08')) -> str:
     """Gera memória de cálculo detalhada em formato texto.
     
     Args:
@@ -367,8 +368,9 @@ def gerar_memoria_calculo(funcionario_nome: str, funcionario_cpf: str, data_admi
     memoria.append("-" * 80)
     if salario_colaborador is not None:
         memoria.append(f"   Base FGTS: R$ {salario_colaborador:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
-        fgts_teorico = (salario_colaborador * Decimal('0.08')).quantize(Decimal('0.01'))
-        memoria.append(f"   FGTS do mês (8% sobre salário): R$ {fgts_teorico:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+        pct_display = int(aliquota * 100) if aliquota * 100 == int(aliquota * 100) else f"{aliquota * 100:.2f}".rstrip('0').rstrip('.')
+        fgts_teorico = (salario_colaborador * aliquota).quantize(Decimal('0.01'))
+        memoria.append(f"   FGTS do mês ({pct_display}% sobre salário): R$ {fgts_teorico:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
     memoria.append(f"   Valor FGTS (após ajustes): R$ {valor_fgts:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
     if fator_plano_economico and fator_plano_economico != Decimal('1'):
         fgts_sem_fator = (valor_fgts / fator_plano_economico).quantize(Decimal('0.01'))

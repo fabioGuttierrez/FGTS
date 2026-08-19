@@ -525,7 +525,7 @@ def processar_relatorio_posicao(task_id: int) -> None:
             Lancamento.objects
             .filter(empresa=empresa)
             .filter(filtro_comp)
-            .select_related('funcionario', 'vinculo', 'vinculo__empresa')
+            .select_related('funcionario', 'vinculo', 'vinculo__empresa', 'vinculo__tipo_vinculo')
             .order_by('competencia', 'funcionario__nome')
         )
 
@@ -604,6 +604,8 @@ def processar_relatorio_posicao(task_id: int) -> None:
                 'valor_pago': str(l.valor_pago) if l.valor_pago is not None else None,
                 'fonte_confirmacao_pagamento': l.fonte_confirmacao_pagamento or '',
                 'valor_atualizado': valor_atualizado,
+                'tipo_vinculo_codigo': getattr(getattr(vinculo, 'tipo_vinculo', None), 'codigo', '') or '',
+                'tipo_vinculo_descricao': getattr(getattr(vinculo, 'tipo_vinculo', None), 'descricao', '') or 'CLT',
             })
 
         task.resultado_json = {

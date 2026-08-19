@@ -102,6 +102,7 @@
         <a href="#empresas">Empresas</a>
         <a href="#funcionarios">Funcionários</a>
         <a href="#vinculos">Vínculos Empregatícios</a>
+        <a href="#tipo-vinculo">Tipo de Vínculo (CLT / Aprendiz)</a>
         <a href="#lancamentos">Lançamentos</a>
         <a href="#geracao-auto">Geração Automática</a>
         <a href="#importacao-txt">Importação TXT (SEFIP)</a>
@@ -210,6 +211,82 @@
         <p>
           Em <strong>Funcionários → Transferir</strong>, encerre o vínculo atual e crie um novo para a empresa destino. O histórico de lançamentos anteriores é preservado na empresa de origem.
         </p>
+      </section>
+
+      <!-- ===================== TIPO DE VÍNCULO ===================== -->
+      <section id="tipo-vinculo" class="doc-section mb-5">
+        <h2><i class="bi bi-mortarboard me-2"></i>Tipo de Vínculo (CLT / Aprendiz)</h2>
+
+        <p>
+          Cada vínculo empregatício possui um <strong>tipo</strong> que determina a alíquota de FGTS aplicada. O tipo é configurado pelo administrador da plataforma via painel Django e <strong>não pode ser alterado livremente pelo usuário</strong> — apenas o sentido CLT → Aprendiz é permitido; o caminho inverso exige encerramento do vínculo.
+        </p>
+
+        <h3>Tipos disponíveis</h3>
+        <table class="table table-sm table-bordered field-table" style="font-size: 0.87rem;">
+          <thead style="background: #f0f5ff;"><tr><th>Código</th><th>Descrição</th><th>Alíquota FGTS</th><th>Observação</th></tr></thead>
+          <tbody>
+            <tr><td>CLT</td><td>Contrato CLT padrão</td><td>8%</td><td>Padrão para vínculos sem tipo definido</td></tr>
+            <tr><td>APRENDIZ</td><td>Contrato de Aprendizagem</td><td>2%</td><td>Lei 10.097/2000 — jovem aprendiz com contrato especial</td></tr>
+          </tbody>
+        </table>
+        <div class="tip-box">
+          <i class="bi bi-lightbulb me-1"></i> Novos tipos de vínculo com percentuais personalizados podem ser criados pelo administrador em <strong>Django Admin → Empresas → Tipos de vínculo</strong>. Isso permite suportar categorias futuras sem alteração de código.
+        </div>
+
+        <h3>Identificação visual</h3>
+        <p>
+          Colaboradores com vínculo do tipo <strong>Aprendiz</strong> são identificados por um badge amarelo
+          <span class="badge bg-warning text-dark rounded-pill" style="font-size:0.8rem;"><i class="bi bi-mortarboard me-1"></i>Aprendiz</span>
+          exibido ao lado do nome na lista de funcionários, no detalhe do funcionário (tabela de vínculos) e no relatório de posição FGTS.
+        </p>
+
+        <h3>Cálculo de FGTS</h3>
+        <p>
+          O sistema determina automaticamente a alíquota correta com base no tipo do vínculo do lançamento:
+        </p>
+        <ul>
+          <li>Lançamentos manuais calculam <code>valor_fgts = base_fgts × alíquota_do_vínculo</code>.</li>
+          <li>Geração automática e atualização em cascata usam a mesma regra.</li>
+          <li>A <strong>Memória de Cálculo</strong> exibe o percentual real (ex.: "2% sobre salário") em vez do genérico 8%.</li>
+        </ul>
+
+        <h3>Importação de planilha</h3>
+        <p>
+          Durante a importação de lançamentos via planilha TXT:
+        </p>
+        <ul>
+          <li><strong>Modo "Recalcular FGTS":</strong> o sistema calcula o valor automaticamente com a alíquota do vínculo (2% para Aprendiz, 8% para CLT).</li>
+          <li><strong>Modo "Manter valor do arquivo":</strong> se o valor no arquivo não corresponde à alíquota do vínculo, a linha é <strong>rejeitada</strong> com mensagem clara no relatório de erros. Exemplo: arquivo com 8% para um Aprendiz (2%) é recusado.</li>
+        </ul>
+        <div class="warn-box">
+          <i class="bi bi-exclamation-triangle me-1"></i> Ao importar histórico de colaboradores Aprendiz, utilize sempre o modo <strong>Recalcular FGTS</strong> ou garanta que os valores do arquivo já estão calculados com 2%.
+        </div>
+
+        <h3>Alterar o tipo de vínculo de um colaborador</h3>
+        <p>
+          Acesse <strong>Funcionários → Editar</strong> e altere o campo <em>Tipo de Vínculo</em> na seção de vínculo atual.
+        </p>
+        <ul>
+          <li>Ao salvar, o sistema registra um <strong>log de auditoria</strong> com o tipo anterior e o novo.</li>
+          <li>Em seguida, exibe uma tela de confirmação perguntando se deseja <strong>recalcular o histórico</strong> de lançamentos com a nova alíquota. Esta ação é opcional e de responsabilidade do usuário.</li>
+          <li>Lançamentos sem base FGTS registrada não são recalculados e são listados separadamente.</li>
+        </ul>
+        <div class="warn-box">
+          <i class="bi bi-exclamation-triangle me-1"></i>
+          <strong>Aprendiz → CLT é bloqueado para usuários comuns.</strong> A efetivação de um aprendiz como CLT representa um novo contrato — o procedimento correto é <em>encerrar o vínculo de Aprendiz</em> (preenchendo a data de demissão) e <em>criar um novo vínculo CLT</em>. Caso um colaborador tenha sido cadastrado com o tipo errado, o administrador da plataforma pode corrigir diretamente pelo <strong>Django Admin → Empresas → Vínculos Empregatícios</strong>.
+        </div>
+
+        <h3>Permissões por perfil</h3>
+        <table class="table table-sm table-bordered field-table" style="font-size: 0.87rem;">
+          <thead style="background: #f0f5ff;"><tr><th>Ação</th><th>Usuário comum</th><th>Admin Django</th></tr></thead>
+          <tbody>
+            <tr><td>Ver tipo do vínculo</td><td>✅ Sim</td><td>✅ Sim</td></tr>
+            <tr><td>Alterar CLT → Aprendiz</td><td>✅ Sim</td><td>✅ Sim</td></tr>
+            <tr><td>Alterar Aprendiz → CLT</td><td>❌ Bloqueado</td><td>✅ Sim (via Admin)</td></tr>
+            <tr><td>Criar novo tipo (ex.: Estágio)</td><td>❌ Não</td><td>✅ Sim (Django Admin)</td></tr>
+            <tr><td>Alterar percentual de um tipo</td><td>❌ Não</td><td>✅ Sim (Django Admin)</td></tr>
+          </tbody>
+        </table>
       </section>
 
       <!-- ===================== LANÇAMENTOS ===================== -->

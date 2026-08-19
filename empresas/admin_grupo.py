@@ -9,9 +9,30 @@ class GrupoEmpresaAdmin(admin.ModelAdmin):
 
 @admin.register(FuncionarioVinculo)
 class FuncionarioVinculoAdmin(admin.ModelAdmin):
-    list_display = ("funcionario", "empresa", "cargo", "matricula", "data_admissao", "data_demissao", "status", "motivo_saida")
-    search_fields = ("funcionario__nome", "empresa__nome", "cargo", "matricula")
-    list_filter = ("empresa", "status", "motivo_saida")
+    list_display = ('funcionario', 'empresa', 'tipo_vinculo_display', 'matricula', 'data_admissao', 'data_demissao', 'status', 'motivo_saida')
+    search_fields = ('funcionario__nome', 'funcionario__cpf', 'empresa__nome', 'cargo', 'matricula')
+    list_filter = ('empresa', 'status', 'tipo_vinculo', 'motivo_saida')
+    raw_id_fields = ('funcionario', 'empresa')
+    readonly_fields = ('id',)
+
+    fieldsets = (
+        (None, {
+            'fields': ('id', 'funcionario', 'empresa', 'matricula', 'tipo_vinculo'),
+        }),
+        ('Período', {
+            'fields': ('data_admissao', 'data_demissao', 'status', 'motivo_saida', 'data_transferencia'),
+        }),
+        ('Dados complementares', {
+            'fields': ('cargo', 'salario', 'observacoes'),
+            'classes': ('collapse',),
+        }),
+    )
+
+    @admin.display(description='Tipo de vínculo')
+    def tipo_vinculo_display(self, obj):
+        if obj.tipo_vinculo:
+            return obj.tipo_vinculo.descricao
+        return 'CLT (padrão)'
 
 @admin.register(TransferenciaFuncionario)
 class TransferenciaFuncionarioAdmin(admin.ModelAdmin):

@@ -2534,7 +2534,7 @@ def download_memoria_calculo(request):
     if not vinculo_id and base_qs.count() > 1:
         return HttpResponse('Lançamento ambíguo: informe o VÍNCULO (ID) ou MATRÍCULA para baixar a memória de cálculo.', status=400)
 
-    lancamento = base_qs.first()
+    lancamento = base_qs.select_related('vinculo__tipo_vinculo').first()
     
     if not lancamento:
         return HttpResponse('Lançamento não encontrado', status=404)
@@ -2587,6 +2587,8 @@ def download_memoria_calculo(request):
     data_admissao_mes = funcionario.data_admissao.strftime('%m/%Y')
     
     # Gera memória de cálculo
+    from empresas.models_grupo import get_aliquota_fgts
+    aliquota_vinculo = get_aliquota_fgts(lancamento.vinculo if lancamento.vinculo_id else None)
     memoria = gerar_memoria_calculo(
         funcionario_nome=funcionario.nome,
         funcionario_cpf=funcionario.cpf,
@@ -2604,6 +2606,7 @@ def download_memoria_calculo(request):
         fator_plano_economico=fator_liquido,
         fator_plano_mult=fator_mult,
         fator_plano_div=fator_div,
+        aliquota=aliquota_vinculo,
     )
     
     # Retorna arquivo para download
@@ -4197,7 +4200,7 @@ def export_relatorio_posicao_xlsx(request, pk):
 
     headers = [
         'Cod_Empresa', 'Empresa', 'CNPJ',
-        'Funcionário', 'PIS', 'Matrícula', 'Cargo', 'CBO',
+        'Funcionário', 'Tipo Vínculo', 'PIS', 'Matrícula', 'Cargo', 'CBO',
         'Admissão', 'Demissão', 'Ano', 'Competência',
         'Base FGTS', 'Valor FGTS', 'parcela_13', 'Status Pagamento', 'Data Pagamento',
         'Valor Pago', 'Fonte Confirmação', f'Valor Atualizado (ref. {data_ref})',
@@ -4238,6 +4241,7 @@ def export_relatorio_posicao_xlsx(request, pk):
             l.get('empresa', ''),
             l.get('empresa_cnpj', ''),
             l.get('funcionario', ''),
+            l.get('tipo_vinculo_descricao', 'CLT'),
             l.get('funcionario_pis', ''),
             l.get('matricula', ''),
             l.get('cargo', ''),
@@ -4258,7 +4262,7 @@ def export_relatorio_posicao_xlsx(request, pk):
             l.get('motivo_saida', ''),
         ])
 
-    col_widths = [10, 12, 30, 18, 30, 14, 12, 20, 10, 10,
+    col_widths = [10, 12, 30, 18, 14, 30, 14, 12, 20, 10, 10,
                   8, 12, 12, 12, 14, 16, 14, 12, 18, 20, 12, 20]
     for i, w in enumerate(col_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w

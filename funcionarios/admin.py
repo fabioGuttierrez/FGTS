@@ -3,7 +3,6 @@ from django.utils.html import format_html
 
 from .admin_diagnostico import DiagnosticoOrfaosAdmin  # noqa: F401
 from .models import Funcionario
-from empresas.models_grupo import FuncionarioVinculo
 
 
 def _excluir_orfaos_seguros(modeladmin, request, queryset):
@@ -92,32 +91,3 @@ class FuncionarioAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
-
-
-@admin.register(FuncionarioVinculo)
-class FuncionarioVinculoAdmin(admin.ModelAdmin):
-    """Admin sem restrições para correção de cadastros incorretos."""
-    list_display = ('funcionario', 'empresa', 'tipo_vinculo_display', 'status', 'data_admissao', 'data_demissao')
-    list_filter = ('status', 'tipo_vinculo')
-    search_fields = ('funcionario__nome', 'funcionario__cpf', 'matricula')
-    raw_id_fields = ('funcionario', 'empresa')
-    readonly_fields = ('id',)
-
-    fieldsets = (
-        (None, {
-            'fields': ('id', 'funcionario', 'empresa', 'matricula', 'tipo_vinculo'),
-        }),
-        ('Período', {
-            'fields': ('data_admissao', 'data_demissao', 'status', 'motivo_saida', 'data_transferencia'),
-        }),
-        ('Dados complementares', {
-            'fields': ('cargo', 'salario', 'observacoes'),
-            'classes': ('collapse',),
-        }),
-    )
-
-    @admin.display(description='Tipo de vínculo')
-    def tipo_vinculo_display(self, obj):
-        if obj.tipo_vinculo:
-            return obj.tipo_vinculo.descricao
-        return 'CLT (padrão)'
