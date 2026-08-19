@@ -3504,7 +3504,7 @@ def _calcular_dados_recolhimento(lancamentos_qs, data_ref=None, indice_cache=Non
             total_recolhido += (lanc.valor_pago or lanc.valor_fgts or Decimal('0'))
         else:
             valor_a_recolher += (lanc.valor_fgts or Decimal('0'))
-        valor_atualizado += _valor_atualizado_lancamento(lanc, data_ref, indice_cache)
+            valor_atualizado += _valor_atualizado_lancamento(lanc, data_ref, indice_cache)
     return {
         'valor_a_recolher': valor_a_recolher,
         'total_recolhido': total_recolhido,
