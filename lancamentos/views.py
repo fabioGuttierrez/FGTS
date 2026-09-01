@@ -4208,7 +4208,7 @@ def export_relatorio_posicao_xlsx(request, pk):
         'Admissão', 'Demissão', 'Ano', 'Competência',
         'Base FGTS', 'Valor FGTS', 'parcela_13', 'Status Pagamento', 'Data Pagamento',
         'Valor Pago', 'Fonte Confirmação', f'Valor Atualizado (ref. {data_ref})',
-        'Status Vínculo', 'Motivo Saída',
+        'Status Vínculo', 'Motivo Desligamento',
     ]
     ws.append(headers)
     for cell in ws[1]:
@@ -4263,11 +4263,11 @@ def export_relatorio_posicao_xlsx(request, pk):
             l.get('fonte_confirmacao_pagamento', ''),
             _decimal(l.get('valor_atualizado')),
             l.get('status_vinculo', ''),
-            l.get('motivo_saida', ''),
+            l.get('observacoes', ''),
         ])
 
     col_widths = [10, 12, 30, 18, 14, 30, 14, 12, 20, 10, 10,
-                  8, 12, 12, 12, 14, 16, 14, 12, 18, 20, 12, 20]
+                  8, 12, 12, 12, 14, 16, 14, 12, 18, 20, 12, 30]
     for i, w in enumerate(col_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
 

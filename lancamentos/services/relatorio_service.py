@@ -598,6 +598,7 @@ def processar_relatorio_posicao(task_id: int) -> None:
                 'data_demissao': vinculo.data_demissao.isoformat() if vinculo and getattr(vinculo, 'data_demissao', None) else None,
                 'status_vinculo': getattr(vinculo, 'status', '') or '',
                 'motivo_saida': getattr(vinculo, 'motivo_saida', '') or '',
+                'observacoes': getattr(vinculo, 'observacoes', '') or '',
                 'base_fgts': str(l.base_fgts) if l.base_fgts is not None else '',
                 'valor_fgts': str(l.valor_fgts),
                 'status_pagamento': 'Pago' if l.pago else 'Em aberto',

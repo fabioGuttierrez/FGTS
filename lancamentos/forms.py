@@ -42,9 +42,10 @@ class LancamentoForm(forms.ModelForm):
             }),
             'pago': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'data_pagto': forms.DateInput(attrs={
-                'type': 'date',
-                'class': 'form-control'
-            }),
+                'type': 'text',
+                'class': 'form-control',
+                'autocomplete': 'off',
+            }, format='%Y-%m-%d'),
             'valor_pago': forms.NumberInput(attrs={
                 'placeholder': 'Valor efetivamente pago',
                 'step': '0.01',
